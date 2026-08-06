@@ -142,4 +142,29 @@ function assertClose(actual, expected, message) {
   assertClose(stats.uncoveredKwh, (150 - 250) * 2, "computeDayStats uncoveredKwh sums both intervals");
 })();
 
+// computeIntervalSeries: now also returns netKwh and delta
+(function () {
+  var hedgeBlocks = [
+    { shape: "base", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000, priceKwh: 0.07 }
+  ];
+  var series = ConsumptionCalc.computeIntervalSeries(
+    ["10:00", "10:15"], [0.10, 0.20], [600, 600], [0, 0], "2026-01-03", hedgeBlocks
+  );
+  assertClose(series.netKwh[0], 150, "netKwh[0] = (600kW-0kW)*0.25h");
+  assertClose(series.netKwh[1], 150, "netKwh[1] = (600kW-0kW)*0.25h");
+  assertClose(series.delta[0], series.netCost[0] - series.hedgeCost[0], "delta[0] = netCost - hedgeCost");
+  assertClose(series.delta[0], 15 - 17.5, "delta[0] matches expected numeric value");
+})();
+
+// computeIntervalSeries: netKwh can go negative when production exceeds consumption
+// (this is a real, common case in the shipped dataset — e.g. tilburg's solar
+// midday output — not just a theoretical edge case)
+(function () {
+  var series = ConsumptionCalc.computeIntervalSeries(
+    ["12:00"], [0.10], [50], [200], "2026-01-03", null
+  );
+  assertClose(series.netKwh[0], -37.5, "netKwh negative when production > consumption");
+  assertClose(series.delta[0], series.netCost[0], "delta = netCost when hedgeCost is 0 (no hedgeBlocks)");
+})();
+
 console.log("consumption-calc.test.js: all assertions passed");

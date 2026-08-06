@@ -28,24 +28,37 @@
 
   function computeIntervalSeries(times, prices, consumption, production, dates, hedgeBlocks) {
     var n = times.length;
+    var netKwhArr = [];
     var netCost = [];
     var hedgeVolume = [];
     var hedgePrice = [];
     var hedgeCost = [];
     var uncovered = [];
+    var delta = [];
 
     for (var i = 0; i < n; i++) {
       var netKwh = (consumption[i] - production[i]) * 0.25;
       var h = hedgeBlocks ? computeIntervalHedge(resolveDate(dates, i), times[i], hedgeBlocks)
                           : { hedgeVolumeKwh: 0, hedgePriceKwh: 0, hedgeCostEur: 0 };
-      netCost.push(netKwh * prices[i]);
+      var intervalNetCost = netKwh * prices[i];
+      netKwhArr.push(netKwh);
+      netCost.push(intervalNetCost);
       hedgeVolume.push(h.hedgeVolumeKwh);
       hedgePrice.push(h.hedgePriceKwh);
       hedgeCost.push(h.hedgeCostEur);
       uncovered.push(netKwh - h.hedgeVolumeKwh);
+      delta.push(intervalNetCost - h.hedgeCostEur);
     }
 
-    return { netCost: netCost, hedgeVolume: hedgeVolume, hedgePrice: hedgePrice, hedgeCost: hedgeCost, uncovered: uncovered };
+    return {
+      netKwh: netKwhArr,
+      netCost: netCost,
+      hedgeVolume: hedgeVolume,
+      hedgePrice: hedgePrice,
+      hedgeCost: hedgeCost,
+      uncovered: uncovered,
+      delta: delta
+    };
   }
 
   function computeDayStats(times, prices, consumption, production, dates, hedgeBlocks) {
