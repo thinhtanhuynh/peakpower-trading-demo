@@ -311,30 +311,37 @@ PAGE_TEMPLATE = """<!doctype html>
 
   var lastChartGeom = null;
 
-  function buildChartSvg(times, consumption, production) {
+  function buildChartSvg(times, netKwh, hedgeVolume, uncovered) {
     var n = times.length;
     var width = 960, height = 260, padLeft = 40, padBottom = 24, padTop = 10;
     var plotW = width - padLeft - 10;
     var plotH = height - padTop - padBottom;
-    var maxVal = 0;
+    var minVal = 0, maxVal = 0;
     for (var i = 0; i < n; i++) {
-      maxVal = Math.max(maxVal, consumption[i], production[i]);
+      minVal = Math.min(minVal, netKwh[i], hedgeVolume[i]);
+      maxVal = Math.max(maxVal, netKwh[i], hedgeVolume[i]);
     }
-    if (maxVal <= 0) { maxVal = 1; }
+    if (minVal === maxVal) { maxVal = minVal + 1; }
+    var range = maxVal - minVal;
+    function yFor(val) { return padTop + (maxVal - val) / range * plotH; }
     var barW = plotW / n;
     var bars = "";
     for (i = 0; i < n; i++) {
-      var barH = (consumption[i] / maxVal) * plotH;
-      var x = padLeft + i * barW;
-      var y = padTop + (plotH - barH);
-      bars += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + Math.max(barW - 1, 1).toFixed(1) +
-        '" height="' + barH.toFixed(1) + '" fill="#0f766e"></rect>';
+      var yNet = yFor(netKwh[i]);
+      var yHedge = yFor(hedgeVolume[i]);
+      var barTop = Math.min(yNet, yHedge);
+      var barH = Math.abs(yNet - yHedge);
+      var barX = padLeft + i * barW;
+      var barFill = uncovered[i] >= 0 ? "#ea580c" : "#0891b2";
+      var barOpacity = uncovered[i] >= 0 ? "0.55" : "0.3";
+      bars += '<rect x="' + barX.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + Math.max(barW - 1, 1).toFixed(1) +
+        '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
     }
-    var linePoints = "";
+    var netPoints = "", hedgePoints = "";
     for (i = 0; i < n; i++) {
       var px = padLeft + i * barW + barW / 2;
-      var py = padTop + (plotH - (production[i] / maxVal) * plotH);
-      linePoints += px.toFixed(1) + "," + py.toFixed(1) + " ";
+      netPoints += px.toFixed(1) + "," + yFor(netKwh[i]).toFixed(1) + " ";
+      hedgePoints += px.toFixed(1) + "," + yFor(hedgeVolume[i]).toFixed(1) + " ";
     }
     var axisLabels = "";
     for (i = 0; i < n; i++) {
@@ -344,11 +351,13 @@ PAGE_TEMPLATE = """<!doctype html>
           '" font-size="10" fill="#64748b">' + times[i] + '</text>';
       }
     }
+    var zeroY = yFor(0);
     lastChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
-    return '<line x1="' + padLeft + '" y1="' + (padTop + plotH) + '" x2="' + (padLeft + plotW) +
-      '" y2="' + (padTop + plotH) + '" stroke="#dbe3ec"></line>' +
+    return '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
+      '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
       bars +
-      '<polyline points="' + linePoints.trim() + '" fill="none" stroke="#15803d" stroke-width="2"></polyline>' +
+      '<polyline points="' + netPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="2"></polyline>' +
+      '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4f46e5" stroke-width="2" stroke-dasharray="5,3"></polyline>' +
       axisLabels +
       '<line id="chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
       '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
@@ -460,32 +469,44 @@ PAGE_TEMPLATE = """<!doctype html>
   var lastMonthChartGeom = null;
   var monthChart = document.getElementById("month-chart");
 
-  function buildMonthChartSvg(dates, times, consumption, production) {
+  function buildMonthChartSvg(dates, times, netKwh, hedgeVolume, uncovered) {
     var n = times.length;
     var pxPerInterval = 4;
     var width = Math.max(960, n * pxPerInterval);
     var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
     var plotW = width - padLeft - 10;
     var plotH = height - padTop - padBottom;
-    var maxVal = 0;
+    var minVal = 0, maxVal = 0;
     var i;
     for (i = 0; i < n; i++) {
-      maxVal = Math.max(maxVal, consumption[i], production[i]);
+      minVal = Math.min(minVal, netKwh[i], hedgeVolume[i]);
+      maxVal = Math.max(maxVal, netKwh[i], hedgeVolume[i]);
     }
-    if (maxVal <= 0) { maxVal = 1; }
+    if (minVal === maxVal) { maxVal = minVal + 1; }
+    var range = maxVal - minVal;
+    function yFor(val) { return padTop + (maxVal - val) / range * plotH; }
     var stepX = n > 1 ? plotW / (n - 1) : 0;
+    var barW = n > 1 ? stepX : plotW;
 
-    var areaPoints = "";
-    var linePoints = "";
+    var bars = "";
+    for (i = 0; i < n; i++) {
+      var yNet = yFor(netKwh[i]);
+      var yHedge = yFor(hedgeVolume[i]);
+      var barTop = Math.min(yNet, yHedge);
+      var barH = Math.abs(yNet - yHedge);
+      var barX = padLeft + i * stepX - barW / 2;
+      var barFill = uncovered[i] >= 0 ? "#ea580c" : "#0891b2";
+      var barOpacity = uncovered[i] >= 0 ? "0.55" : "0.3";
+      bars += '<rect x="' + barX.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + Math.max(barW - 0.5, 0.5).toFixed(1) +
+        '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
+    }
+
+    var netPoints = "", hedgePoints = "";
     for (i = 0; i < n; i++) {
       var px = padLeft + i * stepX;
-      var cy = padTop + (plotH - (consumption[i] / maxVal) * plotH);
-      var gy = padTop + (plotH - (production[i] / maxVal) * plotH);
-      areaPoints += px.toFixed(1) + "," + cy.toFixed(1) + " ";
-      linePoints += px.toFixed(1) + "," + gy.toFixed(1) + " ";
+      netPoints += px.toFixed(1) + "," + yFor(netKwh[i]).toFixed(1) + " ";
+      hedgePoints += px.toFixed(1) + "," + yFor(hedgeVolume[i]).toFixed(1) + " ";
     }
-    var areaPath = "M" + padLeft.toFixed(1) + "," + (padTop + plotH).toFixed(1) + " L" +
-      areaPoints.trim().replace(/ /g, " L") + " L" + (padLeft + plotW).toFixed(1) + "," + (padTop + plotH).toFixed(1) + " Z";
 
     var dayGridlines = "";
     var dayLabels = "";
@@ -499,13 +520,14 @@ PAGE_TEMPLATE = """<!doctype html>
       }
     }
 
+    var zeroY = yFor(0);
     lastMonthChartGeom = { padLeft: padLeft, spacing: stepX, offset: 0, n: n, width: width };
 
     return dayGridlines +
-      '<line x1="' + padLeft + '" y1="' + (padTop + plotH) + '" x2="' + (padLeft + plotW) + '" y2="' + (padTop + plotH) + '" stroke="#dbe3ec"></line>' +
-      '<path d="' + areaPath + '" fill="#0f766e" fill-opacity="0.25" stroke="none"></path>' +
-      '<polyline points="' + areaPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="1.5"></polyline>' +
-      '<polyline points="' + linePoints.trim() + '" fill="none" stroke="#15803d" stroke-width="1.5"></polyline>' +
+      '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
+      bars +
+      '<polyline points="' + netPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="1.5"></polyline>' +
+      '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4f46e5" stroke-width="1.5" stroke-dasharray="5,3"></polyline>' +
       dayLabels +
       '<line id="month-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
       '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
@@ -560,7 +582,7 @@ PAGE_TEMPLATE = """<!doctype html>
       var monthSeries = ConsumptionCalc.computeIntervalSeries(month.times, month.prices, month.consumption, month.production, month.dates, hedgeBlocks);
       renderStatCards(monthStats);
 
-      var markup = buildMonthChartSvg(month.dates, month.times, month.consumption, month.production);
+      var markup = buildMonthChartSvg(month.dates, month.times, monthSeries.netKwh, monthSeries.hedgeVolume, monthSeries.uncovered);
       monthChart.setAttribute("viewBox", "0 0 " + lastMonthChartGeom.width + " 260");
       monthChart.style.width = lastMonthChartGeom.width + "px";
       monthChart.innerHTML = markup;
@@ -590,7 +612,7 @@ PAGE_TEMPLATE = """<!doctype html>
     var daySeries = ConsumptionCalc.computeIntervalSeries(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
     renderStatCards(dayStats);
 
-    chart.innerHTML = buildChartSvg(dateSeries.t, siteSeries.c, siteSeries.g);
+    chart.innerHTML = buildChartSvg(dateSeries.t, daySeries.netKwh, daySeries.hedgeVolume, daySeries.uncovered);
     renderTable(dateSeries.t, siteSeries.c, siteSeries.g, dateSeries.p, daySeries);
   }
 
