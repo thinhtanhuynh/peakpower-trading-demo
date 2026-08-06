@@ -23,6 +23,7 @@ SITE_META = [
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COMBINED_PATH = os.path.join(HERE, "epex_tariffs_usage_combined_15_min_interval.json")
+HEDGE_PATH = os.path.join(HERE, "hedge_blocks_2026.json")
 DATA_OUT_PATH = os.path.join(HERE, "consumption_live_data.json")
 CALC_JS_PATH = os.path.join(HERE, "consumption-calc.js")
 HTML_OUT_PATH = os.path.join(HERE, "Customer Portal - Consumption (Live Data).html")
@@ -58,6 +59,31 @@ def build_compact_dataset(rows):
         }
 
     return {"sites": SITE_META, "byDate": by_date, "bySite": by_site}
+
+
+def build_hedge_section(hedge_rows):
+    """Group hedge_blocks_2026.json rows into {site_id: [block, ...]}.
+
+    Rows for EANs not in SITE_META are ignored (matches build_compact_dataset's
+    handling of the non-electricity tilburg-gas connection). Each block keeps
+    only the fields the page's per-interval hedge calculation needs — kept
+    generic (not "one yearly block per shape") so future MONTH/QUARTER hedge
+    rows from gen_hedge.py would be picked up with no code change here.
+    """
+    ean_to_meta = {m["ean"]: m for m in SITE_META}
+    hedge = {m["id"]: [] for m in SITE_META}
+    for r in hedge_rows:
+        meta = ean_to_meta.get(r["EAN"])
+        if meta is None:
+            continue
+        hedge[meta["id"]].append({
+            "shape": r["shape"],
+            "periodStart": r["periodStart"],
+            "periodEnd": r["periodEnd"],
+            "powerKw": r["powerKw"],
+            "priceKwh": r["priceKwh"],
+        })
+    return hedge
 
 
 PAGE_TEMPLATE = """<!doctype html>
@@ -327,6 +353,10 @@ def main():
         rows = json.load(f)
 
     dataset = build_compact_dataset(rows)
+
+    with open(HEDGE_PATH, "r", encoding="utf-8") as f:
+        hedge_rows = json.load(f)
+    dataset["hedge"] = build_hedge_section(hedge_rows)
 
     data_json_text = json.dumps(dataset, ensure_ascii=False, separators=(",", ":"))
     with open(DATA_OUT_PATH, "w", encoding="utf-8") as f:
