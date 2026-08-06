@@ -3,6 +3,7 @@ Builds the compact live-data JSON for the Consumption (Live Data) page, and
 assembles the final self-contained HTML page from it.
 
 Input:  epex_tariffs_usage_combined_15_min_interval.json
+        hedge_blocks_2026.json
 Output: consumption_live_data.json
         Customer Portal - Consumption (Live Data).html
 
@@ -350,10 +351,11 @@ PAGE_TEMPLATE = """<!doctype html>
     svgEl.addEventListener("mousemove", function (evt) {
       var geom = getGeom();
       if (!geom) { return; }
-      var rect = svgEl.getBoundingClientRect();
-      var viewBox = svgEl.viewBox.baseVal;
-      var scaleX = viewBox.width / rect.width;
-      var mouseX = (evt.clientX - rect.left) * scaleX;
+      var pt = svgEl.createSVGPoint();
+      pt.x = evt.clientX;
+      pt.y = evt.clientY;
+      var userPt = pt.matrixTransform(svgEl.getScreenCTM().inverse());
+      var mouseX = userPt.x;
       var i = Math.round((mouseX - geom.padLeft - geom.offset) / geom.spacing);
       if (i < 0) { i = 0; }
       if (i > geom.n - 1) { i = geom.n - 1; }

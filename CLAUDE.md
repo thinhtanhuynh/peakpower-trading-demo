@@ -40,8 +40,8 @@ Consumption (Live Data) page and its generator/tests are application code.
 | `remap_eans.py` | ~3 KB | Script that remapped the original 5-profile files' EANs to match the Customer Portal `CONNECTIONS` list and generated the new `office` (Almere) profile rows. Not idempotent — see note under Generation methodology. |
 | `hedge_blocks_2026.json` | ~5 KB | Test hedge/trade block data (Base & Peak shapes) per EAN — backs the hedge cost/coverage figures on the Consumption (Live Data) page (see below) and a future *Trading* screen — see "Hedge block test data" below. |
 | `gen_hedge.py` | ~3 KB | Generator script for `hedge_blocks_2026.json`. Re-runnable — supports MONTH/QUARTER/YEAR periods via `month_period()`/`quarter_period()`/`year_period()`. |
-| `generate_consumption_data.py` | ~16 KB | Generator + page-assembly script for the Consumption (Live Data) page — see "Consumption (Live Data) page" below. Companion tests: `test_generate_consumption_data.py`, `consumption-calc.test.js`, `verify_consumption_page.py`. |
-| `consumption-calc.js` | ~1 KB | Pure JS stat/formatting module used by the Consumption (Live Data) page (dual Node/browser module). |
+| `generate_consumption_data.py` | ~29 KB | Generator + page-assembly script for the Consumption (Live Data) page — see "Consumption (Live Data) page" below. Companion tests: `test_generate_consumption_data.py`, `consumption-calc.test.js`, `verify_consumption_page.py`. |
+| `consumption-calc.js` | ~3.8 KB | Pure JS stat/formatting module used by the Consumption (Live Data) page (dual Node/browser module). |
 | `consumption_live_data.json` | ~1.7 MB | Generated compact per-site/per-date consumption/production/EPEX data plus each site's hedge blocks, embedded into the Live Data page. |
 | `Customer Portal - Consumption (Live Data).html` | ~1.7 MB | Standalone, hand-written (not bundled/exported) page showing real 15-minute interval data for a selectable connection and date. |
 
