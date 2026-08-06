@@ -1549,3 +1549,13 @@ tool) to confirm:
       scroll behavior works against the now-much-longer table.
 - [ ] Switch back to Day view; confirm the table reverts to a single day
       and the date input (not the month select) is visible again.
+- [ ] On a wide window (>1400px), hover the Day chart and confirm the
+      crosshair tracks the cursor accurately at both edges, not just the
+      center (added post-final-review: the original hover coordinate math
+      only agreed with the cursor at the exact horizontal midpoint on wide
+      windows due to SVG letterboxing; fixed via `getScreenCTM().inverse()`
+      — this step confirms the fix visually).
+- [ ] On a short viewport, hover a row near the top/bottom of the visible
+      table area and confirm the page doesn't unexpectedly scroll the
+      whole `.main` panel (only the table's own scroll container should
+      move, per `scrollIntoView({block:"nearest"})`).
