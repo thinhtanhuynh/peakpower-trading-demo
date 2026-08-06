@@ -90,9 +90,25 @@
       </div>
       <div class="stat-row" id="stat-row"></div>
       <div class="card">
-        <div class="card-title">Consumption &amp; production — 15-minute intervals</div>
-        <div class="card-subtitle" id="chart-subtitle"></div>
-        <svg id="chart" viewBox="0 0 960 260" style="width:100%;height:260px;display:block"></svg>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <div class="card-title">Consumption &amp; production — 15-minute intervals</div>
+            <div class="card-subtitle" id="chart-subtitle"></div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="chart-tabs">
+              <button type="button" class="chart-tab active" data-mode="day">Day</button>
+              <button type="button" class="chart-tab" data-mode="month">Month</button>
+            </div>
+            <select id="month-select" style="display:none"></select>
+          </div>
+        </div>
+        <div id="day-chart-wrap">
+          <svg id="chart" viewBox="0 0 960 260" style="width:100%;height:260px;display:block"></svg>
+        </div>
+        <div id="month-chart-wrap" class="chart-scroll" style="display:none">
+          <svg id="month-chart" viewBox="0 0 960 260" height="260" style="display:block"></svg>
+        </div>
         <div class="legend">
           <div><span class="swatch" style="background:var(--pp-teal-700)"></span>Consumption</div>
           <div><span class="swatch" style="background:var(--pp-green);height:2px"></span>Production (on-site generation)</div>
@@ -400,13 +416,179 @@
 
   attachHoverHandler(chart, "chart-crosshair", function () { return lastChartGeom; }, highlightTableRow, clearHighlightedRow);
 
+  function monthLabel(year, month, daysPresent, lastDateStr) {
+    var monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    var daysInMonth = new Date(year, month, 0).getDate();
+    var label = monthNames[month - 1] + " " + year;
+    if (daysPresent < daysInMonth) {
+      var lastDay = parseInt(lastDateStr.slice(8, 10), 10);
+      label += " (partial — through " + lastDay + " " + monthNames[month - 1].slice(0, 3) + ")";
+    }
+    return label;
+  }
+
+  function buildMonthOptions() {
+    var byMonth = {};
+    allDates.forEach(function (d) {
+      var key = d.slice(0, 7);
+      if (!byMonth[key]) { byMonth[key] = []; }
+      byMonth[key].push(d);
+    });
+    var keys = Object.keys(byMonth).sort();
+    return keys.map(function (key) {
+      var dates = byMonth[key];
+      var year = parseInt(key.slice(0, 4), 10);
+      var month = parseInt(key.slice(5, 7), 10);
+      var lastDate = dates[dates.length - 1];
+      return { value: key, label: monthLabel(year, month, dates.length, lastDate), dates: dates };
+    });
+  }
+
+  var MONTH_OPTIONS = buildMonthOptions();
+  var monthSelect = document.getElementById("month-select");
+  MONTH_OPTIONS.forEach(function (o) {
+    var opt = document.createElement("option");
+    opt.value = o.value;
+    opt.textContent = o.label;
+    monthSelect.appendChild(opt);
+  });
+  monthSelect.value = MONTH_OPTIONS[MONTH_OPTIONS.length - 1].value;
+
+  function concatMonthData(monthKey) {
+    var opt = MONTH_OPTIONS.filter(function (o) { return o.value === monthKey; })[0];
+    var dates = opt ? opt.dates : [];
+    var allTimes = [], allDatesPerIndex = [], allPrices = [], allC = [], allG = [];
+    var siteId = siteSelect.value;
+    dates.forEach(function (d) {
+      var ds = DATA.byDate[d];
+      var ss = DATA.bySite[siteId] && DATA.bySite[siteId][d];
+      if (!ds || !ss) { return; }
+      for (var i = 0; i < ds.t.length; i++) {
+        allTimes.push(ds.t[i]);
+        allDatesPerIndex.push(d);
+        allPrices.push(ds.p[i]);
+        allC.push(ss.c[i]);
+        allG.push(ss.g[i]);
+      }
+    });
+    return { dates: allDatesPerIndex, times: allTimes, prices: allPrices, consumption: allC, production: allG };
+  }
+
+  var lastMonthChartGeom = null;
+  var monthChart = document.getElementById("month-chart");
+
+  function buildMonthChartSvg(dates, times, consumption, production) {
+    var n = times.length;
+    var pxPerInterval = 4;
+    var width = Math.max(960, n * pxPerInterval);
+    var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
+    var plotW = width - padLeft - 10;
+    var plotH = height - padTop - padBottom;
+    var maxVal = 0;
+    var i;
+    for (i = 0; i < n; i++) {
+      maxVal = Math.max(maxVal, consumption[i], production[i]);
+    }
+    if (maxVal <= 0) { maxVal = 1; }
+    var stepX = n > 1 ? plotW / (n - 1) : 0;
+
+    var areaPoints = "";
+    var linePoints = "";
+    for (i = 0; i < n; i++) {
+      var px = padLeft + i * stepX;
+      var cy = padTop + (plotH - (consumption[i] / maxVal) * plotH);
+      var gy = padTop + (plotH - (production[i] / maxVal) * plotH);
+      areaPoints += px.toFixed(1) + "," + cy.toFixed(1) + " ";
+      linePoints += px.toFixed(1) + "," + gy.toFixed(1) + " ";
+    }
+    var areaPath = "M" + padLeft.toFixed(1) + "," + (padTop + plotH).toFixed(1) + " L" +
+      areaPoints.trim().replace(/ /g, " L") + " L" + (padLeft + plotW).toFixed(1) + "," + (padTop + plotH).toFixed(1) + " Z";
+
+    var dayGridlines = "";
+    var dayLabels = "";
+    var prevDate = null;
+    for (i = 0; i < n; i++) {
+      if (dates[i] !== prevDate) {
+        var lx = (padLeft + i * stepX).toFixed(1);
+        dayGridlines += '<line x1="' + lx + '" y1="' + padTop + '" x2="' + lx + '" y2="' + (padTop + plotH) + '" stroke="#eef2f6"></line>';
+        dayLabels += '<text x="' + lx + '" y="' + (height - 6) + '" font-size="9" fill="#64748b">' + dates[i].slice(8, 10) + "</text>";
+        prevDate = dates[i];
+      }
+    }
+
+    lastMonthChartGeom = { padLeft: padLeft, spacing: stepX, offset: 0, n: n, width: width };
+
+    return dayGridlines +
+      '<line x1="' + padLeft + '" y1="' + (padTop + plotH) + '" x2="' + (padLeft + plotW) + '" y2="' + (padTop + plotH) + '" stroke="#dbe3ec"></line>' +
+      '<path d="' + areaPath + '" fill="#0f766e" fill-opacity="0.25" stroke="none"></path>' +
+      '<polyline points="' + areaPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="1.5"></polyline>' +
+      '<polyline points="' + linePoints.trim() + '" fill="none" stroke="#15803d" stroke-width="1.5"></polyline>' +
+      dayLabels +
+      '<line id="month-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
+      '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
+  }
+
+  attachHoverHandler(monthChart, "month-chart-crosshair", function () { return lastMonthChartGeom; }, highlightTableRow, clearHighlightedRow);
+
+  var chartMode = "day";
+
+  function switchMode(mode) {
+    chartMode = mode;
+    dateInput.style.display = mode === "day" ? "" : "none";
+    monthSelect.style.display = mode === "month" ? "" : "none";
+    document.getElementById("day-chart-wrap").style.display = mode === "day" ? "" : "none";
+    document.getElementById("month-chart-wrap").style.display = mode === "month" ? "" : "none";
+    var tabs = document.querySelectorAll(".chart-tab");
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle("active", tabs[i].getAttribute("data-mode") === mode);
+    }
+    render();
+  }
+
+  var tabButtons = document.querySelectorAll(".chart-tab");
+  for (var t = 0; t < tabButtons.length; t++) {
+    tabButtons[t].addEventListener("click", function (evt) {
+      switchMode(evt.target.getAttribute("data-mode"));
+    });
+  }
+
   function render() {
     var siteId = siteSelect.value;
-    var date = dateInput.value;
     var site = DATA.sites.filter(function (s) { return s.id === siteId; })[0];
+    var hedgeBlocks = DATA.hedge && DATA.hedge[siteId];
+
+    if (chartMode === "month") {
+      var monthKey = monthSelect.value;
+      var month = concatMonthData(monthKey);
+      if (month.times.length === 0) {
+        crumb.textContent = "";
+        chartSubtitle.textContent = "";
+        statRow.innerHTML = '<div class="stat-card"><div class="label">No data</div>' +
+          '<div class="value">—</div><div class="sublabel">No data for this month.</div></div>';
+        monthChart.innerHTML = "";
+        tableBody.innerHTML = "";
+        return;
+      }
+      var monthOpt = MONTH_OPTIONS.filter(function (o) { return o.value === monthKey; })[0];
+      crumb.textContent = site.name + " · " + monthOpt.label;
+      chartSubtitle.textContent = month.times.length + " intervals · Europe/Amsterdam";
+
+      var monthStats = ConsumptionCalc.computeDayStats(month.times, month.prices, month.consumption, month.production, month.dates, hedgeBlocks);
+      var monthSeries = ConsumptionCalc.computeIntervalSeries(month.times, month.prices, month.consumption, month.production, month.dates, hedgeBlocks);
+      renderStatCards(monthStats);
+
+      var markup = buildMonthChartSvg(month.dates, month.times, month.consumption, month.production);
+      monthChart.setAttribute("viewBox", "0 0 " + lastMonthChartGeom.width + " 260");
+      monthChart.style.width = lastMonthChartGeom.width + "px";
+      monthChart.innerHTML = markup;
+
+      renderTable(month.times, month.consumption, month.production, month.prices, monthSeries);
+      return;
+    }
+
+    var date = dateInput.value;
     var dateSeries = DATA.byDate[date];
     var siteSeries = DATA.bySite[siteId] && DATA.bySite[siteId][date];
-    var hedgeBlocks = DATA.hedge && DATA.hedge[siteId];
 
     if (!dateSeries || !siteSeries) {
       crumb.textContent = "";
@@ -421,16 +603,17 @@
     crumb.textContent = site.name + " · " + formatDateLong(date);
     chartSubtitle.textContent = dateSeries.t.length + " intervals · Europe/Amsterdam";
 
-    var stats = ConsumptionCalc.computeDayStats(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
-    var series = ConsumptionCalc.computeIntervalSeries(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
-    renderStatCards(stats);
+    var dayStats = ConsumptionCalc.computeDayStats(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
+    var daySeries = ConsumptionCalc.computeIntervalSeries(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
+    renderStatCards(dayStats);
 
     chart.innerHTML = buildChartSvg(dateSeries.t, siteSeries.c, siteSeries.g);
-    renderTable(dateSeries.t, siteSeries.c, siteSeries.g, dateSeries.p, series);
+    renderTable(dateSeries.t, siteSeries.c, siteSeries.g, dateSeries.p, daySeries);
   }
 
   siteSelect.addEventListener("change", render);
   dateInput.addEventListener("change", render);
+  monthSelect.addEventListener("change", render);
   render();
 })();
 </script>
