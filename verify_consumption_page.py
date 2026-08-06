@@ -22,6 +22,11 @@ EXPECTED_SITES = ["rot", "venlo", "tilburg", "almere", "unnamed", "breda"]
 DST_SHORT_DAY = "2026-03-29"
 REGULAR_DAY = "2026-08-05"
 
+EXPECTED_HEDGE_ROT = [
+    {"shape": "base", "periodStart": "2026-01-01", "periodEnd": "2026-12-31", "powerKw": 1000.0, "priceKwh": 0.07},
+    {"shape": "peak", "periodStart": "2026-01-01", "periodEnd": "2026-12-31", "powerKw": 1000.0, "priceKwh": 0.095},
+]
+
 
 def load_json(path):
     with open(path, "r", encoding="utf-8") as f:
@@ -82,7 +87,26 @@ def main():
     assert dataset["byDate"][REGULAR_DAY]["p"] == expected_p, "%s price mismatch" % REGULAR_DAY
     assert dataset["byDate"][REGULAR_DAY]["t"] == expected_t, "%s time labels mismatch" % REGULAR_DAY
 
-    print("verify_consumption_page.py: all checks passed (%d dates, %d sites)" %
+    assert dataset["hedge"]["rot"] == EXPECTED_HEDGE_ROT, \
+        "rot hedge blocks mismatch: %s" % (dataset["hedge"]["rot"],)
+    for site_id in EXPECTED_SITES:
+        assert site_id in dataset["hedge"], "missing site %s in hedge" % site_id
+        assert len(dataset["hedge"][site_id]) == 2, \
+            "site %s should have 2 hedge blocks (base+peak), got %d" % (site_id, len(dataset["hedge"][site_id]))
+
+    # 2026-08-03 is a Monday: weekday-peak interval (10:00) has both base+peak
+    # active; an off-peak interval the same day (21:00) has base only.
+    weekday_peak_hedge_kwh = 1000.0 * 0.25 + 1000.0 * 0.25
+    weekday_peak_hedge_cost = 1000.0 * 0.25 * 0.07 + 1000.0 * 0.25 * 0.095
+    assert abs(weekday_peak_hedge_kwh - 500.0) < 1e-9, "weekday-peak hedge volume formula check failed"
+    assert abs(weekday_peak_hedge_cost - 41.25) < 1e-9, "weekday-peak hedge cost formula check failed"
+
+    off_peak_hedge_kwh = 1000.0 * 0.25
+    off_peak_hedge_cost = 1000.0 * 0.25 * 0.07
+    assert abs(off_peak_hedge_kwh - 250.0) < 1e-9, "off-peak hedge volume formula check failed"
+    assert abs(off_peak_hedge_cost - 17.5) < 1e-9, "off-peak hedge cost formula check failed"
+
+    print("verify_consumption_page.py: all checks passed (%d dates, %d sites, hedge data verified)" %
           (len(dataset["byDate"]), len(dataset["sites"])))
 
 
