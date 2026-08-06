@@ -101,7 +101,7 @@ PAGE_TEMPLATE = """<!doctype html>
     --pp-sidebar-bg:#0f2b33; --pp-sidebar-text:#cbd5e1; --pp-sidebar-text-active:#ffffff;
     --pp-sidebar-subtitle:#5eead4; --pp-sidebar-active-bg:rgba(20,184,166,0.16);
     --pp-teal-700:#0f766e; --pp-teal-600:#0d9488; --pp-teal-500:#14b8a6; --pp-teal-100:#ccfbf1;
-    --pp-green:#15803d; --pp-red:#dc2626; --pp-cyan:#0891b2;
+    --pp-green:#15803d; --pp-red:#dc2626; --pp-cyan:#0891b2; --pp-orange:#ea580c;
     --pp-indigo:#4f46e5; --pp-indigo-bg:#e0e7ff;
     --font-sans:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
     --font-mono:'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
@@ -148,6 +148,10 @@ PAGE_TEMPLATE = """<!doctype html>
   .chart-tab { border:none; background:transparent; padding:6px 14px; border-radius:6px; font-size:12.5px; font-weight:600; color:var(--pp-text-body); cursor:pointer; font-family:var(--font-sans); }
   .chart-tab.active { background:#fff; color:var(--pp-teal-700); box-shadow:0 1px 2px rgba(0,0,0,0.08); }
   .chart-scroll { overflow-x:auto; }
+  .chart-tooltip { position:fixed; z-index:20; background:#0f172a; color:#fff; font-size:11px; line-height:1.6; padding:8px 10px; border-radius:6px; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,0.25); white-space:nowrap; display:none; }
+  .chart-tooltip .tt-head { font-weight:700; margin-bottom:4px; color:#5eead4; }
+  .chart-tooltip .tt-row { display:flex; justify-content:space-between; gap:14px; }
+  .chart-tooltip .tt-row span:last-child { font-weight:600; }
 </style>
 </head>
 <body>
@@ -199,8 +203,10 @@ PAGE_TEMPLATE = """<!doctype html>
           <svg id="month-chart" viewBox="0 0 960 260" height="260" style="display:block"></svg>
         </div>
         <div class="legend">
-          <div><span class="swatch" style="background:var(--pp-teal-700)"></span>Consumption</div>
-          <div><span class="swatch" style="background:var(--pp-green);height:2px"></span>Production (on-site generation)</div>
+          <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Net usage</div>
+          <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed var(--pp-indigo)"></span>Hedge volume</div>
+          <div><span class="swatch" style="background:var(--pp-orange);opacity:.55"></span>Uncovered — bought at day-ahead</div>
+          <div><span class="swatch" style="background:var(--pp-cyan);opacity:.3"></span>Surplus — sold at day-ahead</div>
         </div>
       </div>
       <div class="card">
@@ -208,7 +214,7 @@ PAGE_TEMPLATE = """<!doctype html>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Time</th><th class="num">Consumption (kW)</th><th class="num">Production (kW)</th><th class="num">Net (kW)</th><th class="num">EPEX (€/kWh)</th><th class="num">Net Cost (€)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Hedge Price (€/kWh)</th><th class="num">Hedge Cost (€)</th><th class="num">Uncovered (kWh)</th></tr>
+              <tr><th>Date</th><th>Time</th><th class="num">Consumption (kW)</th><th class="num">Production (kW)</th><th class="num">Net (kW)</th><th class="num">EPEX (€/kWh)</th><th class="num">Net Cost (€)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Hedge Price (€/kWh)</th><th class="num">Hedge Cost (€)</th><th class="num">Uncovered (kWh)</th></tr>
             </thead>
             <tbody id="table-body"></tbody>
           </table>
@@ -217,6 +223,7 @@ PAGE_TEMPLATE = """<!doctype html>
     </div>
   </div>
 </div>
+<div id="chart-tooltip" class="chart-tooltip"></div>
 
 <script>__CALC_JS__</script>
 <script type="application/json" id="consumption-data">__DATA_JSON__</script>
