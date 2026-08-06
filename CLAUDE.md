@@ -5,16 +5,27 @@ Project memory for `trading-poc` — read this before working in the folder.
 ## What this is
 
 `trading-poc` is an early-stage proof-of-concept for **PeakPower**, an energy
-trading platform. The folder currently holds two things:
+trading platform. The folder currently holds three things:
 
 1. **Two static HTML portal mockups** (self-contained, bundled preview
-   pages — no build tooling, no source repo behind them yet).
+   pages — no build tooling, no source repo behind them yet). These stay
+   pure design references — never hand-edit them.
 2. **EPEX day-ahead tariff data plus generated large-consumer energy
    usage/production test data**, at 15-minute resolution, meant to back the
    *Prices* and *Consumption* screens of the Customer Portal mockup.
+3. **A generated, regeneratable data-driven page** — `Customer Portal -
+   Consumption (Live Data).html` — plus the Python generator
+   (`generate_consumption_data.py`), a pure JS calc module
+   (`consumption-calc.js`), and 3 test suites (`test_generate_consumption_data.py`,
+   `consumption-calc.test.js`, `verify_consumption_page.py`). Unlike the two
+   mockups above, this page is real, testable code: rebuild it with
+   `python3 generate_consumption_data.py` rather than hand-editing the HTML.
+   Running its test suites needs Python 3 plus Node.js (for
+   `consumption-calc.test.js`).
 
-There is no application code, package.json, or build system in this folder
-— everything here is either a design mockup or flat JSON/CSV test data.
+There is no package.json or wider build system in this folder — the two
+portal mockups remain design mockups / flat JSON/CSV test data, but the
+Consumption (Live Data) page and its generator/tests are application code.
 
 ## Repository contents
 

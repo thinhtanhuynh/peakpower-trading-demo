@@ -50,6 +50,12 @@ def main():
             "site %s has %d dates, expected %d" % (
                 site_id, len(dataset["bySite"][site_id]), EXPECTED_DATES)
 
+    for site_id, dates in dataset["bySite"].items():
+        for date, s in dates.items():
+            n = len(dataset["byDate"][date]["t"])
+            assert len(s["c"]) == len(s["g"]) == n, \
+                "%s/%s array length %d/%d != byDate %d" % (site_id, date, len(s["c"]), len(s["g"]), n)
+
     assert len(dataset["byDate"][DST_SHORT_DAY]["t"]) == 92, \
         "DST day should have 92 intervals, got %d" % len(dataset["byDate"][DST_SHORT_DAY]["t"])
     assert len(dataset["byDate"][REGULAR_DAY]["t"]) == 96, \

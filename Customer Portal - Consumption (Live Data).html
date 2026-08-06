@@ -81,7 +81,7 @@
     <div class="content">
       <div class="controls">
         <select id="site-select"></select>
-        <input type="date" id="date-input" min="2026-01-01" max="2026-08-05">
+        <input type="date" id="date-input">
       </div>
       <div class="stat-row" id="stat-row"></div>
       <div class="card">
@@ -184,8 +184,14 @@
     siteSelect.appendChild(opt);
   });
 
+  var allDates = Object.keys(DATA.byDate).sort();
+  var MIN_DATE = allDates[0];
+  var MAX_DATE = allDates[allDates.length - 1];
+  dateInput.min = MIN_DATE;
+  dateInput.max = MAX_DATE;
+
   var DEFAULT_SITE = "rot";
-  var DEFAULT_DATE = "2026-08-05";
+  var DEFAULT_DATE = MAX_DATE;
   siteSelect.value = DEFAULT_SITE;
   dateInput.value = DEFAULT_DATE;
 
@@ -252,6 +258,8 @@
     var siteSeries = DATA.bySite[siteId] && DATA.bySite[siteId][date];
 
     if (!dateSeries || !siteSeries) {
+      crumb.textContent = "";
+      chartSubtitle.textContent = "";
       statRow.innerHTML = '<div class="stat-card"><div class="label">No data</div>' +
         '<div class="value">—</div><div class="sublabel">No data for this date.</div></div>';
       chart.innerHTML = "";
