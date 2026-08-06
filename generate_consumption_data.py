@@ -99,7 +99,7 @@ PAGE_TEMPLATE = """<!doctype html>
     --pp-text-heading:#0f172a; --pp-text-body:#64748b; --pp-text-faint:#94a3b8;
     --pp-sidebar-bg:#0f2b33; --pp-sidebar-text:#cbd5e1; --pp-sidebar-text-active:#ffffff;
     --pp-sidebar-subtitle:#5eead4; --pp-sidebar-active-bg:rgba(20,184,166,0.16);
-    --pp-teal-700:#0f766e; --pp-teal-600:#0d9488; --pp-teal-500:#14b8a6;
+    --pp-teal-700:#0f766e; --pp-teal-600:#0d9488; --pp-teal-500:#14b8a6; --pp-teal-100:#ccfbf1;
     --pp-green:#15803d; --pp-red:#dc2626; --pp-cyan:#0891b2;
     --pp-indigo:#4f46e5; --pp-indigo-bg:#e0e7ff;
     --font-sans:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
@@ -142,6 +142,11 @@ PAGE_TEMPLATE = """<!doctype html>
   tbody td { padding:6px 14px; border-bottom:1px solid var(--pp-border); }
   tbody tr:nth-child(even) { background:var(--pp-surface-zebra); }
   td.net-export { color:var(--pp-cyan); font-weight:600; }
+  tbody tr.hovered { background:var(--pp-teal-100) !important; }
+  .chart-tabs { display:flex; gap:4px; background:var(--pp-surface-alt); border-radius:8px; padding:3px; }
+  .chart-tab { border:none; background:transparent; padding:6px 14px; border-radius:6px; font-size:12.5px; font-weight:600; color:var(--pp-text-body); cursor:pointer; font-family:var(--font-sans); }
+  .chart-tab.active { background:#fff; color:var(--pp-teal-700); box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+  .chart-scroll { overflow-x:auto; }
 </style>
 </head>
 <body>
@@ -186,7 +191,7 @@ PAGE_TEMPLATE = """<!doctype html>
         <div class="table-wrap">
           <table>
             <thead>
-              <tr><th>Time</th><th class="num">Consumption (kW)</th><th class="num">Production (kW)</th><th class="num">Net (kW)</th><th class="num">EPEX (€/kWh)</th></tr>
+              <tr><th>Time</th><th class="num">Consumption (kW)</th><th class="num">Production (kW)</th><th class="num">Net (kW)</th><th class="num">EPEX (€/kWh)</th><th class="num">Net Cost (€)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Hedge Price (€/kWh)</th><th class="num">Hedge Cost (€)</th><th class="num">Uncovered (kWh)</th></tr>
             </thead>
             <tbody id="table-body"></tbody>
           </table>
@@ -243,6 +248,45 @@ PAGE_TEMPLATE = """<!doctype html>
       '<div class="sublabel">' + sublabel + '</div></div>';
   }
 
+  function renderStatCards(stats) {
+    var spotTone = stats.spotResultEur > 0 ? "critical" : (stats.spotResultEur < 0 ? "success" : "");
+    var netTone = stats.netKwh < 0 ? "export" : "";
+    var uncoveredTone = stats.uncoveredKwh < 0 ? "export" : "";
+    statRow.innerHTML =
+      statCardHtml("Consumption", ConsumptionCalc.formatNL(stats.consumptionKwh, 1) + " kWh", "", "total") +
+      statCardHtml("Production", ConsumptionCalc.formatNL(stats.productionKwh, 1) + " kWh", "", "on-site generation") +
+      statCardHtml("Net / import", ConsumptionCalc.formatNL(stats.netKwh, 1) + " kWh", netTone, stats.netKwh < 0 ? "net exporter" : "net importer") +
+      statCardHtml("Peak demand", ConsumptionCalc.formatNL(stats.peakKw, 1) + " kW", "", "at " + stats.peakTime) +
+      statCardHtml("Net cost", (stats.spotResultEur >= 0 ? "+ " : "− ") + "€ " + ConsumptionCalc.formatNL(Math.abs(stats.spotResultEur), 2), spotTone, "indicative, day-ahead price") +
+      statCardHtml("Hedge cost", "€ " + ConsumptionCalc.formatNL(stats.hedgeCostEur, 2), "", "locked in via hedge") +
+      statCardHtml("Uncovered", ConsumptionCalc.formatNL(stats.uncoveredKwh, 1) + " kWh", uncoveredTone, stats.uncoveredKwh < 0 ? "over-hedged" : "exposed to spot price");
+  }
+
+  function tdClass(value) {
+    return value < 0 ? ' class="num net-export"' : ' class="num"';
+  }
+
+  function renderTable(times, consumption, production, prices, series) {
+    var rows = "";
+    for (var i = 0; i < times.length; i++) {
+      var net = consumption[i] - production[i];
+      rows += '<tr data-idx="' + i + '"><td>' + times[i] + "</td>" +
+        '<td class="num">' + ConsumptionCalc.formatNL(consumption[i], 1) + "</td>" +
+        '<td class="num">' + ConsumptionCalc.formatNL(production[i], 1) + "</td>" +
+        "<td" + tdClass(net) + ">" + ConsumptionCalc.formatNL(net, 1) + "</td>" +
+        '<td class="num">' + ConsumptionCalc.formatNL(prices[i], 4) + "</td>" +
+        "<td" + tdClass(series.netCost[i]) + ">" + ConsumptionCalc.formatNL(series.netCost[i], 2) + "</td>" +
+        '<td class="num">' + ConsumptionCalc.formatNL(series.hedgeVolume[i], 1) + "</td>" +
+        '<td class="num">' + ConsumptionCalc.formatNL(series.hedgePrice[i], 4) + "</td>" +
+        '<td class="num">' + ConsumptionCalc.formatNL(series.hedgeCost[i], 2) + "</td>" +
+        "<td" + tdClass(series.uncovered[i]) + ">" + ConsumptionCalc.formatNL(series.uncovered[i], 1) + "</td>" +
+        "</tr>";
+    }
+    tableBody.innerHTML = rows;
+  }
+
+  var lastChartGeom = null;
+
   function buildChartSvg(times, consumption, production) {
     var n = times.length;
     var width = 960, height = 260, padLeft = 40, padBottom = 24, padTop = 10;
@@ -276,12 +320,59 @@ PAGE_TEMPLATE = """<!doctype html>
           '" font-size="10" fill="#64748b">' + times[i] + '</text>';
       }
     }
+    lastChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
     return '<line x1="' + padLeft + '" y1="' + (padTop + plotH) + '" x2="' + (padLeft + plotW) +
       '" y2="' + (padTop + plotH) + '" stroke="#dbe3ec"></line>' +
       bars +
       '<polyline points="' + linePoints.trim() + '" fill="none" stroke="#15803d" stroke-width="2"></polyline>' +
-      axisLabels;
+      axisLabels +
+      '<line id="chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
+      '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
   }
+
+  function attachHoverHandler(svgEl, crosshairId, getGeom, onHoverIndex, onLeave) {
+    svgEl.addEventListener("mousemove", function (evt) {
+      var geom = getGeom();
+      if (!geom) { return; }
+      var rect = svgEl.getBoundingClientRect();
+      var viewBox = svgEl.viewBox.baseVal;
+      var scaleX = viewBox.width / rect.width;
+      var mouseX = (evt.clientX - rect.left) * scaleX;
+      var i = Math.round((mouseX - geom.padLeft - geom.offset) / geom.spacing);
+      if (i < 0) { i = 0; }
+      if (i > geom.n - 1) { i = geom.n - 1; }
+      var crosshair = svgEl.querySelector("#" + crosshairId);
+      if (crosshair) {
+        var cx = geom.padLeft + i * geom.spacing + geom.offset;
+        crosshair.setAttribute("x1", cx.toFixed(1));
+        crosshair.setAttribute("x2", cx.toFixed(1));
+        crosshair.setAttribute("visibility", "visible");
+      }
+      onHoverIndex(i);
+    });
+    svgEl.addEventListener("mouseleave", function () {
+      var crosshair = svgEl.querySelector("#" + crosshairId);
+      if (crosshair) { crosshair.setAttribute("visibility", "hidden"); }
+      onLeave();
+    });
+  }
+
+  var previousHoveredRow = null;
+  function highlightTableRow(i) {
+    if (previousHoveredRow) { previousHoveredRow.classList.remove("hovered"); }
+    var row = tableBody.querySelector('tr[data-idx="' + i + '"]');
+    if (row) {
+      row.classList.add("hovered");
+      row.scrollIntoView({ block: "nearest" });
+    }
+    previousHoveredRow = row;
+  }
+  function clearHighlightedRow() {
+    if (previousHoveredRow) { previousHoveredRow.classList.remove("hovered"); }
+    previousHoveredRow = null;
+  }
+
+  attachHoverHandler(chart, "chart-crosshair", function () { return lastChartGeom; }, highlightTableRow, clearHighlightedRow);
 
   function render() {
     var siteId = siteSelect.value;
@@ -289,6 +380,7 @@ PAGE_TEMPLATE = """<!doctype html>
     var site = DATA.sites.filter(function (s) { return s.id === siteId; })[0];
     var dateSeries = DATA.byDate[date];
     var siteSeries = DATA.bySite[siteId] && DATA.bySite[siteId][date];
+    var hedgeBlocks = DATA.hedge && DATA.hedge[siteId];
 
     if (!dateSeries || !siteSeries) {
       crumb.textContent = "";
@@ -303,30 +395,12 @@ PAGE_TEMPLATE = """<!doctype html>
     crumb.textContent = site.name + " · " + formatDateLong(date);
     chartSubtitle.textContent = dateSeries.t.length + " intervals · Europe/Amsterdam";
 
-    var stats = ConsumptionCalc.computeDayStats(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g);
-    var spotTone = stats.spotResultEur > 0 ? "critical" : (stats.spotResultEur < 0 ? "success" : "");
-    var netTone = stats.netKwh < 0 ? "export" : "";
-
-    statRow.innerHTML =
-      statCardHtml("Consumption", ConsumptionCalc.formatNL(stats.consumptionKwh, 1) + " kWh", "", dateSeries.t.length + " intervals") +
-      statCardHtml("Production", ConsumptionCalc.formatNL(stats.productionKwh, 1) + " kWh", "", "on-site generation") +
-      statCardHtml("Net / import", ConsumptionCalc.formatNL(stats.netKwh, 1) + " kWh", netTone, stats.netKwh < 0 ? "net exporter" : "net importer") +
-      statCardHtml("Peak demand", ConsumptionCalc.formatNL(stats.peakKw, 1) + " kW", "", "at " + stats.peakTime) +
-      statCardHtml("Spot result", (stats.spotResultEur >= 0 ? "+ " : "− ") + "€ " + ConsumptionCalc.formatNL(Math.abs(stats.spotResultEur), 2), spotTone, "indicative, day-ahead price");
+    var stats = ConsumptionCalc.computeDayStats(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
+    var series = ConsumptionCalc.computeIntervalSeries(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
+    renderStatCards(stats);
 
     chart.innerHTML = buildChartSvg(dateSeries.t, siteSeries.c, siteSeries.g);
-
-    var rows = "";
-    for (var i = 0; i < dateSeries.t.length; i++) {
-      var net = siteSeries.c[i] - siteSeries.g[i];
-      var netClass = net < 0 ? ' class="num net-export"' : ' class="num"';
-      rows += "<tr><td>" + dateSeries.t[i] + "</td>" +
-        '<td class="num">' + ConsumptionCalc.formatNL(siteSeries.c[i], 1) + "</td>" +
-        '<td class="num">' + ConsumptionCalc.formatNL(siteSeries.g[i], 1) + "</td>" +
-        "<td" + netClass + ">" + ConsumptionCalc.formatNL(net, 1) + "</td>" +
-        '<td class="num">' + ConsumptionCalc.formatNL(dateSeries.p[i], 4) + "</td></tr>";
-    }
-    tableBody.innerHTML = rows;
+    renderTable(dateSeries.t, siteSeries.c, siteSeries.g, dateSeries.p, series);
   }
 
   siteSelect.addEventListener("change", render);
