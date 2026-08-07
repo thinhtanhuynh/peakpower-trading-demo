@@ -224,10 +224,8 @@ date 2026-01-01 through 2026-08-05), plus a **Day / Month** chart toggle
 (below). It doesn't modify or depend on `Customer Portal - Preview.html` —
 that file stays a pure design mockup.
 
-**Scope:** Day and Month views (no Quarter view). No hedge-cover line is
-drawn on the chart itself — hedge figures are shown in the stat cards and
-table only. `tilburg-gas` is excluded — it has no usage rows and no hedge
-rows.
+**Scope:** Day and Month views (no Quarter view). `tilburg-gas` is
+excluded — it has no usage rows and no hedge rows.
 
 **Data shape** (`consumption_live_data.json`, embedded inline in the HTML —
 no `fetch`, no network requests, opens directly via `file://`):
@@ -252,31 +250,54 @@ future MONTH/QUARTER hedge rows would be picked up without a code change.
 
 **Calculations** (`consumption-calc.js`, unit tested via
 `consumption-calc.test.js`), per 15-minute interval:
-- `energy_kWh = power_kW × 0.25`.
-- **Net cost** = net (consumption − production, kWh) × that interval's
-  EPEX price — the daily/monthly total of this is the "Net cost" stat card
-  (formerly labeled "Spot result").
+- `energy_kWh = power_kW × 0.25`; `netKwh = (consumption − production) ×
+  0.25` — can go negative on a solar/CHP-heavy interval where production
+  exceeds consumption (a real, common case — e.g. `tilburg`'s midday solar
+  output, not just a theoretical edge case).
+- **Net cost** = `netKwh` × that interval's EPEX price — the daily/monthly
+  total of this is the "Net cost" stat card (formerly labeled "Spot result").
 - **Hedge volume/price/cost** — a hedge block is active for an interval if
   the date falls in its period, and — for `peak` blocks only — the
   weekday is Mon–Fri and the time is 08:00–20:00; volume is
   `powerKw × 0.25` per active block, summed; price is the blended
   cost/volume across simultaneously-active blocks (e.g. base+peak both
   active on a weekday during peak hours).
-- **Uncovered** = net (kWh) − hedge volume — can go negative
-  (over-hedged that interval/day/month).
+- **Uncovered** = `netKwh` − hedge volume — can go negative (over-hedged
+  that interval/day/month).
+- **Delta** = Net Cost − Hedge Cost — shown only in the hover tooltip
+  (below), not a stat card or table column.
 
 Net cost is intentionally independent of the hedge (it answers "what would
 this cost at spot price alone"); hedge cost and uncovered are the separate
 "what's locked in" / "what's still exposed" figures. Numbers display
 NL-style (comma decimal, period thousands separator).
 
-**Hover:** hovering the chart (Day or Month) highlights and scrolls to the
-matching row in the table below, via a shared cursor-position →
-nearest-interval-index calculation (one listener per chart, not per mark,
-so it scales to the Month view's ~2,976 points).
+**Chart (Day and Month):** two lines — net usage (solid teal) and hedge
+volume (dashed indigo) — with the gap between them filled by one bar per
+interval: orange (55% opacity) when net exceeds hedge ("uncovered — bought
+at day-ahead"), cyan (30% opacity) when hedge exceeds net ("surplus — sold
+at day-ahead") — the same color convention as the original Customer
+Portal mockup's Day-tab legend. Consumption and production are no longer
+plotted (both remain in the table and their own stat cards); the y-axis is
+bipolar (a proper zero baseline, not always at the bottom) to correctly
+show intervals where `netKwh` goes negative.
 
-**Month view:** a second chart type (line/area, not bars — a bar per
-15-minute interval isn't legible at a whole month's density) plotting
+**Hover vs. click:** hovering the chart shows a tooltip with every value
+for that interval (date, time, consumption, production, net, EPEX, net
+cost, hedge volume/price/cost, uncovered, delta) plus a crosshair — it no
+longer scrolls the table. Clicking the chart highlights and scrolls to
+that interval's row instead; the selection persists until the next click
+or until the view changes (switching site/date/month clears it). One
+shared interaction function drives both Day and Month charts, using a
+cursor-position → nearest-interval-index calculation (not per-mark
+listeners), so it scales to the Month view's ~2,976 points.
+
+**Table:** a Date column (short format, e.g. "5 Aug 2026") is the first
+column in both Day and Month modes — in Day mode every row repeats the
+same date; in Month mode it's what actually disambiguates the repeating
+`HH:MM` values across days.
+
+**Month view:** a second chart type (line + bars, not bars alone) plotting
 every interval of a selected month in one horizontally-scrollable chart;
 the month dropdown is derived from the data's actual coverage, so the
 trailing partial month (August 2026, only 5 days) renders correctly with
@@ -289,8 +310,9 @@ dataset *and* `hedge_blocks_2026.json`; `python3 verify_consumption_page.py`
 cross-checks the result (site/date coverage, DST-day interval count,
 HTML-embedded data matching the standalone JSON, one site/date's usage
 values matching the raw source rows exactly, and the embedded hedge blocks
-matching `hedge_blocks_2026.json` with a numeric spot-check of the
-weekday-peak vs. off-peak formulas).
+matching a fresh `build_hedge_section(hedge_blocks_2026.json)` — not a
+hardcoded snapshot, so it stays correct if the source file gains new
+MONTH/QUARTER rows).
 
 ## Conventions
 
