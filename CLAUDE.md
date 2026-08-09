@@ -13,19 +13,24 @@ trading platform. The folder currently holds three things:
 2. **EPEX day-ahead tariff data plus generated large-consumer energy
    usage/production test data**, at 15-minute resolution, meant to back the
    *Prices* and *Consumption* screens of the Customer Portal mockup.
-3. **A generated, regeneratable data-driven page** — `Customer Portal -
-   Consumption (Live Data).html` — plus the Python generator
-   (`generate_consumption_data.py`), a pure JS calc module
-   (`consumption-calc.js`), and 3 test suites (`test_generate_consumption_data.py`,
-   `consumption-calc.test.js`, `verify_consumption_page.py`). Unlike the two
-   mockups above, this page is real, testable code: rebuild it with
-   `python3 generate_consumption_data.py` rather than hand-editing the HTML.
-   Running its test suites needs Python 3 plus Node.js (for
-   `consumption-calc.test.js`).
+3. **A live, browser-calculated data-driven page** — `Customer Portal -
+   Consumption (Live Data).html` — plus two pure JS modules,
+   `consumption-calc.js` (stats/formatting) and `consumption-data-loader.js`
+   (fetches and groups the raw source files), and their Node test suites
+   (`consumption-calc.test.js`, `consumption-data-loader.test.js`). There is
+   **no build step and no Python anywhere in this pipeline**: the page
+   `fetch()`es `epex_tariffs_usage_combined_15_min_interval.json` and
+   `hedge_blocks_2026.json` directly and does all grouping and calculation
+   client-side, every time it loads — editing either source JSON file (e.g.
+   adding a new hedge period) is picked up on the next page load with
+   nothing to regenerate. Running the test suites only needs Node.js.
 
-There is no package.json or wider build system in this folder — the two
-portal mockups remain design mockups / flat JSON/CSV test data, but the
-Consumption (Live Data) page and its generator/tests are application code.
+This folder is **Python-free by design** — there is no package.json either,
+just two JS modules loaded straight into the browser via `<script src>`.
+Because the page uses `fetch()`, it must be served over http(s) rather than
+opened directly via `file://` (browsers block `fetch()` of local files) —
+e.g. `npx http-server .` or `npx serve .` from this folder, then open the
+page through that server's URL.
 
 ## Repository contents
 
@@ -36,14 +41,12 @@ Consumption (Live Data) page and its generator/tests are application code.
 | `EPEX tariffs 15 min interval.csv` | ~3.6 MB | Source EPEX day-ahead tariff export, 20,828 rows (15-min intervals) |
 | `epex_tariffs_15_min_interval.json` | ~11.2 MB | Same tariff data as JSON (one object per row) |
 | `epex_usage_15_min_interval.json` | ~66 MB | Generated consumption/production test data, 6 sites × 20,828 intervals = 124,968 rows |
-| `epex_tariffs_usage_combined_15_min_interval.json` | ~75 MB | Tariff + usage merged into one record per site per interval, 124,968 rows |
-| `remap_eans.py` | ~3 KB | Script that remapped the original 5-profile files' EANs to match the Customer Portal `CONNECTIONS` list and generated the new `office` (Almere) profile rows. Not idempotent — see note under Generation methodology. |
-| `hedge_blocks_2026.json` | ~5 KB | Test hedge/trade block data (Base & Peak shapes) per EAN — backs the hedge cost/coverage figures on the Consumption (Live Data) page (see below) and a future *Trading* screen — see "Hedge block test data" below. |
-| `gen_hedge.py` | ~3 KB | Generator script for `hedge_blocks_2026.json`. Re-runnable — supports MONTH/QUARTER/YEAR periods via `month_period()`/`quarter_period()`/`year_period()`. |
-| `generate_consumption_data.py` | ~29 KB | Generator + page-assembly script for the Consumption (Live Data) page — see "Consumption (Live Data) page" below. Companion tests: `test_generate_consumption_data.py`, `consumption-calc.test.js`, `verify_consumption_page.py`. |
-| `consumption-calc.js` | ~3.8 KB | Pure JS stat/formatting module used by the Consumption (Live Data) page (dual Node/browser module). |
-| `consumption_live_data.json` | ~1.7 MB | Generated compact per-site/per-date consumption/production/EPEX data plus each site's hedge blocks, embedded into the Live Data page. |
-| `Customer Portal - Consumption (Live Data).html` | ~1.7 MB | Standalone, hand-written (not bundled/exported) page showing real 15-minute interval data for a selectable connection and date. |
+| `epex_tariffs_usage_combined_15_min_interval.json` | ~75 MB | Tariff + usage merged into one record per site per interval, 124,968 rows. Fetched directly by the Consumption (Live Data) page at load time. |
+| `hedge_blocks_2026.json` | ~16 KB | Test hedge/trade block data (Base & Peak shapes) per EAN — backs the hedge cost/coverage figures on the Consumption (Live Data) page (see below) and a future *Trading* screen — see "Hedge block test data" below. Hand-edited (no generator script); fetched directly by the Live Data page at load time. |
+| `consumption-calc.js` | ~4 KB | Pure JS stat/formatting module used by the Consumption (Live Data) page (dual Node/browser module). Unit tested via `consumption-calc.test.js`. |
+| `consumption-data-loader.js` | ~6 KB | Pure JS module that groups the two source JSON files above into the page's `{sites, byDate, bySite, hedge}` shape, plus a `fetch()`-based loader that runs the whole thing client-side on page load (dual Node/browser module). Unit tested via `consumption-data-loader.test.js`. |
+| `Customer Portal - Consumption (Live Data).html` | ~31 KB | Standalone, hand-written page (loads `consumption-calc.js` and `consumption-data-loader.js` via `<script src>`) showing real 15-minute interval data for a selectable connection and date. Must be served over http(s), not opened via `file://`. |
+| `PeakPowerTrading-CalculationSample.csv` | ~5 KB | Reference calculation sample (one day, 96 rows) the `consumption-calc.js` formulas (Usage Cost, Actual Usage, Base/Peak/Hedge Volume, Uncovered, Long, Short, Delta Cost) are validated against — see "Calculations" below. Not consumed by the page itself. |
 
 The two large usage/combined JSON files are over the 30 MB chat-upload
 limit — when regenerating and sending them through Claude, gzip first
@@ -158,23 +161,28 @@ Added to back the `almere` connection, generated with `random.Random(420608)`:
   seasonal heating-demand factor (cosine curve, peak mid-January, trough
   mid-July) drives output, with ~6% of days having full CHP downtime
   (maintenance).
-- The original 5-profile generation script is **not** checked into this
-  repo — it only exists as the Python used in the Claude session that
-  produced the first version of these files. `remap_eans.py` (added when
-  EANs were aligned to the Customer Portal) **is** checked in and covers
-  the EAN/name remap plus the new `office` profile generation, but it
-  expects the pre-remap 5-profile files as input, not the current ones —
-  don't rerun it as-is. If asked to regenerate or further extend the
-  dataset (e.g. add a 7th site, change a profile, or extend the date
-  range), rebuild the per-organization profile functions described above
-  rather than assuming a full end-to-end script exists here.
+- No generation script for this data is checked into the repo (the
+  Python used to produce/remap these files, including the original
+  5-profile generator and the later `remap_eans.py` EAN/name remap, was
+  run ad hoc in past Claude sessions and intentionally isn't kept — this
+  folder is Python-free by design, see "What this is" above). If asked to
+  regenerate or further extend the dataset (e.g. add a 7th site, change a
+  profile, or extend the date range), rebuild the per-organization profile
+  logic described above directly (in JS, or as a one-off ephemeral script
+  that isn't checked in) rather than assuming an end-to-end generator
+  exists here.
 
 ## Hedge block test data
 
-`hedge_blocks_2026.json` (generated by `gen_hedge.py`) is placeholder test
-data for a future *Trading* screen: one row per EAN per shape, expressing
+`hedge_blocks_2026.json` is hand-maintained placeholder test data for a
+future *Trading* screen: one row per EAN per shape per period, expressing
 a hedge as a power (MW) held for a period, converted to energy (MWh) and
-to kW/kWh equivalents.
+to kW/kWh equivalents. There is no generator script for this file (see
+"What this is" above) — new rows are added directly to the JSON, matching
+the schema and conversions documented below. The Consumption (Live Data)
+page fetches this file directly and groups it by EAN client-side (see
+`consumption-data-loader.js`'s `buildHedgeSection`), so any edit here
+takes effect on the page's next load.
 
 **Shapes:**
 - `base` — held 24/7 across every day of the period.
@@ -200,42 +208,56 @@ represented the same way:
 | `periodStart` / `periodEnd` | ISO date strings | inclusive first/last calendar day of the period |
 | `periodLabel` | string | human-readable, matches the Customer Portal's existing block period style, e.g. `"Aug 2026"`, `"Q3 2026"`, `"2026"` |
 
-The current file only contains the `YEAR` / `2026` period (6 EANs × 2
-shapes = 12 rows), using a uniform placeholder `power (MW)` of `1.0` and
-round offered prices (€70/MWh base, €95/MWh peak) so the volume math is
-easy to hand-verify. `gen_hedge.py` exposes `month_period()`,
-`quarter_period()`, and `year_period()` builders plus `build_rows()`, so
-adding e.g. an `"Aug 2026"` MONTH row or a `"Q1 2027"` QUARTER row (both
-periods already referenced in the portal mockup's example trade blocks)
-is a matter of calling the right builder — it doesn't yet do so
-automatically. The gas connection (`tilburg-gas`, EAN
-`871687100000000092`) is intentionally excluded — "Not tradeable" in the
-portal mockup.
+The file currently contains three periods per EAN (36 rows total, 6 EANs ×
+2 shapes × 3 periods):
+
+| periodLabel | periodType | power (MW) base / peak | offered price (€/MWh) base / peak |
+|---|---|---|---|
+| `2026` (YEAR) | `YEAR` | 1.0 / 1.0 | 70.00 / 95.00 |
+| `Q2 2026` (Apr–Jun) | `QUARTER` | 2.0 / 1.0 | 66.39 / 91.15 |
+| `Jul 2026` | `MONTH` | 2.0 / 1.0 | 77.79 / 91.19 |
+
+The original `YEAR`/`2026` row uses round placeholder numbers (€70/MWh
+base, €95/MWh peak) so the volume math is easy to hand-verify; the `Q2
+2026` and `Jul 2026` rows use a deliberately different base/peak power
+split (2 MW base, 1 MW peak) and non-round prices to exercise the page's
+handling of multiple simultaneously-active hedge periods per site with
+differing shapes/prices. Adding another period (e.g. a `Q1 2027` row,
+also referenced in the portal mockup's example trade blocks) means adding
+6 EANs × 2 shapes = 12 more rows directly to the JSON, following the same
+field shape and the volume conversion rules above. The gas connection
+(`tilburg-gas`, EAN `871687100000000092`) is intentionally excluded —
+"Not tradeable" in the portal mockup.
 
 ## Consumption (Live Data) page
 
-`Customer Portal - Consumption (Live Data).html` (generated by
-`generate_consumption_data.py`) is a standalone companion to the Customer
-Portal mockup's *Consumption* screen — instead of the mockup's seeded
-placeholder data, it reads real 15-minute consumption/production/EPEX data
-straight from `epex_tariffs_usage_combined_15_min_interval.json` for a
-connection and date picked from dropdowns (all 6 electricity sites; any
-date 2026-01-01 through 2026-08-05), plus a **Day / Month** chart toggle
-(below). It doesn't modify or depend on `Customer Portal - Preview.html` —
-that file stays a pure design mockup.
+`Customer Portal - Consumption (Live Data).html` is a standalone companion
+to the Customer Portal mockup's *Consumption* screen — instead of the
+mockup's seeded placeholder data, it reads real 15-minute
+consumption/production/EPEX data straight from
+`epex_tariffs_usage_combined_15_min_interval.json` for a connection and
+date picked from dropdowns (all 6 electricity sites; any date 2026-01-01
+through 2026-08-05), plus a **Day / Month** chart toggle (below). It
+doesn't modify or depend on `Customer Portal - Preview.html` — that file
+stays a pure design mockup.
 
 **Scope:** Day and Month views (no Quarter view). `tilburg-gas` is
 excluded — it has no usage rows and no hedge rows.
 
-**Data shape** (`consumption_live_data.json`, embedded inline in the HTML —
-no `fetch`, no network requests, opens directly via `file://`):
+**Loading (fully client-side, no build step):** the page loads
+`consumption-calc.js` and `consumption-data-loader.js` via `<script src>`,
+then calls `ConsumptionDataLoader.loadConsumptionData()` on page load. That
+function `fetch()`es `epex_tariffs_usage_combined_15_min_interval.json`
+and `hedge_blocks_2026.json`, and groups them in the browser into the same
+`{sites, byDate, bySite, hedge}` shape a Python pre-pass used to produce
+ahead of time:
 
 ```jsonc
 {
   "sites": [{ "id": "rot", "ean": "871687100000000011", "name": "Rotterdam DC" }, "... 6 total"],
   "byDate": { "2026-01-01": { "t": ["00:00", "..."], "p": [0.0896, "..."] }, "... 217 dates" },
   "bySite": { "rot": { "2026-01-01": { "c": [612.4, "..."], "g": [0.0, "..."] } }, "... 6 sites" },
-  "hedge": { "rot": [{ "shape": "base", "periodStart": "2026-01-01", "periodEnd": "2026-12-31", "powerKw": 1000.0, "priceKwh": 0.07 }, "... base + peak"], "... 6 sites" }
+  "hedge": { "rot": [{ "shape": "base", "periodStart": "2026-01-01", "periodEnd": "2026-12-31", "powerKw": 1000.0, "priceKwh": 0.07 }, "... 6 blocks per site across YEAR/QUARTER/MONTH periods"], "... 6 sites" }
 }
 ```
 
@@ -243,54 +265,87 @@ no `fetch`, no network requests, opens directly via `file://`):
 date and shared across sites; `bySite[id][date].c`/`.g` are per-site
 consumption/production (kW), index-aligned with `byDate[date].t`. Array
 length is 96 every day except 2026-03-29 (the spring-forward DST day),
-which has 92. `hedge[id]` is a list of hedge blocks straight from
-`hedge_blocks_2026.json` (currently 2 per site: `base` and `peak`, both
-covering all of 2026) — kept generic (period start/end per block) so
-future MONTH/QUARTER hedge rows would be picked up without a code change.
+which has 92. `hedge[id]` is a list of hedge blocks grouped straight from
+`hedge_blocks_2026.json` (kept generic — period start/end per block — so
+any mix of YEAR/QUARTER/MONTH hedge rows is picked up with no code
+change). Because nothing is pre-baked, editing either source JSON file
+(e.g. adding a new hedge period, or regenerating the usage dataset) takes
+effect the next time the page is loaded — there's no regeneration step to
+remember to run. The page shows a "Loading live data…" state (controls
+disabled) until both fetches resolve, and an inline error card if a fetch
+fails — most commonly because the page was opened via `file://` instead
+of a local http(s) server (see "What this is" above).
 
 **Calculations** (`consumption-calc.js`, unit tested via
-`consumption-calc.test.js`), per 15-minute interval:
-- `energy_kWh = power_kW × 0.25`; `netKwh = (consumption − production) ×
-  0.25` — can go negative on a solar/CHP-heavy interval where production
-  exceeds consumption (a real, common case — e.g. `tilburg`'s midday solar
-  output, not just a theoretical edge case).
-- **Net cost** = `netKwh` × that interval's EPEX price — the daily/monthly
-  total of this is the "Net cost" stat card (formerly labeled "Spot result").
-- **Hedge volume/price/cost** — a hedge block is active for an interval if
-  the date falls in its period, and — for `peak` blocks only — the
-  weekday is Mon–Fri and the time is 08:00–20:00; volume is
-  `powerKw × 0.25` per active block, summed; price is the blended
-  cost/volume across simultaneously-active blocks (e.g. base+peak both
-  active on a weekday during peak hours).
-- **Uncovered** = `netKwh` − hedge volume — can go negative (over-hedged
-  that interval/day/month).
-- **Delta** = Net Cost − Hedge Cost — shown only in the hover tooltip
-  (below), not a stat card or table column.
+`consumption-calc.test.js` against real rows from
+`PeakPowerTrading-CalculationSample.csv`), per 15-minute interval — energy
+values are converted from the source's kW to kWh (`× 0.25 h`) internally,
+then everything below follows the sample column-for-column:
 
-Net cost is intentionally independent of the hedge (it answers "what would
-this cost at spot price alone"); hedge cost and uncovered are the separate
-"what's locked in" / "what's still exposed" figures. Numbers display
-NL-style (comma decimal, period thousands separator).
+- **TUF** / **FDF** — small fixed grid fees layered on top of EPEX, not
+  present in any source data file. Held constant across all sites for this
+  POC: `ConsumptionCalc.DEFAULT_TUF = 0.01 €/kWh` (added when buying),
+  `DEFAULT_FDF = 0.005 €/kWh` (added when feeding production into the
+  grid). Both `computeIntervalRow`/`computeIntervalSeries`/`computeDayStats`
+  accept optional `tuf`/`fdf` overrides for future per-site values.
+- **Usage Cost** = `Consumption×(EPEX+TUF) − Production×(EPEX+FDF)` — the
+  retail cost of the site's own metered flow, independent of the hedge.
+- **Actual Usage** = `Consumption − Production` — can go negative on a
+  solar/CHP-heavy interval where production exceeds consumption (a real,
+  common case — e.g. `tilburg`'s midday solar output, not just a
+  theoretical edge case).
+- **Base Volume** / **Peak Volume** — summed separately across all
+  simultaneously-active hedge blocks of each shape (`powerKw × 0.25` per
+  block); a `peak` block only counts toward Peak Volume when the weekday is
+  Mon–Fri **and** the time is 08:00 through 20:00 **inclusive of both
+  endpoints** (the 20:00 interval is still peak, 20:15 is not — confirmed
+  against the reference sample).
+- **Hedge Volume** = Base Volume + Peak Volume.
+- **Uncovered** = Actual Usage − Hedge Volume.
+- **Long** = `max(0, −Uncovered)` — over-hedged; the unused hedge volume is
+  effectively sold at spot. **Short** = `max(0, Uncovered)` — under-hedged;
+  the shortfall must be bought at spot.
+- **Delta Cost** (the key P&L figure — negative means revenue/savings,
+  positive means additional cost):
+  ```
+  Delta Cost = Actual Usage < 0
+    ? Usage Cost − (Hedge Volume × EPEX)      // net export: hedge unneeded, fully sold at spot
+    : EPEX × (Actual Usage − Hedge Volume)    // covers both over- and under-hedged cases
+  ```
+  Delta Cost is computed from full-precision intermediate values (not the
+  rounded, displayed Usage Cost), matching the reference sample exactly.
 
-**Chart (Day and Month):** two lines — net usage (solid teal) and hedge
+Note the fixed hedge contract price (`priceKwh` in `hedge_blocks_2026.json`)
+does **not** appear in any of these formulas — Delta Cost measures the P&L
+of the position against EPEX spot, not the hedge's own locked-in price.
+Numbers display NL-style (comma decimal, period thousands separator).
+
+**Stat cards:** deliberately trimmed to the trading-desk figures rather than
+every column — Actual Usage, Long, Short, Base Volume, Peak Volume, Hedge
+Volume, and total Delta Cost (day/month total, tone-colored: red when it's
+an additional cost, green when it's savings/revenue). Consumption,
+Production, Peak demand, Usage Cost, and Uncovered remain visible in the
+table but are no longer surfaced as their own cards.
+
+**Chart (Day and Month):** two lines — actual usage (solid teal) and hedge
 volume (dashed indigo) — with the gap between them filled by one bar per
-interval: orange (55% opacity) when net exceeds hedge ("uncovered — bought
-at day-ahead"), cyan (30% opacity) when hedge exceeds net ("surplus — sold
-at day-ahead") — the same color convention as the original Customer
-Portal mockup's Day-tab legend. Consumption and production are no longer
-plotted (both remain in the table and their own stat cards); the y-axis is
-bipolar (a proper zero baseline, not always at the bottom) to correctly
-show intervals where `netKwh` goes negative.
+interval: orange (55% opacity) when Uncovered ≥ 0 ("Short — bought at
+day-ahead"), cyan (30% opacity) when Uncovered < 0 ("Long — sold at
+day-ahead") — the same color convention as the original Customer Portal
+mockup's Day-tab legend. Consumption and production are no longer plotted;
+the y-axis is bipolar (a proper zero baseline, not always at the bottom) to
+correctly show intervals where Actual Usage goes negative.
 
-**Hover vs. click:** hovering the chart shows a tooltip with every value
-for that interval (date, time, consumption, production, net, EPEX, net
-cost, hedge volume/price/cost, uncovered, delta) plus a crosshair — it no
-longer scrolls the table. Clicking the chart highlights and scrolls to
-that interval's row instead; the selection persists until the next click
-or until the view changes (switching site/date/month clears it). One
-shared interaction function drives both Day and Month charts, using a
-cursor-position → nearest-interval-index calculation (not per-mark
-listeners), so it scales to the Month view's ~2,976 points.
+**Hover vs. click:** hovering the chart shows a tooltip with just Actual
+Usage, Long, Short, and Delta Cost for that interval (the rest of the
+columns are available in the table below) plus a crosshair — it no longer
+scrolls the table. Clicking the chart highlights and scrolls to that
+interval's row instead; the selection persists until the next click or
+until the view changes (switching site/date/month clears it). One shared
+interaction function drives both
+Day and Month charts, using a cursor-position → nearest-interval-index
+calculation (not per-mark listeners), so it scales to the Month view's
+~2,976 points.
 
 **Table:** a Date column (short format, e.g. "5 Aug 2026") is the first
 column in both Day and Month modes — in Day mode every row repeats the
@@ -304,15 +359,15 @@ trailing partial month (August 2026, only 5 days) renders correctly with
 no special-casing. The table below follows whichever mode (Day/Month) is
 active.
 
-**Regenerating:** `python3 generate_consumption_data.py` rebuilds
-`consumption_live_data.json` and the HTML page from the current combined
-dataset *and* `hedge_blocks_2026.json`; `python3 verify_consumption_page.py`
-cross-checks the result (site/date coverage, DST-day interval count,
-HTML-embedded data matching the standalone JSON, one site/date's usage
-values matching the raw source rows exactly, and the embedded hedge blocks
-matching a fresh `build_hedge_section(hedge_blocks_2026.json)` — not a
-hardcoded snapshot, so it stays correct if the source file gains new
-MONTH/QUARTER rows).
+**Running / testing:** there's nothing to regenerate. Serve this folder
+over http(s) (e.g. `npx http-server .` or `npx serve .`) and open the page
+through that server's URL — opening the HTML file directly via `file://`
+will fail to load data, since browsers block `fetch()` of local files that
+way. `node consumption-calc.test.js` and `node consumption-data-loader.test.js`
+unit-test the two JS modules against fixture rows (grouping-by-site,
+sorting-by-isp, rounding, hedge-block filtering/blending, multi-period
+hedge stacking, etc.) without needing to fetch the real multi-MB source
+files.
 
 ## Conventions
 
@@ -324,3 +379,12 @@ MONTH/QUARTER rows).
   source files (`EPEX tariffs 15 min interval.csv`, one JSON export) kept
   their original human-readable / snake_case names as first delivered —
   no strict convention enforced yet across the two source files.
+- This folder intentionally contains **no Python files and no build
+  step**. All data grouping and calculation for the Consumption (Live
+  Data) page happens client-side in `consumption-calc.js` and
+  `consumption-data-loader.js` when the page loads. If a task would
+  otherwise call for a `.py` script (e.g. reshaping data, generating a new
+  test dataset), prefer a JS solution — a dual Node/browser module if it's
+  needed by the page, or a one-off ephemeral script (not checked in) if
+  it's a pure data-prep task like the hedge/EAN generation described
+  above.
