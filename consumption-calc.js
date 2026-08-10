@@ -6,9 +6,14 @@
  *   Actual Usage = Consumption − Production
  *   Base Volume  = sum of active "base" hedge blocks for the interval (kWh)
  *   Peak Volume  = sum of active "peak" hedge blocks for the interval (kWh)
- *                  — peak blocks are only active Mon–Fri, 08:00 through
- *                  20:00 inclusive of both endpoints (verified against the
- *                  sample: the 20:00 interval is peak, 20:15 is not)
+ *                  — peak blocks are only active Mon–Fri, from 08:15
+ *                  through 20:00 inclusive. Each interval's timestamp marks
+ *                  the END of its 15-minute window (e.g. "08:00" covers
+ *                  07:45-08:00, before the peak block starts), so "08:00"
+ *                  itself is excluded and "08:15" (covering 08:00-08:15,
+ *                  the first window actually inside the block) is the
+ *                  first peak interval; "20:00" (covering 19:45-20:00) is
+ *                  still peak, "20:15" is not.
  *   Hedge Volume = Base Volume + Peak Volume
  *   Uncovered    = Actual Usage − Hedge Volume
  *   Long         = max(0, −Uncovered)   -- over-hedged; surplus sold at spot
@@ -40,10 +45,11 @@
     return weekday >= 1 && weekday <= 5;
   }
 
-  // Inclusive of both boundaries — the 20:00 interval is still peak,
-  // 20:15 is not (confirmed against the reference calculation sample).
+  // Excludes exactly "08:00" (that interval's usage window is 07:45-08:00,
+  // before the block starts); includes "08:15" through "20:00" inclusive
+  // ("20:00" covers 19:45-20:00, still inside the block; "20:15" is not).
   function isPeakWindow(timeStr) {
-    return timeStr >= "08:00" && timeStr <= "20:00";
+    return timeStr > "08:00" && timeStr <= "20:00";
   }
 
   /** Splits a date+time's active hedge blocks into Base Volume vs Peak Volume (kWh). */

@@ -297,9 +297,14 @@ then everything below follows the sample column-for-column:
 - **Base Volume** / **Peak Volume** — summed separately across all
   simultaneously-active hedge blocks of each shape (`powerKw × 0.25` per
   block); a `peak` block only counts toward Peak Volume when the weekday is
-  Mon–Fri **and** the time is 08:00 through 20:00 **inclusive of both
-  endpoints** (the 20:00 interval is still peak, 20:15 is not — confirmed
-  against the reference sample).
+  Mon–Fri **and** the time is **08:15 through 20:00 inclusive**. Each
+  interval's timestamp marks the *end* of its 15-minute window (e.g. "08:00"
+  covers 07:45–08:00), so "08:00" itself is still before the block starts
+  and is excluded; "08:15" (covering 08:00–08:15, the first window actually
+  inside the block) is the first peak interval, and "20:00" (covering
+  19:45–20:00) is still peak while "20:15" is not. This intentionally
+  diverges from a literal reading of `PeakPowerTrading-CalculationSample.csv`,
+  which assumed a start-of-interval timestamp convention.
 - **Hedge Volume** = Base Volume + Peak Volume.
 - **Uncovered** = Actual Usage − Hedge Volume.
 - **Long** = `max(0, −Uncovered)` — over-hedged; the unused hedge volume is
@@ -328,10 +333,14 @@ Production, Peak demand, Usage Cost, and Uncovered remain visible in the
 table but are no longer surfaced as their own cards.
 
 **Chart (Day and Month):** two lines — actual usage (solid teal) and hedge
-volume (dashed indigo) — with the gap between them filled by one bar per
-interval: orange (55% opacity) when Uncovered ≥ 0 ("Short — bought at
-day-ahead"), cyan (30% opacity) when Uncovered < 0 ("Long — sold at
-day-ahead") — the same color convention as the original Customer Portal
+volume (dashed indigo) — with each interval rendered as a stacked bar from
+the zero baseline: a light-yellow segment (20% opacity, deliberately muted
+so it doesn't compete with the Short/Long segment above it) from zero up
+to `MIN(Actual Usage, Hedge Volume)` — the portion of usage already covered
+by the hedge — topped by the existing orange/cyan segment spanning the gap
+between the two lines: orange (55% opacity) when Uncovered ≥ 0 ("Short —
+bought at day-ahead"), cyan (30% opacity) when Uncovered < 0 ("Long — sold
+at day-ahead") — the same color convention as the original Customer Portal
 mockup's Day-tab legend. Consumption and production are no longer plotted;
 the y-axis is bipolar (a proper zero baseline, not always at the bottom) to
 correctly show intervals where Actual Usage goes negative.

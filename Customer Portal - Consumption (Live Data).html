@@ -120,6 +120,7 @@
         <div class="legend">
           <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Actual usage</div>
           <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed var(--pp-indigo)"></span>Hedge volume</div>
+          <div><span class="swatch" style="background:#facc15;opacity:.2"></span>Covered (min of actual &amp; hedge)</div>
           <div><span class="swatch" style="background:var(--pp-orange);opacity:.55"></span>Short — bought at day-ahead</div>
           <div><span class="swatch" style="background:var(--pp-cyan);opacity:.3"></span>Long — sold at day-ahead</div>
         </div>
@@ -232,8 +233,9 @@
     if (minVal === maxVal) { maxVal = minVal + 1; }
     var range = maxVal - minVal;
     function yFor(val) { return padTop + (maxVal - val) / range * plotH; }
+    var zeroY = yFor(0);
     var barW = plotW / n;
-    var bars = "";
+    var coveredBars = "", bars = "";
     for (i = 0; i < n; i++) {
       var yNet = yFor(actualUsage[i]);
       var yHedge = yFor(hedgeVolume[i]);
@@ -242,6 +244,14 @@
       var barX = padLeft + i * barW;
       var barFill = uncovered[i] >= 0 ? "#ea580c" : "#0891b2";
       var barOpacity = uncovered[i] >= 0 ? "0.55" : "0.3";
+
+      var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
+      var yCovered = yFor(coveredVal);
+      var covTop = Math.min(zeroY, yCovered);
+      var covH = Math.abs(zeroY - yCovered);
+      coveredBars += '<rect x="' + barX.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + Math.max(barW - 1, 1).toFixed(1) +
+        '" height="' + covH.toFixed(1) + '" fill="#facc15" opacity="0.2"></rect>';
+
       bars += '<rect x="' + barX.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + Math.max(barW - 1, 1).toFixed(1) +
         '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
     }
@@ -259,10 +269,10 @@
           '" font-size="10" fill="#64748b">' + times[i] + '</text>';
       }
     }
-    var zeroY = yFor(0);
     lastChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
     return '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
       '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
+      coveredBars +
       bars +
       '<polyline points="' + netPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="2"></polyline>' +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4f46e5" stroke-width="2" stroke-dasharray="5,3"></polyline>' +
@@ -421,10 +431,11 @@
     if (minVal === maxVal) { maxVal = minVal + 1; }
     var range = maxVal - minVal;
     function yFor(val) { return padTop + (maxVal - val) / range * plotH; }
+    var zeroY = yFor(0);
     var stepX = n > 1 ? plotW / (n - 1) : 0;
     var barW = n > 1 ? stepX : plotW;
 
-    var bars = "";
+    var coveredBars = "", bars = "";
     for (i = 0; i < n; i++) {
       var yNet = yFor(actualUsage[i]);
       var yHedge = yFor(hedgeVolume[i]);
@@ -433,6 +444,14 @@
       var barX = padLeft + i * stepX - barW / 2;
       var barFill = uncovered[i] >= 0 ? "#ea580c" : "#0891b2";
       var barOpacity = uncovered[i] >= 0 ? "0.55" : "0.3";
+
+      var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
+      var yCovered = yFor(coveredVal);
+      var covTop = Math.min(zeroY, yCovered);
+      var covH = Math.abs(zeroY - yCovered);
+      coveredBars += '<rect x="' + barX.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + Math.max(barW - 0.5, 0.5).toFixed(1) +
+        '" height="' + covH.toFixed(1) + '" fill="#facc15" opacity="0.2"></rect>';
+
       bars += '<rect x="' + barX.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + Math.max(barW - 0.5, 0.5).toFixed(1) +
         '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
     }
@@ -456,11 +475,11 @@
       }
     }
 
-    var zeroY = yFor(0);
     lastMonthChartGeom = { padLeft: padLeft, spacing: stepX, offset: 0, n: n, width: width };
 
     return dayGridlines +
       '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
+      coveredBars +
       bars +
       '<polyline points="' + netPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="1.5"></polyline>' +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4f46e5" stroke-width="1.5" stroke-dasharray="5,3"></polyline>' +

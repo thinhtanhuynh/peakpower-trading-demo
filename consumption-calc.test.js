@@ -9,7 +9,7 @@ function assertClose(actual, expected, message) {
 
 // Fixture hedge blocks matching PeakPowerTrading-CalculationSample.csv:
 // a single 1 MW base block (all year) + a single 1 MW peak block (Mon-Fri
-// 08:00-20:00 inclusive), i.e. 250 kWh base / 250 kWh peak per interval.
+// 08:15-20:00 inclusive), i.e. 250 kWh base / 250 kWh peak per interval.
 var SAMPLE_HEDGE = [
   { shape: "base", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000 },
   { shape: "peak", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000 }
@@ -47,16 +47,35 @@ var MONDAY = "2026-01-05";
   assertClose(row.deltaCost, 0.60429, "07:00 deltaCost");
 })();
 
-// 08:00 — peak window opens; Base + Peak both active.
+// 08:00 — a record's timestamp marks the END of its window, so "08:00"
+// covers 07:45-08:00 — still BEFORE the 08:00 peak block starts. Peak stays
+// inactive here even though the label reads "08:00" (this intentionally
+// diverges from PeakPowerTrading-CalculationSample.csv's literal "8:00" row,
+// which assumed a start-of-interval timestamp convention — see the comment
+// on isPeakWindow in consumption-calc.js).
 (function () {
   var row = ConsumptionCalc.computeIntervalRow("08:00", 427 * 4, 100 * 4, 0.19532, MONDAY, SAMPLE_HEDGE);
   assertClose(row.actualUsage, 327, "08:00 actualUsage");
   assertClose(row.baseVolumeKwh, 250, "08:00 baseVolume");
-  assertClose(row.peakVolumeKwh, 250, "08:00 peakVolume (window opens at 08:00)");
-  assertClose(row.hedgeVolumeKwh, 500, "08:00 hedgeVolume");
-  assertClose(row.uncovered, -173, "08:00 uncovered");
-  assertClose(row.long, 173, "08:00 long");
-  assertClose(row.deltaCost, -33.79036, "08:00 deltaCost");
+  assertClose(row.peakVolumeKwh, 0, "08:00 peakVolume (still before the block; window is 07:45-08:00)");
+  assertClose(row.hedgeVolumeKwh, 250, "08:00 hedgeVolume");
+  assertClose(row.uncovered, 77, "08:00 uncovered");
+  assertClose(row.short, 77, "08:00 short");
+  assertClose(row.long, 0, "08:00 long");
+  assertClose(row.deltaCost, 15.03964, "08:00 deltaCost");
+})();
+
+// 08:15 — the first interval whose window (08:00-08:15) is fully inside the
+// peak block; matches the sample's "8:15" row (which was already >= 08:00
+// under either convention, so it's unaffected by the boundary fix).
+(function () {
+  var row = ConsumptionCalc.computeIntervalRow("08:15", 458 * 4, 116 * 4, 0.18974, MONDAY, SAMPLE_HEDGE);
+  assertClose(row.actualUsage, 342, "08:15 actualUsage");
+  assertClose(row.peakVolumeKwh, 250, "08:15 peakVolume (first interval inside the block)");
+  assertClose(row.hedgeVolumeKwh, 500, "08:15 hedgeVolume");
+  assertClose(row.uncovered, -158, "08:15 uncovered");
+  assertClose(row.long, 158, "08:15 long");
+  assertClose(row.deltaCost, -29.97892, "08:15 deltaCost");
 })();
 
 // 13:00 — Case C (Actual Usage < 0, net export): Delta Cost = Usage Cost - Hedge Volume*EPEX.
@@ -167,11 +186,11 @@ var MONDAY = "2026-01-05";
   assertClose(stats.peakKw, 427 * 4, "computeDayStats peakKw picks the highest consumption interval");
   assert.strictEqual(stats.peakTime, "08:00", "computeDayStats peakTime");
   assertClose(stats.baseVolumeKwh, 250 + 250, "computeDayStats baseVolumeKwh sums both intervals");
-  assertClose(stats.peakVolumeKwh, 0 + 250, "computeDayStats peakVolumeKwh sums both intervals");
-  assertClose(stats.hedgeVolumeKwh, 250 + 500, "computeDayStats hedgeVolumeKwh sums both intervals");
-  assertClose(stats.longKwh, 70 + 173, "computeDayStats longKwh sums both intervals");
-  assertClose(stats.shortKwh, 0, "computeDayStats shortKwh (both intervals over-hedged)");
-  assertClose(stats.deltaCostEur, -12.5755 + -33.79036, "computeDayStats deltaCostEur sums both intervals");
+  assertClose(stats.peakVolumeKwh, 0 + 0, "computeDayStats peakVolumeKwh (08:00 itself is still before the peak block)");
+  assertClose(stats.hedgeVolumeKwh, 250 + 250, "computeDayStats hedgeVolumeKwh sums both intervals");
+  assertClose(stats.longKwh, 70 + 0, "computeDayStats longKwh sums both intervals");
+  assertClose(stats.shortKwh, 0 + 77, "computeDayStats shortKwh (08:00 interval is now under-hedged)");
+  assertClose(stats.deltaCostEur, -12.5755 + 15.03964, "computeDayStats deltaCostEur sums both intervals");
 })();
 
 // computeDayStats: works with no hedgeBlocks (4/5-arg call), new fields default to 0.
