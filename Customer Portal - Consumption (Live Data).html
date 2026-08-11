@@ -415,6 +415,7 @@
 <script src="consumption-calc.js"></script>
 <script src="consumption-data-loader.js"></script>
 <script src="portal-seed-data.js"></script>
+<script src="portal-trade-link.js"></script>
 <script>
 (function () {
   "use strict";
@@ -561,19 +562,49 @@
   }
   function onWizardNoteChange(val) { state.wizard.note = val; renderApp(); }
 
+  /**
+   * Submits the wizard's *actual* selections (previously this hardcoded
+   * "Q1 2027 / 1,000 MW" like the mockup) and publishes the request to the
+   * Back Office Trade desk's "To price" queue via PortalTradeLink.
+   */
   function submitWizard() {
     var id = "TRD-" + state.nextSeq;
-    var direction = state.wizard.direction, shape = state.wizard.shape, note = state.wizard.note;
-    var bodyText = note ? 'Comment: "' + note + '"' : (direction + " " + shape + " Q1 2027 · 1,000 MW across 4 connections.");
+    var req = PortalTradeLink.buildRequest(state.wizard, {
+      id: id,
+      customer: PortalSeedData.CUSTOMER_NAME,
+      connections: PortalSeedData.WIZARD_CONNECTIONS,
+      periods: PortalSeedData.WIZARD_PERIODS,
+      year: PortalSeedData.WIZARD_YEAR,
+      submittedAt: new Date().toISOString()
+    });
+
+    var power = PortalTradeLink.formatMw(req.powerMw);
+    var volume = PortalTradeLink.formatMwh(req.volumeMwh);
+    var siteCount = req.connections.length;
+    var bodyText = req.note
+      ? 'Comment: "' + req.note + '"'
+      : req.direction + " " + req.shape + " " + req.period + " · " + power +
+        " across " + siteCount + " connection" + (siteCount === 1 ? "" : "s") + ".";
+
     var trade = {
-      id: id, shape: shape, period: "Q1 2027", direction: direction, power: "1,000 MW", volume: "768,00 MWh",
+      id: id, shape: req.shape, period: req.period, direction: req.direction,
+      power: power, volume: volume,
       price: null, value: null, status: "Awaiting price", statusTone: "info",
       events: [{ title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "just now", body: bodyText, tone: "submit" }],
-      facts: [["Reference", id], ["Requested by", "J. de Vries"], ["State", "Awaiting price"], ["Direction", direction],
-        ["Shape", shape], ["Delivery period", "Q1 2027"], ["Total power", "1,000 MW"], ["Total volume", "768,00 MWh"]]
+      facts: [["Reference", id], ["Requested by", "J. de Vries"], ["State", "Awaiting price"], ["Direction", req.direction],
+        ["Shape", req.shape], ["Delivery period", req.period], ["Total power", power], ["Total volume", volume]]
     };
     state.trades.unshift(trade);
     state.nextSeq++;
+
+    // Hand off to the Back Office. Storage may be unavailable (private mode,
+    // quota) — the portal's own flow must not depend on the link succeeding.
+    try {
+      PortalTradeLink.publish(window.localStorage, req);
+    } catch (e) {
+      console.warn("Trade request not published to the Back Office desk:", e);
+    }
+
     state.page = "Trading"; state.tradingView = "list"; state.tradeId = null;
     activatePageDom("trading");
     renderApp();

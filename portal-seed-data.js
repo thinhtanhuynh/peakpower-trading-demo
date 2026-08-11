@@ -18,6 +18,9 @@
 
   var NAV = ["Dashboard", "Connections", "Consumption", "Prices", "Trading", "Wallet", "Invoices"];
   var USER_LINE = "J. de Vries · Vandersteen Koeling B.V.";
+  // How the Back Office desk names this customer (no "B.V.", matching the
+  // Back Office mockup's own seeded trades).
+  var CUSTOMER_NAME = "Vandersteen Koeling";
   var TONE_COLOR = { submit: "#0d9488", indigo: "#4f46e5", amber: "#d97706", green: "#15803d", red: "#dc2626" };
 
   var CONNECTIONS = [
@@ -269,6 +272,7 @@
   var api = {
     NAV: NAV,
     USER_LINE: USER_LINE,
+    CUSTOMER_NAME: CUSTOMER_NAME,
     TONE_COLOR: TONE_COLOR,
     CONNECTIONS: CONNECTIONS,
     WIZARD_CONNECTIONS: WIZARD_CONNECTIONS,

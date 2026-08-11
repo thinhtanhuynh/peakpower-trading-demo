@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PeakPower — Back Office Trade desk (Live Data)</title>
+<style>
+:root {
+    --pp-bg:#eef2f6; --pp-surface:#ffffff; --pp-surface-alt:#f8fafc; --pp-surface-zebra:#fbfdff;
+    --pp-border:#dbe3ec; --pp-border-strong:#c3cede;
+    --pp-text-heading:#0f172a; --pp-text-body:#64748b; --pp-text-faint:#94a3b8;
+    --pp-sidebar-bg:#0f2b33; --pp-sidebar-text:#cbd5e1; --pp-sidebar-text-active:#ffffff;
+    --pp-sidebar-subtitle:#5eead4; --pp-sidebar-active-bg:rgba(20,184,166,0.16);
+    --pp-teal-900:#0f2b33; --pp-teal-700:#0f766e; --pp-teal-600:#0d9488; --pp-teal-500:#14b8a6;
+    --pp-teal-300:#5eead4; --pp-teal-100:#ccfbf1;
+    --pp-indigo:#4f46e5; --pp-indigo-bg:#e0e7ff;
+    --pp-orange:#ea580c; --pp-cyan:#0891b2;
+    --pp-amber:#d97706; --pp-amber-bg:#fef3c7; --pp-amber-border:#fcd34d; --pp-amber-text:#92400e;
+    --pp-green:#15803d; --pp-green-bg:#dcfce7; --pp-green-border:#86efac; --pp-green-text:#166534;
+    --pp-red:#dc2626; --pp-red-bg:#fee2e2; --pp-red-border:#fca5a5; --pp-red-text:#991b1b;
+    --font-sans:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
+    --font-mono:'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
+    --text-2xs:10px; --text-xs:11px; --text-sm:12.5px; --text-base:13.5px; --text-md:15px; --text-lg:17px; --text-xl:23px; --text-display:44px;
+    --weight-regular:400; --weight-medium:500; --weight-semibold:600; --weight-bold:700;
+    --tracking-eyebrow:0.05em;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px; --space-10:40px;
+    --radius-sm:5px; --radius-md:7px; --radius-lg:10px; --radius-pill:999px;
+    --sidebar-width:218px; --topbar-height:56px;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: var(--font-sans); background: var(--pp-bg); color: var(--pp-text-heading); }
+  .app { display:flex; height:100vh; width:100%; overflow:hidden; }
+  .sidebar { width:var(--sidebar-width); min-width:var(--sidebar-width); background:var(--pp-sidebar-bg); color:var(--pp-sidebar-text); display:flex; flex-direction:column; padding:20px 0; }
+  .sidebar .brand { padding:0 20px 20px; font-size:11px; letter-spacing:var(--tracking-eyebrow); color:var(--pp-sidebar-subtitle); font-weight:700; text-transform:uppercase; }
+  .sidebar nav { display:flex; flex-direction:column; gap:2px; padding:0 10px; }
+  .sidebar nav a { display:block; padding:9px 12px; border-radius:7px; font-size:13px; color:var(--pp-sidebar-text); text-decoration:none; cursor:pointer; transition:background-color .15s ease, color .15s ease; }
+  .sidebar nav a:hover:not(.active) { background:rgba(255,255,255,0.07); color:var(--pp-sidebar-text-active); }
+  .sidebar nav a.active { background:var(--pp-sidebar-active-bg); color:var(--pp-sidebar-text-active); font-weight:600; }
+  .sidebar-footer { margin-top:auto; padding:14px 20px; border-top:1px solid rgba(255,255,255,0.08); font-size:11.5px; color:var(--pp-sidebar-text); }
+  .sidebar-footer span { display:block; margin-top:2px; font-size:10.5px; color:#5b7480; }
+  .main { flex:1; display:flex; flex-direction:column; overflow:auto; }
+  .topbar { height:var(--topbar-height); min-height:var(--topbar-height); background:#fff; border-bottom:1px solid var(--pp-border); display:flex; align-items:center; justify-content:space-between; padding:0 28px; position:sticky; top:0; z-index:5; gap:16px; }
+  .topbar .crumb { font-size:11px; color:var(--pp-text-body); }
+  .topbar .crumb .crumb-back { color:var(--pp-text-heading); font-weight:600; cursor:pointer; }
+  .topbar .crumb .crumb-back:hover { color:var(--pp-teal-700); }
+  .topbar .title { font-size:var(--text-lg); font-weight:700; color:var(--pp-text-heading); margin-top:2px; }
+  .topbar-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  /* Badge — matches PeakPowerDesignSystem Badge.jsx exactly (11px/600,
+     4px 12px, and every tone carries a real 1px border). */
+  .badge { display:inline-block; padding:4px 12px; border-radius:var(--radius-pill); font-size:11px; font-weight:600; line-height:1.2; border:1px solid transparent; white-space:nowrap; }
+  .badge.info { background:var(--pp-indigo-bg); color:#4338ca; border-color:#c7d2fe; }
+  .badge.success { background:var(--pp-green-bg); color:var(--pp-green-text); border-color:var(--pp-green-border); }
+  .badge.warning { background:var(--pp-amber-bg); color:var(--pp-amber-text); border-color:var(--pp-amber-border); }
+  .badge.critical { background:var(--pp-red-bg); color:var(--pp-red-text); border-color:var(--pp-red-border); }
+  .badge.brand { background:var(--pp-teal-100); color:var(--pp-teal-700); border-color:var(--pp-teal-300); }
+  .badge.neutral { background:var(--pp-surface-alt); color:var(--pp-text-body); border-color:var(--pp-border-strong); }
+  .content { padding:28px; }
+  .page { display:none; flex-direction:column; gap:16px; }
+  .page.active { display:flex; animation:pp-fade-in .18s ease; }
+  @keyframes pp-fade-in { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+  
+.btn-primary, .btn-secondary { display:inline-flex; align-items:center; gap:8px; border-radius:var(--radius-md); padding:10px 20px; font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans); border:1px solid; transition:background .15s ease, border-color .15s ease; }
+  .btn-primary { background:var(--pp-teal-600); border-color:var(--pp-teal-600); color:#fff; }
+  .btn-primary:hover:not(:disabled) { background:var(--pp-teal-700); border-color:var(--pp-teal-700); }
+  .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-secondary { background:#fff; border-color:var(--pp-border-strong); color:var(--pp-text-heading); }
+  .btn-secondary:hover:not(:disabled) { background:var(--pp-surface-alt); }
+  .btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-sm { padding:7px 14px; font-size:12px; }
+  
+.banner { display:flex; align-items:center; gap:12px; border-radius:var(--radius-lg); padding:12px 16px; font-size:12.5px; }
+  .banner-amber { background:var(--pp-amber-bg); border:1px solid var(--pp-amber-border); color:var(--pp-amber-text); }
+  .banner-teal { background:var(--pp-teal-100); border:1px solid var(--pp-teal-300); color:var(--pp-teal-900); }
+  .banner-icon { width:22px; height:22px; border-radius:50%; background:var(--pp-amber); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+  .banner-body { flex:1; }
+
+  /* --- Trade desk ------------------------------------------------------- */
+  .desk-columns { display:flex; flex-wrap:wrap; gap:18px; align-items:flex-start; }
+  .desk-column { flex:1; min-width:280px; }
+  .desk-queue { display:flex; flex-direction:column; gap:10px; margin-top:14px; }
+  .desk-empty { font-size:12px; color:var(--pp-text-faint); padding:18px 0; }
+
+  /* Card geometry ported from the Back Office mockup's queue cards. */
+  .desk-card { cursor:pointer; background:#fff; border:1px solid var(--pp-border); border-radius:8px; padding:14px 16px; transition:border-color .15s ease, box-shadow .15s ease; }
+  .desk-card:hover { border-color:var(--pp-border-strong); }
+  .desk-card.urgent { background:var(--pp-red-bg); border-color:var(--pp-red-border); }
+  /* A request that arrived from the Customer Portal in this session. */
+  .desk-card.live { background:var(--pp-teal-100); border-color:var(--pp-teal-300); }
+  .desk-card.flash { animation:desk-flash 1.4s ease; }
+  @keyframes desk-flash { 0% { box-shadow:0 0 0 0 rgba(20,184,166,.55); } 100% { box-shadow:0 0 0 14px rgba(20,184,166,0); } }
+
+  .desk-card .dc-top { display:flex; justify-content:space-between; align-items:center; }
+  .desk-card .dc-id { font-family:var(--font-mono); font-size:11.5px; font-weight:700; color:var(--pp-teal-600); }
+  .desk-card .dc-tag { font-family:var(--font-mono); font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:5px; border:1px solid; }
+  .desk-card .dc-customer { font-size:12.5px; font-weight:600; color:var(--pp-text-heading); margin-top:8px; }
+  .desk-card .dc-line { display:flex; justify-content:space-between; align-items:baseline; margin-top:2px; }
+  .desk-card .dc-meta { font-size:11px; color:var(--pp-text-body); }
+  .desk-card .dc-value { font-size:12px; font-weight:700; color:var(--pp-text-heading); }
+  .desk-card .dc-action { font-size:10px; font-weight:600; color:var(--pp-teal-600); margin-top:10px; }
+
+  .desk-note { background:var(--pp-surface-alt); border:1px solid var(--pp-border-strong); border-radius:8px; padding:12px 16px; font-size:12px; color:var(--pp-text-body); }
+
+  /* --- Request detail ---------------------------------------------------- */
+  .detail-grid { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap; }
+  .detail-main { flex:1.55; min-width:420px; display:flex; flex-direction:column; gap:20px; }
+  .detail-side { flex:1; min-width:260px; display:flex; flex-direction:column; gap:20px; }
+  .kv-row { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:6px 0; }
+  .kv-row .k { color:var(--pp-text-body); }
+  .kv-row .v { font-weight:600; text-align:right; }
+  .kv-row .v.mono { font-family:var(--font-mono); font-weight:500; font-size:11.5px; }
+  .grid-table { border:1px solid var(--pp-border); border-radius:var(--radius-lg); overflow:hidden; background:#fff; }
+  .gt-head { display:grid; background:var(--pp-surface-alt); font-size:10px; font-weight:700; color:var(--pp-text-body); letter-spacing:.03em; padding:9px 12px; gap:10px; border-bottom:1px solid var(--pp-border); }
+  .gt-row { display:grid; padding:11px 12px; font-size:12px; color:var(--pp-text-heading); border-top:1px solid var(--pp-border); align-items:center; gap:10px; }
+  .gt-head + .gt-row { border-top:none; }
+  .gt-num { text-align:right; }
+  .gt-sub { font-size:10px; color:var(--pp-text-faint); font-family:var(--font-mono); }
+  .crumb-back { cursor:pointer; color:var(--pp-teal-600); font-weight:600; }
+  .crumb-back:hover { text-decoration:underline; }
+  .empty-note { font-size:12.5px; color:var(--pp-text-body); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">Back office</div>
+    <nav id="sidebar-nav"></nav>
+    <div class="sidebar-footer">M. Bakker<span>Trading</span></div>
+  </div>
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <div class="crumb" id="crumb"></div>
+        <div class="title" id="page-title">Trade desk</div>
+      </div>
+      <div class="topbar-actions" id="topbar-actions"></div>
+    </div>
+    <div class="content">
+      <div class="page active" id="page-desk">
+        <div id="desk-body"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="portal-trade-link.js"></script>
+<script src="back-office-desk-data.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var D = BackOfficeDeskData;
+  var Link = PortalTradeLink;
+
+  var state = {
+    view: "list",          // "list" | "detail"
+    tradeId: null,
+    requests: [],          // live requests published by the Customer Portal
+    flashIds: {}           // ids to pulse once, so a new arrival is noticeable
+  };
+
+  var deskBody = document.getElementById("desk-body");
+  var crumb = document.getElementById("crumb");
+  var pageTitle = document.getElementById("page-title");
+  var topbarActions = document.getElementById("topbar-actions");
+
+  // --- helpers --------------------------------------------------------------
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function badge(text, tone) { return '<span class="badge ' + tone + '">' + esc(text) + "</span>"; }
+  function cardHtml(title, subtitle, body, action) {
+    return '<div class="card">' +
+      '<div class="card-head"><div>' +
+        '<div class="card-title">' + esc(title) + "</div>" +
+        (subtitle ? '<div class="card-subtitle">' + esc(subtitle) + "</div>" : "") +
+      "</div>" + (action || "") + "</div>" + body + "</div>";
+  }
+
+  /** All live requests as desk cards, newest-first handled by buildQueues. */
+  function liveCards() { return state.requests.map(Link.toDeskCard); }
+
+  function findCard(id) {
+    var all = D.buildQueues(liveCards());
+    for (var q = 0; q < all.length; q++) {
+      for (var i = 0; i < all[q].trades.length; i++) {
+        if (all[q].trades[i].id === id) { return all[q].trades[i]; }
+      }
+    }
+    return null;
+  }
+
+  // --- list view ------------------------------------------------------------
+
+  function deskCardHtml(t) {
+    var tone = D.TAG_STYLE[t.tagTone] || D.TAG_STYLE.neutral;
+    var cls = "desk-card" + (t.live ? " live" : (t.urgent ? " urgent" : "")) +
+      (state.flashIds[t.id] ? " flash" : "");
+    return '<div class="' + cls + '" onclick="BO.openTrade(\'' + esc(t.id) + '\')">' +
+      '<div class="dc-top">' +
+        '<span class="dc-id">' + esc(t.id) + "</span>" +
+        '<span class="dc-tag" style="background:' + tone.bg + ';border-color:' + tone.border + ';color:' + tone.color + '">' + esc(t.tag) + "</span>" +
+      "</div>" +
+      '<div class="dc-customer">' + esc(t.customer) + "</div>" +
+      '<div class="dc-line"><span class="dc-meta">' + esc(t.meta) + '</span>' +
+        '<span class="dc-value">' + esc(t.valueLabel) + "</span></div>" +
+      '<div class="dc-action">' + esc(t.actionLabel) + "</div>" +
+      "</div>";
+  }
+
+  function renderList() {
+    var queues = D.buildQueues(liveCards());
+    var cols = queues.map(function (q) {
+      var body = q.trades.length
+        ? '<div class="desk-queue">' + q.trades.map(deskCardHtml).join("") + "</div>"
+        : '<div class="desk-empty">Nothing in this queue.</div>';
+      return '<div class="desk-column">' +
+        cardHtml(q.title, q.subtitle, body, badge(q.countLabel, q.badgeTone)) +
+        "</div>";
+    }).join("");
+
+    deskBody.innerHTML =
+      '<div class="desk-columns">' + cols + "</div>" +
+      '<div class="desk-note">Offers under 5 minutes are highlighted. Expiry is decided server-side — ' +
+      "an expired offer cannot be accepted even if a customer's screen still shows a timer.</div>";
+
+    crumb.textContent = "Trading · live queue";
+    pageTitle.textContent = "Trade desk";
+    topbarActions.innerHTML = state.requests.length
+      ? '<button type="button" class="btn-secondary btn-sm" onclick="BO.clearRequests()">Clear live requests</button>'
+      : "";
+
+    // Each arrival pulses once.
+    state.flashIds = {};
+  }
+
+  // --- detail view ----------------------------------------------------------
+
+  function renderDetail() {
+    var t = findCard(state.tradeId);
+    if (!t) { state.view = "list"; return renderList(); }
+
+    crumb.innerHTML = '<span class="crumb-back" onclick="BO.backToList()">← Trade desk</span> · ' + esc(t.id);
+    pageTitle.textContent = t.customer;
+    topbarActions.innerHTML = "";
+
+    var req = t.request;
+    if (!req) {
+      // Seeded mockup rows carry no underlying request payload.
+      deskBody.innerHTML = cardHtml(t.id + " · " + t.customer, t.meta,
+        '<div class="empty-note">This is one of the desk\'s seeded example trades, so it has no ' +
+        'underlying request detail. Submit a trade from the Customer Portal to see a fully ' +
+        'populated request here.</div>');
+      return;
+    }
+
+    var facts = [
+      ["Reference", req.id], ["Customer", req.customer], ["State", req.status],
+      ["Direction", req.direction], ["Shape", req.shape], ["Delivery period", req.period],
+      ["Period start", req.periodStart], ["Period end", req.periodEnd],
+      ["Total power", Link.formatMw(req.powerMw)], ["Total volume", Link.formatMwh(req.volumeMwh)],
+      ["Indicative price", req.indicativePrice != null ? "€ " + Link.formatNL(req.indicativePrice, 2) + " / MWh" : "—"],
+      ["Submitted", req.submittedAt ? new Date(req.submittedAt).toLocaleString("nl-NL") : "—"]
+    ];
+    var factsHtml = facts.map(function (f) {
+      return '<div class="kv-row"><span class="k">' + esc(f[0]) + '</span><span class="v">' + esc(f[1]) + "</span></div>";
+    }).join("");
+
+    var cols = "2fr 1fr 1fr";
+    var rows = req.connections.map(function (c) {
+      return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
+        "<div>" + esc(c.name) + '<div class="gt-sub">' + esc(c.sub) + "</div></div>" +
+        '<div class="gt-num">' + Link.formatMw(c.powerMw) + "</div>" +
+        '<div class="gt-num">' + Link.formatMwh(Link.volumeMwh(c.powerMw, req.periodStart, req.periodEnd, req.shape)) + "</div>" +
+        "</div>";
+    }).join("");
+    var connTable = '<div class="grid-table">' +
+      '<div class="gt-head" style="grid-template-columns:' + cols + '">' +
+        "<div>CONNECTION</div><div class=\"gt-num\">POWER</div><div class=\"gt-num\">VOLUME</div>" +
+      "</div>" + rows + "</div>";
+
+    deskBody.innerHTML =
+      '<div class="banner banner-teal">Live request received from the Customer Portal — awaiting a price from the desk.</div>' +
+      '<div class="detail-grid">' +
+        '<div class="detail-main">' +
+          cardHtml("The request", req.direction + " " + req.shape + " · " + req.period, connTable) +
+          (req.note ? cardHtml("Customer note", "", '<div class="empty-note">' + esc(req.note) + "</div>") : "") +
+        "</div>" +
+        '<div class="detail-side">' + cardHtml("Request details", "", factsHtml) + "</div>" +
+      "</div>";
+  }
+
+  function render() { return state.view === "detail" ? renderDetail() : renderList(); }
+
+  // --- transitions ----------------------------------------------------------
+
+  function openTrade(id) { state.tradeId = id; state.view = "detail"; render(); }
+  function backToList() { state.tradeId = null; state.view = "list"; render(); }
+  function clearRequests() {
+    Link.clear(window.localStorage);
+    state.requests = [];
+    backToList();
+  }
+
+  /** Re-read the link and pulse anything we had not seen before. */
+  function refresh(list) {
+    var known = {};
+    state.requests.forEach(function (r) { known[r.id] = true; });
+    var next = list || Link.read(window.localStorage);
+    next.forEach(function (r) { if (!known[r.id]) { state.flashIds[r.id] = true; } });
+    state.requests = next;
+    render();
+  }
+
+  window.BO = {
+    openTrade: openTrade, backToList: backToList, clearRequests: clearRequests,
+    refresh: refresh, _state: state
+  };
+
+  // --- init -----------------------------------------------------------------
+
+  document.getElementById("sidebar-nav").innerHTML = D.NAV.map(function (n) {
+    var active = n === "Trade desk";
+    return '<a href="#"' + (active ? ' class="active"' : "") + ' onclick="return false">' + esc(n) + "</a>";
+  }).join("");
+
+  state.requests = Link.read(window.localStorage);
+  render();
+
+  // Live updates from a Customer Portal tab. storage events only fire in OTHER
+  // tabs, which is exactly the cross-portal case we care about.
+  Link.subscribe(window, function (list) { refresh(list); });
+
+  // A same-tab fallback: if the desk is reopened or focused, re-read the link.
+  window.addEventListener("focus", function () { refresh(); });
+})();
+</script>
+</body>
+</html>

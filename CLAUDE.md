@@ -54,7 +54,10 @@ page through that server's URL.
 | `consumption-calc.js` | ~8 KB | Pure JS stat/formatting module used by the Consumption (Live Data) page (dual Node/browser module). Unit tested via `consumption-calc.test.js`. |
 | `consumption-data-loader.js` | ~6 KB | Pure JS module that groups the two source JSON files above into the page's `{sites, byDate, bySite, hedge}` shape, plus a `fetch()`-based loader that runs the whole thing client-side on page load (dual Node/browser module). Unit tested via `consumption-data-loader.test.js`. |
 | `portal-seed-data.js` | ~28 KB | Pure JS module (dual Node/browser) holding static seed/mock data ported from `Customer Portal - Preview.html` for the screens that have no live data source in this POC — Connections' descriptive metadata, Dashboard tiles/activity, Wallet ledger/top-ups (plus a `simulateTopup()` pure function), and Invoices. Not unit tested (no calculation logic, just data + one small formatter/simulator). |
-| `Customer Portal - Consumption (Live Data).html` | ~108 KB | Standalone, hand-written multi-page portal (loads `consumption-calc.js`, `consumption-data-loader.js`, and `portal-seed-data.js` via `<script src>`) with a working Dashboard/Connections/Consumption/Prices/Trading/Wallet/Invoices sidebar — see "Customer Portal (Live Data) page" below. Must be served over http(s), not opened via `file://`. |
+| `portal-trade-link.js` | ~7 KB | Pure JS module (dual Node/browser) carrying a submitted trade request from the Customer Portal to the Back Office Trade desk over `localStorage` — see "Cross-portal trade requests" below. Unit tested via `portal-trade-link.test.js`. |
+| `back-office-desk-data.js` | ~6 KB | Pure JS module (dual Node/browser): the Back Office mockup's own seeded `TRADES`/`QUEUE_META` ported verbatim, plus `buildQueues()`, which merges live Customer Portal requests into the seeded columns. |
+| `Customer Portal - Consumption (Live Data).html` | ~108 KB | Standalone, hand-written multi-page portal (loads `consumption-calc.js`, `consumption-data-loader.js`, `portal-seed-data.js` and `portal-trade-link.js` via `<script src>`) with a working Dashboard/Connections/Consumption/Prices/Trading/Wallet/Invoices sidebar — see "Customer Portal (Live Data) page" below. Must be served over http(s), not opened via `file://`. |
+| `Back Office Portal - Trade Desk (Live Data).html` | ~19 KB | Functional stand-in for the Back Office mockup's **Trade desk** screen only (loads `portal-trade-link.js` and `back-office-desk-data.js`). Three-column To price / Awaiting customer / To confirm queues, with live Customer Portal requests merged into "To price" — see "Cross-portal trade requests" below. Also needs http(s). |
 | `PeakPowerTrading-CalculationSample.csv` | ~8 KB | Reference calculation sample (one day, 96 rows) the `consumption-calc.js` formulas (Usage Cost, Actual Usage, Base/Peak/Hedge Volume, Uncovered, Long, Short, Delta Cost, Hedge Cost, Total Cost) are validated against — see "Calculations" below. Negative numbers are written in accounting parentheses, e.g. `(70)`, and `-` means zero/absent. Its hedge blocks are unpriced, so its Hedge Cost column is 0 throughout and Total Cost equals Delta Cost. Not consumed by the page itself. |
 
 The two large usage/combined JSON files are over the 30 MB chat-upload
@@ -535,11 +538,17 @@ button is disabled whenever the range is empty.
 over http(s) (e.g. `npx http-server .` or `npx serve .`) and open the page
 through that server's URL — opening the HTML file directly via `file://`
 will fail to load data, since browsers block `fetch()` of local files that
-way. `node consumption-calc.test.js` and `node consumption-data-loader.test.js`
-unit-test the two JS modules against fixture rows (grouping-by-site,
-sorting-by-isp, rounding, hedge-block filtering/blending, multi-period
-hedge stacking, etc.) without needing to fetch the real multi-MB source
-files. `portal-seed-data.js` has no dedicated test suite (no calculation
+way. The same applies to `Back Office Portal - Trade Desk (Live Data).html`,
+which shares `localStorage` with the Customer Portal and so must be served
+from the **same origin** — open both through one server to see the trade-request
+flow work.
+
+`node consumption-calc.test.js`, `node consumption-data-loader.test.js` and
+`node portal-trade-link.test.js` unit-test the three logic modules against
+fixtures (grouping-by-site, sorting-by-isp, rounding, hedge-block
+filtering/blending, multi-period hedge stacking, period-hour maths, desk-card
+conversion, storage round-tripping and corrupt-storage handling) without
+needing to fetch the real multi-MB source files. `portal-seed-data.js` has no dedicated test suite (no calculation
 logic to validate — it's ported static data plus one pure `simulateTopup()`
 helper); the whole page's navigation (all 7 tabs, plus row-click detail
 panels on Connections/Trading/Invoices and the Wallet top-up flow) has been
@@ -547,6 +556,59 @@ verified with a one-off jsdom + `http.server` smoke test rather than a
 checked-in suite — re-run a similar script after changing the page shell
 if in doubt, since there's no automated regression coverage for the
 sidebar/page-switching logic itself.
+
+## Cross-portal trade requests
+
+Submitting a trade in the Customer Portal's wizard makes it appear in the
+Back Office Trade desk's **To price** queue. This is the one flow that spans
+both portals.
+
+**Transport.** There is no backend, so `portal-trade-link.js` writes requests
+to `localStorage` under `peakpower.tradeRequests.v1` (a JSON array, oldest
+first). The Back Office page reads that key on load and subscribes to the
+browser's `storage` event, so a request submitted in one tab shows up in an
+already-open desk tab with no reload and no polling. `storage` only fires in
+*other* tabs, so there's no same-tab echo to guard against; a `focus`
+listener covers the same-tab case. Consequences of this choice: it is
+**same-browser, same-origin only** — two different browsers, or a private
+window, will not see each other — and both pages must be served from the same
+origin (they already must be served over http(s) at all).
+
+Storage failures (quota, private mode) are swallowed: `read()` returns `[]`
+on anything unparseable and `write()` returns `false` rather than throwing,
+and the Customer Portal wraps its `publish()` in a try/catch. **A broken link
+must never break either portal's own flow.**
+
+**Direction.** One-way only: request → "To price". The desk does not price
+anything back yet, so the return legs (offer → accept → confirm) don't exist.
+
+**What flows.** `submitWizard()` previously hardcoded `"Q1 2027"` /
+`"1,000 MW"` (copying the mockup); it now publishes the wizard's *real*
+selections — direction, shape, the selected month/quarter/year period with
+its start/end dates, per-connection power lines (zero-volume connections are
+dropped), the note, and the indicative price for that shape. Total volume is
+**computed**, not carried: `powerMw × hoursInPeriod(start, end, shape)`,
+where base counts every hour and peak counts Mon–Fri 08:00–20:00 only (DST is
+not adjusted for, matching `hedge_blocks_2026.json`'s simplification). That
+formula independently reproduces the mockup's own hardcoded
+`1,000 MW → 768,00 MWh` for Peak Q1 2027, which is what validates it.
+
+Ids continue the Customer Portal's `TRD-1079+` sequence, which cannot collide
+with the Back Office mockup's seeded `TRD-1049…1058`.
+
+**Desk rendering.** `PortalTradeLink.toDeskCard()` converts a request into
+exactly the card shape the mockup's queues use (including the short desk
+period label — `Q1 2027` → `Q1-27`), so a live request is structurally
+indistinguishable from a seeded one. `buildQueues()` puts live cards at the
+**top** of To price (newest first) and drops any seeded row whose id a live
+card reuses, so re-publishing can't double up. Live cards get a teal tint and
+a one-shot pulse; seeded rows have no underlying payload, so opening one
+shows an explanatory note instead of a detail view.
+
+`Back Office Portal - Preview.html` remains a pure design reference and was
+**not** edited — the Trade desk page is a separate functional rebuild, exactly
+as the Consumption page is for the Customer mockup. Its shell CSS is the same
+design-system block as the Customer Portal page.
 
 ## Conventions
 
