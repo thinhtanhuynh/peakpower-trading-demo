@@ -574,8 +574,9 @@ truth rather than a request list and a separate offer list to reconcile:
 | `Awaiting price` | submitted, unpriced | To price | "Awaiting price" |
 | `Offer received` | priced, window open | Awaiting customer (mm:ss tag) | pending firm offer + Accept/Reject |
 | `Offer expired` | window elapsed unanswered | Awaiting customer ("expired") | "Offer expired" |
-| `Accepted · awaiting execution` | customer accepted | **To confirm** | accepted, on the timeline |
+| `Accepted · awaiting execution` | customer accepted | **To confirm** (Confirm button) | accepted, amber |
 | `Offer rejected` | customer declined | *(off the desk)* | rejected, on the timeline |
+| `Confirmed` | desk executed it | *(off the desk)* | Confirmed, green, with market reference |
 
 `status` is stored, but **`effectiveStatus(req, now)` is what to render** — an
 offer expires on a clock, so the stored string goes stale on its own.
@@ -596,9 +597,9 @@ on anything unparseable and `write()` returns `false` rather than throwing,
 and the Customer Portal wraps its `publish()` in a try/catch. **A broken link
 must never break either portal's own flow.**
 
-**Direction.** The full request → price → respond loop is implemented. Not
-implemented: the desk actually *executing* a confirmed trade, and any wallet
-reservation (accepting says funds are reserved but nothing moves).
+**Direction.** The full request → price → respond → confirm loop is
+implemented. Not implemented: any wallet movement (accepting says funds are
+reserved and confirming says the wallet is debited, but no balance changes).
 
 **The return leg.** The desk's request detail has a price form (price €/MWh +
 reaction window, defaulting to the request's own indicative price and 30
@@ -638,6 +639,23 @@ Accepted trades move to the desk's **To confirm** column; rejected ones use
 the sentinel column `"done"`, which no queue matches, so they simply drop off
 the desk. `buildQueues()` filters by queue key, so any unknown column is
 naturally invisible rather than needing a special case.
+
+**Confirm.** Every card in **To confirm** carries a Confirm button (the click
+`stopPropagation()`s so it doesn't also open the card's detail). Confirming a
+*live* trade calls `confirmTrade()` and publishes, giving the customer status
+`Confirmed` (green) with a `Trade confirmed` timeline entry and an
+`ICE-…` market reference; the card then moves to `"done"` and clears out of
+the column. Only an **accepted** trade can be confirmed — not an unpriced,
+unanswered, rejected or already-confirmed one.
+
+The desk's own seeded rows (`TRD-1049`, `TRD-1052`) have no record behind
+them, so confirming one just adds its id to `state.confirmedSeedIds` and
+`seedRows()` filters it out — nothing is written to the link. Note that this
+is page-local state, so seeded rows reappear on reload while live ones don't;
+that's intended, since the seeds are mockup fixtures rather than real trades.
+
+Accepted is deliberately **amber**, not green: the trade is reserved but not
+yet executed. Green is reserved for `Confirmed`.
 
 **A footgun worth knowing:** `toDeskCard`/`toCustomerTrade`/`secondsRemaining`
 take an optional `now`, which makes them tempting `map()` callbacks — but
@@ -680,13 +698,18 @@ card `8px`/`14px 16px`, mono id 11.5/700 teal-600, tag 10.5/700 `4px 10px`
 radius 5, meta 11px, value 12/700, action 10/600 mt10; detail column
 `flex:1.55; min-width:520px`; list spaced 16px, detail 20px).
 
-**Only Trade desk is reachable.** The other seven Back Office nav entries are
-rendered `.disabled` (dimmed, `aria-disabled`, no navigation) rather than as
-dead links, because this page implements that one screen. When the page was
-first built its `.card`/`.card-title`/`.card-subtitle` rules were accidentally
-left out of the extracted CSS, so every card rendered unstyled — there is now
-a test asserting that **every class rendered into the DOM has a matching CSS
-rule**, which is worth keeping if more markup is added.
+**Navigation.** All eight Back Office nav entries are navigable, as in the
+mockup. Trade desk is the only one with real behaviour; the other seven render
+the **mockup's own `isPlaceholder` screen** (it has one, for screens the
+design deliberately leaves unbuilt), reusing its exact treatment — white card,
+`10px` radius, `48px 24px`, centred `13px` body text. Leaving the desk clears
+any open request detail, so returning lands on the queues rather than a stale
+trade.
+
+When the page was first built its `.card`/`.card-title`/`.card-subtitle` rules
+were accidentally left out of the extracted CSS, so every card rendered
+unstyled — there is now a test asserting that **every class rendered into the
+DOM has a matching CSS rule**, which is worth keeping if more markup is added.
 
 ## Conventions
 

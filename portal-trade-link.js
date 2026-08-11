@@ -152,6 +152,7 @@
   var STATUS_OFFER_EXPIRED = "Offer expired";
   var STATUS_ACCEPTED = "Accepted · awaiting execution";
   var STATUS_REJECTED = "Offer rejected";
+  var STATUS_CONFIRMED = "Confirmed";
   var DEFAULT_REACTION_MINUTES = 30;
 
   // Anything before this is not a plausible "now" for this app.
@@ -228,6 +229,7 @@
    * its reaction window has since elapsed.
    */
   function effectiveStatus(req, now) {
+    if (isConfirmed(req)) { return STATUS_CONFIRMED; }
     if (isResolved(req)) {
       return req.response.action === "accept" ? STATUS_ACCEPTED : STATUS_REJECTED;
     }
@@ -260,6 +262,29 @@
 
   function acceptOffer(req, opts) { return respondToOffer(req, "accept", opts); }
   function rejectOffer(req, opts) { return respondToOffer(req, "reject", opts); }
+
+  function isConfirmed(req) { return !!(req && req.confirmation); }
+
+  /**
+   * The desk confirms execution of an accepted trade. Pure; returns a new
+   * record, or null if the trade isn't in a confirmable state (only an
+   * *accepted* offer can be confirmed — not an unpriced, unanswered, rejected
+   * or already-confirmed one).
+   */
+  function confirmTrade(req, opts) {
+    opts = opts || {};
+    if (!isResolved(req) || req.response.action !== "accept") { return null; }
+    if (isConfirmed(req)) { return null; }
+    var out = {};
+    for (var k in req) { out[k] = req[k]; }
+    out.status = STATUS_CONFIRMED;
+    out.confirmation = {
+      by: opts.by || "PeakPower Trading",
+      at: new Date(nowMs(opts.now)).toISOString(),
+      reference: opts.reference || null
+    };
+    return out;
+  }
 
   /** Desk countdown tone, matching the mockup's own thresholds. */
   function countdownTone(seconds) {
@@ -299,7 +324,17 @@
     }
 
     // An answered offer leaves the countdown queue: accepted trades go to
-    // "To confirm" for execution; rejected ones drop off the desk entirely.
+    // "To confirm" for execution; rejected and confirmed ones use the sentinel
+    // column "done", which no queue matches, so they drop off the desk.
+    if (isConfirmed(req)) {
+      base.column = "done";
+      base.urgent = false;
+      base.tag = "confirmed";
+      base.tagTone = "neutral";
+      base.valueLabel = "€ " + formatNL(req.offer.valueEur, 0);
+      base.actionLabel = "executed";
+      return base;
+    }
     if (isResolved(req)) {
       var accepted = req.response.action === "accept";
       base.column = accepted ? "confirm" : "done";
@@ -308,6 +343,7 @@
       base.tagTone = accepted ? "warning" : "neutral";
       base.valueLabel = "€ " + formatNL(req.offer.valueEur, 0);
       base.actionLabel = accepted ? "confirm or fail →" : "rejected by customer";
+      base.confirmable = accepted;
       return base;
     }
 
@@ -331,6 +367,7 @@
     var status = effectiveStatus(req, now);
     var priced = isPriced(req);
     var resolved = isResolved(req);
+    var confirmed = isConfirmed(req);
     var left = priced ? secondsRemaining(req, now) : 0;
     // Only an unanswered, unexpired offer is still actionable.
     var pending = priced && !resolved && left > 0;
@@ -371,6 +408,19 @@
           tone: acc ? "amber" : "red"
         });
         facts.push([acc ? "Accepted by" : "Rejected by", req.response.by]);
+        if (confirmed) {
+          var c = req.confirmation;
+          events.push({
+            title: "Trade confirmed",
+            actor: c.by,
+            ts: formatStamp(c.at),
+            body: "Executed on the market" + (c.reference ? ", reference " + c.reference : "") +
+              ". Reservation settled — wallet debited € " + formatNL(o.valueEur, 2) + ".",
+            tone: "green"
+          });
+          facts.push(["Confirmed by", c.by]);
+          if (c.reference) { facts.push(["Market reference", c.reference]); }
+        }
       } else if (!pending) {
         events.push({
           title: "Offer expired",
@@ -388,10 +438,12 @@
       price: priced ? "€ " + formatNL(req.offer.priceMwh, 4) : null,
       value: priced ? "€ " + formatNL(req.offer.valueEur, 2) : null,
       status: status,
-      statusTone: resolved
-        ? (req.response.action === "accept" ? "success" : "critical")
-        : (pending ? "warning" : (priced ? "critical" : "info")),
+      statusTone: confirmed ? "success"
+        : (resolved
+            ? (req.response.action === "accept" ? "warning" : "critical")
+            : (pending ? "warning" : (priced ? "critical" : "info"))),
       resolved: resolved,
+      confirmed: confirmed,
       responseAction: resolved ? req.response.action : null,
       pending: pending,
       expiresAt: priced ? req.offer.expiresAt : null,
@@ -481,6 +533,9 @@
     STATUS_OFFER_EXPIRED: STATUS_OFFER_EXPIRED,
     STATUS_ACCEPTED: STATUS_ACCEPTED,
     STATUS_REJECTED: STATUS_REJECTED,
+    STATUS_CONFIRMED: STATUS_CONFIRMED,
+    confirmTrade: confirmTrade,
+    isConfirmed: isConfirmed,
     DEFAULT_REACTION_MINUTES: DEFAULT_REACTION_MINUTES,
     priceRequest: priceRequest,
     respondToOffer: respondToOffer,

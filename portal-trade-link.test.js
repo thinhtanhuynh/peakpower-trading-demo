@@ -398,7 +398,9 @@ function pricedFixture(extra) {
   assert.strictEqual(accT.pending, false, "an answered offer is no longer actionable");
   assert.strictEqual(accT.resolved, true);
   assert.strictEqual(accT.responseAction, "accept");
-  assert.strictEqual(accT.statusTone, "success");
+  // Accepted is amber, not green: the trade is reserved but not yet executed.
+  // Green is reserved for Confirmed (see the confirm section below).
+  assert.strictEqual(accT.statusTone, "warning");
   assert.strictEqual(accT.events.length, 3, "submitted + offered + accepted");
   assert.strictEqual(accT.events[2].title, "Offer accepted");
   assert.ok(accT.facts.some(function (f) { return f[0] === "Accepted by"; }));
@@ -413,6 +415,60 @@ function pricedFixture(extra) {
   var back = Link.read(s)[0];
   assert.strictEqual(Link.isResolved(back), true);
   assert.strictEqual(Link.toDeskCard(back, T0).column, "confirm");
+})();
+
+// --- confirm ----------------------------------------------------------------
+(function () {
+  var priced = pricedFixture();
+  var acc = Link.acceptOffer(priced, { now: T0 });
+  var rej = Link.rejectOffer(priced, { now: T0 });
+
+  var conf = Link.confirmTrade(acc, { by: "M. Bakker · Trading", reference: "ICE-1079-A", now: T0 });
+  assert.strictEqual(acc.confirmation, undefined, "confirmTrade does not mutate its input");
+  assert.strictEqual(Link.isConfirmed(conf), true);
+  assert.strictEqual(conf.status, "Confirmed");
+  assert.strictEqual(Link.effectiveStatus(conf, T0), "Confirmed");
+  assert.strictEqual(conf.confirmation.by, "M. Bakker · Trading");
+  assert.strictEqual(conf.confirmation.reference, "ICE-1079-A");
+
+  // Confirmation outranks the clock too.
+  assert.strictEqual(Link.effectiveStatus(conf, "2026-08-11T11:00:00.000Z"), "Confirmed");
+
+  // Only an accepted trade can be confirmed.
+  assert.strictEqual(Link.confirmTrade(priced, { now: T0 }), null, "cannot confirm an unanswered offer");
+  assert.strictEqual(Link.confirmTrade(rej, { now: T0 }), null, "cannot confirm a rejected offer");
+  assert.strictEqual(Link.confirmTrade(Link.buildRequest(WIZ, opts()), { now: T0 }), null,
+    "cannot confirm an unpriced request");
+  assert.strictEqual(Link.confirmTrade(conf, { now: T0 }), null, "cannot confirm twice");
+
+  // Desk: a confirmed trade leaves every queue.
+  var accCard = Link.toDeskCard(acc, T0);
+  assert.strictEqual(accCard.column, "confirm");
+  assert.strictEqual(accCard.confirmable, true, "accepted cards expose a Confirm action");
+  var confCard = Link.toDeskCard(conf, T0);
+  assert.strictEqual(confCard.column, "done", "a confirmed trade clears out of To confirm");
+  assert.strictEqual(confCard.tag, "confirmed");
+
+  // Customer: status Confirmed, success tone, with the execution on the timeline.
+  var ct = Link.toCustomerTrade(conf, T0);
+  assert.strictEqual(ct.status, "Confirmed");
+  assert.strictEqual(ct.confirmed, true);
+  assert.strictEqual(ct.statusTone, "success");
+  assert.strictEqual(ct.pending, false);
+  assert.strictEqual(ct.events.length, 4, "submitted + offered + accepted + confirmed");
+  assert.strictEqual(ct.events[3].title, "Trade confirmed");
+  assert.ok(/ICE-1079-A/.test(ct.events[3].body), "the market reference is on the timeline");
+  assert.ok(ct.facts.some(function (f) { return f[0] === "Confirmed by"; }));
+  assert.ok(ct.facts.some(function (f) { return f[0] === "Market reference"; }));
+  // An accepted-but-unconfirmed trade is amber, not green.
+  assert.strictEqual(Link.toCustomerTrade(acc, T0).statusTone, "warning");
+
+  // Round-trips through storage.
+  var s = fakeStorage();
+  Link.publish(s, conf);
+  var back = Link.read(s)[0];
+  assert.strictEqual(Link.isConfirmed(back), true);
+  assert.strictEqual(Link.toCustomerTrade(back, T0).status, "Confirmed");
 })();
 
 // --- formatStamp ------------------------------------------------------------
