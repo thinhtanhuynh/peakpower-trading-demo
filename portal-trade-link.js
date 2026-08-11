@@ -150,6 +150,8 @@
   var STATUS_AWAITING_PRICE = "Awaiting price";
   var STATUS_OFFER_RECEIVED = "Offer received";
   var STATUS_OFFER_EXPIRED = "Offer expired";
+  var STATUS_ACCEPTED = "Accepted · awaiting execution";
+  var STATUS_REJECTED = "Offer rejected";
   var DEFAULT_REACTION_MINUTES = 30;
 
   // Anything before this is not a plausible "now" for this app.
@@ -214,11 +216,50 @@
     return (h > 0 ? h + ":" + pad(m) : "" + pad(m)) + ":" + pad(sec);
   }
 
-  /** The status a record should read as right now (offers expire on a clock). */
+  function isResolved(req) {
+    return !!(req && req.response && (req.response.action === "accept" || req.response.action === "reject"));
+  }
+
+  /**
+   * The status a record should read as right now.
+   *
+   * Once the customer has responded, that decision is final and outranks the
+   * clock — an accepted trade must not later read as "expired" just because
+   * its reaction window has since elapsed.
+   */
   function effectiveStatus(req, now) {
+    if (isResolved(req)) {
+      return req.response.action === "accept" ? STATUS_ACCEPTED : STATUS_REJECTED;
+    }
     if (!isPriced(req)) { return req && req.status ? req.status : STATUS_AWAITING_PRICE; }
     return isExpired(req, now) ? STATUS_OFFER_EXPIRED : STATUS_OFFER_RECEIVED;
   }
+
+  /**
+   * Records the customer's decision on a live offer. Pure; returns a new
+   * record, or null if the offer cannot be acted on — unpriced, already
+   * answered, or expired. Expiry is re-checked here rather than trusted from
+   * the UI, so a stale screen can't accept a dead offer (which is exactly what
+   * the desk's own note warns about).
+   */
+  function respondToOffer(req, action, opts) {
+    opts = opts || {};
+    if (action !== "accept" && action !== "reject") { return null; }
+    if (!isPriced(req) || isResolved(req)) { return null; }
+    if (action === "accept" && isExpired(req, opts.now)) { return null; }
+    var out = {};
+    for (var k in req) { out[k] = req[k]; }
+    out.status = action === "accept" ? STATUS_ACCEPTED : STATUS_REJECTED;
+    out.response = {
+      action: action,
+      by: opts.by || "J. de Vries · Energy Manager",
+      at: new Date(nowMs(opts.now)).toISOString()
+    };
+    return out;
+  }
+
+  function acceptOffer(req, opts) { return respondToOffer(req, "accept", opts); }
+  function rejectOffer(req, opts) { return respondToOffer(req, "reject", opts); }
 
   /** Desk countdown tone, matching the mockup's own thresholds. */
   function countdownTone(seconds) {
@@ -257,6 +298,19 @@
       return base;
     }
 
+    // An answered offer leaves the countdown queue: accepted trades go to
+    // "To confirm" for execution; rejected ones drop off the desk entirely.
+    if (isResolved(req)) {
+      var accepted = req.response.action === "accept";
+      base.column = accepted ? "confirm" : "done";
+      base.urgent = false;
+      base.tag = accepted ? "accepted" : "rejected";
+      base.tagTone = accepted ? "warning" : "neutral";
+      base.valueLabel = "€ " + formatNL(req.offer.valueEur, 0);
+      base.actionLabel = accepted ? "confirm or fail →" : "rejected by customer";
+      return base;
+    }
+
     var left = secondsRemaining(req, now);
     base.column = "awaiting";
     base.urgent = left <= 5 * 60;
@@ -276,8 +330,10 @@
     var volume = formatMwh(req.volumeMwh);
     var status = effectiveStatus(req, now);
     var priced = isPriced(req);
+    var resolved = isResolved(req);
     var left = priced ? secondsRemaining(req, now) : 0;
-    var pending = priced && left > 0;
+    // Only an unanswered, unexpired offer is still actionable.
+    var pending = priced && !resolved && left > 0;
 
     var events = [{
       title: "Request submitted",
@@ -303,7 +359,19 @@
         tone: "indigo"
       });
       facts.push(["Offered price", "€ " + formatNL(o.priceMwh, 4) + " / MWh"]);
-      if (!pending) {
+      if (resolved) {
+        var acc = req.response.action === "accept";
+        events.push({
+          title: acc ? "Offer accepted" : "Offer rejected",
+          actor: req.response.by,
+          ts: formatStamp(req.response.at),
+          body: acc
+            ? "€ " + formatNL(o.valueEur, 2) + " reserved on the company wallet. Awaiting execution confirmation."
+            : "The offer was declined. No volume was contracted.",
+          tone: acc ? "amber" : "red"
+        });
+        facts.push([acc ? "Accepted by" : "Rejected by", req.response.by]);
+      } else if (!pending) {
         events.push({
           title: "Offer expired",
           actor: "PeakPower Trading",
@@ -320,7 +388,11 @@
       price: priced ? "€ " + formatNL(req.offer.priceMwh, 4) : null,
       value: priced ? "€ " + formatNL(req.offer.valueEur, 2) : null,
       status: status,
-      statusTone: pending ? "warning" : (priced ? "critical" : "info"),
+      statusTone: resolved
+        ? (req.response.action === "accept" ? "success" : "critical")
+        : (pending ? "warning" : (priced ? "critical" : "info")),
+      resolved: resolved,
+      responseAction: resolved ? req.response.action : null,
       pending: pending,
       expiresAt: priced ? req.offer.expiresAt : null,
       secondsRemaining: left,
@@ -407,8 +479,14 @@
     STATUS_AWAITING_PRICE: STATUS_AWAITING_PRICE,
     STATUS_OFFER_RECEIVED: STATUS_OFFER_RECEIVED,
     STATUS_OFFER_EXPIRED: STATUS_OFFER_EXPIRED,
+    STATUS_ACCEPTED: STATUS_ACCEPTED,
+    STATUS_REJECTED: STATUS_REJECTED,
     DEFAULT_REACTION_MINUTES: DEFAULT_REACTION_MINUTES,
     priceRequest: priceRequest,
+    respondToOffer: respondToOffer,
+    acceptOffer: acceptOffer,
+    rejectOffer: rejectOffer,
+    isResolved: isResolved,
     secondsRemaining: secondsRemaining,
     isPriced: isPriced,
     isExpired: isExpired,

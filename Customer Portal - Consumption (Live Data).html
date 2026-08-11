@@ -668,6 +668,7 @@
     topUpWallet: topUpWallet, backToWallet: backToWallet,
     setTopupAmount: setTopupAmount, setTopupAmountValue: setTopupAmountValue, performTopup: performTopup,
     openInvoice: openInvoice, closeInvoice: closeInvoice,
+    acceptOffer: acceptOffer, rejectOffer: rejectOffer,
     noop: function () {}
   };
 
@@ -683,6 +684,28 @@
    * any offer against it — survives a page reload, which in-memory state alone
    * would lose.
    */
+  /**
+   * Accept / reject a live offer. The link re-checks expiry itself, so a stale
+   * screen can't accept an offer whose window has already closed — it just
+   * re-syncs and the trade shows as expired.
+   */
+  function respondToOffer(id, action) {
+    var list;
+    try {
+      list = PortalTradeLink.read(window.localStorage);
+    } catch (e) { return; }
+    var req = list.filter(function (r) { return r.id === id; })[0];
+    if (!req) { return; }
+    var next = PortalTradeLink.respondToOffer(req, action);
+    if (next) {
+      try { PortalTradeLink.publish(window.localStorage, next); } catch (e) { /* keep going */ }
+    }
+    syncLinkedTrades();
+    renderApp();
+  }
+  function acceptOffer(id) { respondToOffer(id, "accept"); }
+  function rejectOffer(id) { respondToOffer(id, "reject"); }
+
   function syncLinkedTrades() {
     var linked = [];
     try {
@@ -1106,8 +1129,13 @@
         '<div class="ob-price">' + t.price + ' <span>/ MWh</span></div>' +
         '<div class="ob-sub">' + t.volume + ' · total ' + t.value + ' · VAT excluded</div>' +
         '<div class="ob-actions">' +
-        '<button type="button" class="btn-accept" onclick="PP.noop()">Accept</button>' +
-        '<button type="button" class="btn-reject" onclick="PP.noop()">Reject</button>' +
+        // Linked trades carry a real offer on the Back Office link, so Accept
+        // and Reject act on it. The seeded demo trade keeps the mockup's stub.
+        (t.linked
+          ? '<button type="button" class="btn-accept" onclick="PP.acceptOffer(\'' + t.id + '\')">Accept</button>' +
+            '<button type="button" class="btn-reject" onclick="PP.rejectOffer(\'' + t.id + '\')">Reject</button>'
+          : '<button type="button" class="btn-accept" onclick="PP.noop()">Accept</button>' +
+            '<button type="button" class="btn-reject" onclick="PP.noop()">Reject</button>') +
         '<button type="button" class="btn-ghost" onclick="PP.noop()">Ask a question</button>' +
         '<span class="ob-countdown">' + mmss(t.secondsRemaining) + '</span>' +
         '</div></div>';

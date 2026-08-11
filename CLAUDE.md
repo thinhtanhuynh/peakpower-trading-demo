@@ -572,8 +572,10 @@ truth rather than a request list and a separate offer list to reconcile:
 | `status` | meaning | desk queue | customer |
 |---|---|---|---|
 | `Awaiting price` | submitted, unpriced | To price | "Awaiting price" |
-| `Offer received` | priced, window open | Awaiting customer (mm:ss tag) | pending firm offer + countdown |
-| `Offer expired` | window elapsed | Awaiting customer ("expired") | "Offer expired" |
+| `Offer received` | priced, window open | Awaiting customer (mm:ss tag) | pending firm offer + Accept/Reject |
+| `Offer expired` | window elapsed unanswered | Awaiting customer ("expired") | "Offer expired" |
+| `Accepted · awaiting execution` | customer accepted | **To confirm** | accepted, on the timeline |
+| `Offer rejected` | customer declined | *(off the desk)* | rejected, on the timeline |
 
 `status` is stored, but **`effectiveStatus(req, now)` is what to render** — an
 offer expires on a clock, so the stored string goes stale on its own.
@@ -594,8 +596,9 @@ on anything unparseable and `write()` returns `false` rather than throwing,
 and the Customer Portal wraps its `publish()` in a try/catch. **A broken link
 must never break either portal's own flow.**
 
-**Direction.** Both legs are implemented. Not implemented: the customer
-*accepting* an offer (→ "To confirm" → executed) and any wallet reservation.
+**Direction.** The full request → price → respond loop is implemented. Not
+implemented: the desk actually *executing* a confirmed trade, and any wallet
+reservation (accepting says funds are reserved but nothing moves).
 
 **The return leg.** The desk's request detail has a price form (price €/MWh +
 reaction window, defaulting to the request's own indicative price and 30
@@ -620,6 +623,21 @@ apart and a backgrounded tab doesn't lose time. The desk updates queue tags
 in place (not a full re-render) so it doesn't flicker or clobber a
 half-typed price. Tone thresholds match the mockup: ≤5 min critical,
 ≤15 min warning, else neutral.
+
+**Accept / reject.** The Customer Portal's firm-offer banner Accept and Reject
+buttons are wired to `PP.acceptOffer`/`PP.rejectOffer` **for linked trades
+only** — the seeded `TRD-1078` keeps the mockup's `PP.noop()` stub, since it
+has no record behind it. `respondToOffer()` re-checks expiry itself rather
+than trusting the UI, so a stale screen cannot accept a dead offer (exactly
+what the desk's own note warns about); rejecting an expired offer is still
+allowed, since declining is always safe. A decision is **final and outranks
+the clock** — `effectiveStatus()` returns the response for a resolved record,
+so an accepted trade never later reads as "expired" once its window elapses.
+
+Accepted trades move to the desk's **To confirm** column; rejected ones use
+the sentinel column `"done"`, which no queue matches, so they simply drop off
+the desk. `buildQueues()` filters by queue key, so any unknown column is
+naturally invisible rather than needing a special case.
 
 **A footgun worth knowing:** `toDeskCard`/`toCustomerTrade`/`secondsRemaining`
 take an optional `now`, which makes them tempting `map()` callbacks — but
@@ -656,7 +674,19 @@ shows an explanatory note instead of a detail view.
 `Back Office Portal - Preview.html` remains a pure design reference and was
 **not** edited — the Trade desk page is a separate functional rebuild, exactly
 as the Consumption page is for the Customer mockup. Its shell CSS is the same
-design-system block as the Customer Portal page.
+design-system block as the Customer Portal page, and every `.desk-*` rule is
+copied verbatim from the mockup's Trade desk inline styles (queue gap 18px,
+card `8px`/`14px 16px`, mono id 11.5/700 teal-600, tag 10.5/700 `4px 10px`
+radius 5, meta 11px, value 12/700, action 10/600 mt10; detail column
+`flex:1.55; min-width:520px`; list spaced 16px, detail 20px).
+
+**Only Trade desk is reachable.** The other seven Back Office nav entries are
+rendered `.disabled` (dimmed, `aria-disabled`, no navigation) rather than as
+dead links, because this page implements that one screen. When the page was
+first built its `.card`/`.card-title`/`.card-subtitle` rules were accidentally
+left out of the extracted CSS, so every card rendered unstyled — there is now
+a test asserting that **every class rendered into the DOM has a matching CSS
+rule**, which is worth keeping if more markup is added.
 
 ## Conventions
 

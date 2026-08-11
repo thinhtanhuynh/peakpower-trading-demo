@@ -54,10 +54,34 @@
   .badge.critical { background:var(--pp-red-bg); color:var(--pp-red-text); border-color:var(--pp-red-border); }
   .badge.brand { background:var(--pp-teal-100); color:var(--pp-teal-700); border-color:var(--pp-teal-300); }
   .badge.neutral { background:var(--pp-surface-alt); color:var(--pp-text-body); border-color:var(--pp-border-strong); }
+  /* Every nav entry except Trade desk is out of scope for this page, so it is
+     rendered as visibly unavailable rather than as a dead link. */
+  .sidebar nav a.disabled { opacity:.38; cursor:not-allowed; }
+  .sidebar nav a.disabled:hover { background:transparent; color:var(--pp-sidebar-text); }
   .content { padding:28px; }
   .page { display:none; flex-direction:column; gap:16px; }
   .page.active { display:flex; animation:pp-fade-in .18s ease; }
   @keyframes pp-fade-in { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
+  /* This page renders everything into one #desk-body wrapper, so the wrapper
+     carries the section gap — .page has a single child (see CLAUDE.md).
+     The mockup spaces the queue list at 16px and the request detail at 20px. */
+  #desk-body { display:flex; flex-direction:column; gap:16px; }
+  #desk-body.detail { gap:20px; }
+  /* Card — matches PeakPowerDesignSystem Card.jsx (18px 20px, title 13.5,
+     subtitle 11.5 with margin-bottom 14 and no margin-top). */
+  .card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:18px 20px; }
+  .card .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .card .card-title { font-size:13.5px; font-weight:700; color:var(--pp-text-heading); }
+  .card .card-subtitle { font-size:11.5px; color:var(--pp-text-body); margin-bottom:14px; }
+  /* StatCard — matches StatCard.jsx. */
+  .stat-row { display:flex; gap:16px; flex-wrap:wrap; }
+  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; min-width:160px; flex:1; }
+  .stat-card .label { font-size:11px; font-weight:600; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
+  .stat-card .value { font-size:23px; font-weight:700; margin-top:8px; color:var(--pp-text-heading); }
+  .stat-card .value.critical { color:var(--pp-orange); }
+  .stat-card .value.success { color:var(--pp-green); }
+  .stat-card .value.brand { color:var(--pp-teal-600); }
+  .stat-card .sublabel { font-size:11px; color:var(--pp-text-faint); margin-top:6px; }
   
 .btn-primary, .btn-secondary { display:inline-flex; align-items:center; gap:8px; border-radius:var(--radius-md); padding:10px 20px; font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans); border:1px solid; transition:background .15s ease, border-color .15s ease; }
   .btn-primary { background:var(--pp-teal-600); border-color:var(--pp-teal-600); color:#fff; }
@@ -102,7 +126,7 @@
 
   /* --- Request detail ---------------------------------------------------- */
   .detail-grid { display:flex; gap:20px; align-items:flex-start; flex-wrap:wrap; }
-  .detail-main { flex:1.55; min-width:420px; display:flex; flex-direction:column; gap:20px; }
+  .detail-main { flex:1.55; min-width:520px; display:flex; flex-direction:column; gap:20px; }
   .detail-side { flex:1; min-width:260px; display:flex; flex-direction:column; gap:20px; }
   .kv-row { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:6px 0; }
   .kv-row .k { color:var(--pp-text-body); }
@@ -276,6 +300,8 @@
     }
 
     var priced = Link.isPriced(req);
+    var resolved = Link.isResolved(req);
+    var accepted = resolved && req.response.action === "accept";
     var left = Link.secondsRemaining(req);
     var facts = [
       ["Reference", req.id], ["Customer", req.customer], ["State", Link.effectiveStatus(req)],
@@ -327,19 +353,33 @@
           '<div class="pf-actions"><button type="button" class="btn-primary" id="send-offer" onclick="BO.sendOffer()">Send offer</button></div>' +
         "</div>");
     } else {
-      pricePanel = cardHtml("Offer sent", req.offer.pricedBy + " · " + Link.formatStamp(req.offer.pricedAt),
+      var offerRows =
         '<div class="kv-row"><span class="k">Price</span><span class="v">€ ' + Link.formatNL(req.offer.priceMwh, 4) + " / MWh</span></div>" +
         '<div class="kv-row"><span class="k">Total value</span><span class="v">€ ' + Link.formatNL(req.offer.valueEur, 2) + "</span></div>" +
-        '<div class="kv-row"><span class="k">Reaction window</span><span class="v">' + req.offer.reactionMinutes + " min</span></div>" +
-        '<div class="kv-row"><span class="k">' + (left > 0 ? "Expires in" : "Expired") + '</span>' +
-          '<span class="v mono" id="detail-countdown">' + (left > 0 ? Link.mmss(left) : "—") + "</span></div>");
+        '<div class="kv-row"><span class="k">Reaction window</span><span class="v">' + req.offer.reactionMinutes + " min</span></div>";
+      offerRows += resolved
+        ? '<div class="kv-row"><span class="k">' + (accepted ? "Accepted by" : "Rejected by") + '</span>' +
+            '<span class="v">' + esc(req.response.by) + "</span></div>" +
+          '<div class="kv-row"><span class="k">Responded</span><span class="v mono">' +
+            esc(Link.formatStamp(req.response.at)) + "</span></div>"
+        : '<div class="kv-row"><span class="k">' + (left > 0 ? "Expires in" : "Expired") + '</span>' +
+            '<span class="v mono" id="detail-countdown">' + (left > 0 ? Link.mmss(left) : "—") + "</span></div>";
+      pricePanel = cardHtml(resolved ? (accepted ? "Offer accepted" : "Offer rejected") : "Offer sent",
+        req.offer.pricedBy + " · " + Link.formatStamp(req.offer.pricedAt), offerRows);
     }
 
-    var banner = !priced
-      ? '<div class="banner banner-teal">Live request received from the Customer Portal — awaiting a price from the desk.</div>'
-      : (left > 0
-          ? '<div class="banner banner-teal">Offer sent — the customer has <strong id="banner-countdown">' + Link.mmss(left) + "</strong> to respond.</div>"
-          : '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">The reaction window closed before the customer responded.</div></div>');
+    var banner;
+    if (!priced) {
+      banner = '<div class="banner banner-teal">Live request received from the Customer Portal — awaiting a price from the desk.</div>';
+    } else if (resolved && accepted) {
+      banner = '<div class="banner banner-teal">Accepted by the customer — this trade is now in <strong>To confirm</strong> for execution.</div>';
+    } else if (resolved) {
+      banner = '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">The customer rejected this offer. No volume was contracted.</div></div>';
+    } else if (left > 0) {
+      banner = '<div class="banner banner-teal">Offer sent — the customer has <strong id="banner-countdown">' + Link.mmss(left) + "</strong> to respond.</div>";
+    } else {
+      banner = '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">The reaction window closed before the customer responded.</div></div>';
+    }
 
     deskBody.innerHTML =
       banner +
@@ -417,7 +457,11 @@
     render();
   }
 
-  function render() { return state.view === "detail" ? renderDetail() : renderList(); }
+  function render() {
+    // The mockup spaces the detail view 20px and the queue list 16px.
+    deskBody.classList.toggle("detail", state.view === "detail");
+    return state.view === "detail" ? renderDetail() : renderList();
+  }
 
   // --- transitions ----------------------------------------------------------
 
@@ -481,9 +525,13 @@
 
   // --- init -----------------------------------------------------------------
 
+  // Trade desk is the only screen this page implements; the rest of the Back
+  // Office nav is shown for context but is explicitly not reachable.
   document.getElementById("sidebar-nav").innerHTML = D.NAV.map(function (n) {
     var active = n === "Trade desk";
-    return '<a href="#"' + (active ? ' class="active"' : "") + ' onclick="return false">' + esc(n) + "</a>";
+    return '<a href="#" class="' + (active ? "active" : "disabled") + '"' +
+      (active ? "" : ' aria-disabled="true" title="Not part of this Trade desk page"') +
+      ' onclick="return false">' + esc(n) + "</a>";
   }).join("");
 
   state.requests = Link.read(window.localStorage);

@@ -350,6 +350,71 @@ function pricedFixture(extra) {
   assert.ok(/Hedging Q1 growth\./.test(Link.toCustomerTrade(noted, T0).events[0].body));
 })();
 
+// --- accept / reject --------------------------------------------------------
+(function () {
+  var priced = pricedFixture();
+
+  // Accept.
+  var acc = Link.acceptOffer(priced, { by: "M. Vandersteen · Finance", now: T0 });
+  assert.strictEqual(priced.response, undefined, "acceptOffer does not mutate its input");
+  assert.strictEqual(Link.isResolved(acc), true);
+  assert.strictEqual(acc.response.action, "accept");
+  assert.strictEqual(acc.response.by, "M. Vandersteen · Finance");
+  assert.strictEqual(Link.effectiveStatus(acc, T0), "Accepted · awaiting execution");
+
+  // Reject.
+  var rej = Link.rejectOffer(priced, { now: T0 });
+  assert.strictEqual(rej.response.action, "reject");
+  assert.strictEqual(Link.effectiveStatus(rej, T0), "Offer rejected");
+
+  // A decision is final: it outranks the clock, so an accepted trade must not
+  // later read as "expired" once its window elapses.
+  assert.strictEqual(Link.effectiveStatus(acc, "2026-08-11T11:00:00.000Z"), "Accepted · awaiting execution",
+    "an accepted trade never reverts to expired");
+  assert.strictEqual(Link.effectiveStatus(rej, "2026-08-11T11:00:00.000Z"), "Offer rejected");
+
+  // Guards: cannot act twice, cannot act on an unpriced request, and cannot
+  // accept an expired offer even if a stale screen still shows the button.
+  assert.strictEqual(Link.acceptOffer(acc, { now: T0 }), null, "cannot accept twice");
+  assert.strictEqual(Link.rejectOffer(acc, { now: T0 }), null, "cannot reject an accepted offer");
+  assert.strictEqual(Link.acceptOffer(Link.buildRequest(WIZ, opts()), { now: T0 }), null,
+    "cannot accept an unpriced request");
+  assert.strictEqual(Link.acceptOffer(priced, { now: "2026-08-11T10:31:00.000Z" }), null,
+    "cannot accept after expiry");
+  assert.strictEqual(Link.respondToOffer(priced, "maybe", { now: T0 }), null, "unknown action rejected");
+  // Rejecting an expired offer is still allowed — it just records the decline.
+  assert.ok(Link.rejectOffer(priced, { now: "2026-08-11T10:31:00.000Z" }), "an expired offer can still be declined");
+
+  // Desk routing: accepted -> To confirm, rejected -> off the desk.
+  var accCard = Link.toDeskCard(acc, T0);
+  assert.strictEqual(accCard.column, "confirm", "accepted trades move to To confirm");
+  assert.strictEqual(accCard.tag, "accepted");
+  assert.strictEqual(accCard.actionLabel, "confirm or fail →");
+  var rejCard = Link.toDeskCard(rej, T0);
+  assert.strictEqual(rejCard.column, "done", "rejected trades leave the three desk queues");
+
+  // Customer view: no longer pending, with the decision on the timeline.
+  var accT = Link.toCustomerTrade(acc, T0);
+  assert.strictEqual(accT.pending, false, "an answered offer is no longer actionable");
+  assert.strictEqual(accT.resolved, true);
+  assert.strictEqual(accT.responseAction, "accept");
+  assert.strictEqual(accT.statusTone, "success");
+  assert.strictEqual(accT.events.length, 3, "submitted + offered + accepted");
+  assert.strictEqual(accT.events[2].title, "Offer accepted");
+  assert.ok(accT.facts.some(function (f) { return f[0] === "Accepted by"; }));
+  var rejT = Link.toCustomerTrade(rej, T0);
+  assert.strictEqual(rejT.statusTone, "critical");
+  assert.strictEqual(rejT.events[2].title, "Offer rejected");
+  assert.ok(rejT.facts.some(function (f) { return f[0] === "Rejected by"; }));
+
+  // Round-trips through storage intact.
+  var s = fakeStorage();
+  Link.publish(s, acc);
+  var back = Link.read(s)[0];
+  assert.strictEqual(Link.isResolved(back), true);
+  assert.strictEqual(Link.toDeskCard(back, T0).column, "confirm");
+})();
+
 // --- formatStamp ------------------------------------------------------------
 (function () {
   // Local-time formatting, so assert against a locally-constructed date rather
