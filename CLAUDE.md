@@ -481,12 +481,23 @@ mockup's Day-tab legend. Consumption and production are no longer plotted;
 the y-axis is bipolar (a proper zero baseline, not always at the bottom) to
 correctly show intervals where Actual Usage goes negative.
 
-**Hover vs. click:** hovering the chart shows a tooltip with just Actual
-Usage, Long, Short, Delta Cost, Hedge Cost, and Total Cost for that
-interval (the rest of the columns are available in the table below) plus a
-crosshair — it no longer scrolls the table. Long and Short rows are
-**omitted when their value is 0**: they're mutually exclusive per interval,
-so at most one of the two ever appears. Clicking the chart highlights and scrolls to that
+**Hover vs. click:** hovering the chart shows a tooltip plus a crosshair — it
+no longer scrolls the table. The tooltip is deliberately ordered **volumes
+first, then the money that follows from them** (the rest of the columns are
+available in the table below):
+
+| Row | Source | Notes |
+|---|---|---|
+| Hedge | `hedgeVolume` | what was locked in for this interval |
+| Usage | `actualUsage` | labelled "Usage", not "Actual Usage" |
+| Short *or* Long | `short`/`long` | **omitted when 0** — mutually exclusive, so at most one appears |
+| Hedge Cost | `hedgeCost` | |
+| Buy *or* Sell | `deltaCost` | label follows the sign: positive = volume **bought** at spot, negative = surplus hedge **sold**. Reads "Buy / Sell" in the rare exactly-zero case |
+| Total | `totalCost` | |
+
+The Short/Long and Buy/Sell pairs intentionally mirror each other: whichever
+side of the hedge the interval landed on names both its volume row and its
+cost row. Clicking the chart highlights and scrolls to that
 interval's row instead; the selection persists until the next click or
 until the view changes (switching site or either date clears it). One
 shared interaction function drives both charts, using a cursor-position →

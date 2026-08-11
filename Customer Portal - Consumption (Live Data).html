@@ -1657,17 +1657,24 @@
   function buildTooltipHtml(context, i) {
     var dateStr = resolveDate(context.dates, i);
     var s = context.series;
+    // Volumes first (what was hedged vs. what was actually used, then the gap
+    // between them), then the money that follows from them.
     var rows = [
-      ["Actual Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"]
+      ["Hedge", ConsumptionCalc.formatNL(s.hedgeVolume[i], 1) + " kWh"],
+      ["Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"]
     ];
     // Long and Short are mutually exclusive per interval — only ever one of
     // the two is non-zero, so hide whichever is 0 rather than showing a
     // permanently-empty row.
-    if (s.long[i] !== 0) { rows.push(["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"]); }
     if (s.short[i] !== 0) { rows.push(["Short", ConsumptionCalc.formatNL(s.short[i], 1) + " kWh"]); }
-    rows.push(["Delta Cost", ConsumptionCalc.formatNL(s.deltaCost[i], 2) + " €"]);
+    if (s.long[i] !== 0) { rows.push(["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"]); }
     rows.push(["Hedge Cost", ConsumptionCalc.formatNL(s.hedgeCost[i], 2) + " €"]);
-    rows.push(["Total Cost", ConsumptionCalc.formatNL(s.totalCost[i], 2) + " €"]);
+    // Delta Cost is what the uncovered gap costs at spot: a positive figure is
+    // volume bought, a negative one is surplus hedge sold.
+    var delta = s.deltaCost[i];
+    var deltaLabel = delta > 0 ? "Buy" : (delta < 0 ? "Sell" : "Buy / Sell");
+    rows.push([deltaLabel, ConsumptionCalc.formatNL(delta, 2) + " €"]);
+    rows.push(["Total", ConsumptionCalc.formatNL(s.totalCost[i], 2) + " €"]);
     var html = '<div class="tt-head">' + formatDateShort(dateStr) + " · " + context.times[i] + "</div>";
     for (var r = 0; r < rows.length; r++) {
       html += '<div class="tt-row"><span>' + rows[r][0] + '</span><span>' + rows[r][1] + '</span></div>';
