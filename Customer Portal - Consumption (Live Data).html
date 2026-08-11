@@ -11,41 +11,95 @@
     --pp-text-heading:#0f172a; --pp-text-body:#64748b; --pp-text-faint:#94a3b8;
     --pp-sidebar-bg:#0f2b33; --pp-sidebar-text:#cbd5e1; --pp-sidebar-text-active:#ffffff;
     --pp-sidebar-subtitle:#5eead4; --pp-sidebar-active-bg:rgba(20,184,166,0.16);
-    --pp-teal-700:#0f766e; --pp-teal-600:#0d9488; --pp-teal-500:#14b8a6; --pp-teal-100:#ccfbf1;
-    --pp-green:#15803d; --pp-red:#dc2626; --pp-cyan:#0891b2; --pp-orange:#ea580c;
+    --pp-teal-900:#0f2b33; --pp-teal-700:#0f766e; --pp-teal-600:#0d9488; --pp-teal-500:#14b8a6;
+    --pp-teal-300:#5eead4; --pp-teal-100:#ccfbf1;
     --pp-indigo:#4f46e5; --pp-indigo-bg:#e0e7ff;
+    --pp-orange:#ea580c; --pp-cyan:#0891b2;
+    --pp-amber:#d97706; --pp-amber-bg:#fef3c7; --pp-amber-border:#fcd34d; --pp-amber-text:#92400e;
+    --pp-green:#15803d; --pp-green-bg:#dcfce7; --pp-green-border:#86efac; --pp-green-text:#166534;
+    --pp-red:#dc2626; --pp-red-bg:#fee2e2; --pp-red-border:#fca5a5; --pp-red-text:#991b1b;
     --font-sans:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
     --font-mono:'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
+    --text-2xs:10px; --text-xs:11px; --text-sm:12.5px; --text-base:13.5px; --text-md:15px; --text-lg:17px; --text-xl:23px; --text-display:44px;
+    --weight-regular:400; --weight-medium:500; --weight-semibold:600; --weight-bold:700;
+    --tracking-eyebrow:0.05em;
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px; --space-10:40px;
+    --radius-sm:5px; --radius-md:7px; --radius-lg:10px; --radius-pill:999px;
+    --sidebar-width:218px; --topbar-height:56px;
   }
   * { box-sizing: border-box; }
   body { margin:0; font-family: var(--font-sans); background: var(--pp-bg); color: var(--pp-text-heading); }
   .app { display:flex; height:100vh; width:100%; overflow:hidden; }
-  .sidebar { width:218px; min-width:218px; background:var(--pp-sidebar-bg); color:var(--pp-sidebar-text); display:flex; flex-direction:column; padding:20px 0; }
-  .sidebar .brand { padding:0 20px 20px; font-size:11px; letter-spacing:.05em; color:var(--pp-sidebar-subtitle); font-weight:700; text-transform:uppercase; }
+  .sidebar { width:var(--sidebar-width); min-width:var(--sidebar-width); background:var(--pp-sidebar-bg); color:var(--pp-sidebar-text); display:flex; flex-direction:column; padding:20px 0; }
+  .sidebar .brand { padding:0 20px 20px; font-size:11px; letter-spacing:var(--tracking-eyebrow); color:var(--pp-sidebar-subtitle); font-weight:700; text-transform:uppercase; }
   .sidebar nav { display:flex; flex-direction:column; gap:2px; padding:0 10px; }
-  .sidebar nav a { display:block; padding:9px 12px; border-radius:7px; font-size:13px; color:var(--pp-sidebar-text); text-decoration:none; }
+  .sidebar nav a { display:block; padding:9px 12px; border-radius:7px; font-size:13px; color:var(--pp-sidebar-text); text-decoration:none; cursor:pointer; transition:background-color .15s ease, color .15s ease; }
+  .sidebar nav a:hover:not(.active) { background:rgba(255,255,255,0.07); color:var(--pp-sidebar-text-active); }
   .sidebar nav a.active { background:var(--pp-sidebar-active-bg); color:var(--pp-sidebar-text-active); font-weight:600; }
+  .sidebar-footer { margin-top:auto; padding:14px 20px; border-top:1px solid rgba(255,255,255,0.08); font-size:11.5px; color:var(--pp-sidebar-text); }
+  .sidebar-footer span { display:block; margin-top:2px; font-size:10.5px; color:#5b7480; }
   .main { flex:1; display:flex; flex-direction:column; overflow:auto; }
-  .topbar { height:56px; min-height:56px; background:#fff; border-bottom:1px solid var(--pp-border); display:flex; align-items:center; justify-content:space-between; padding:0 28px; position:sticky; top:0; z-index:5; }
+  .topbar { height:var(--topbar-height); min-height:var(--topbar-height); background:#fff; border-bottom:1px solid var(--pp-border); display:flex; align-items:center; justify-content:space-between; padding:0 28px; position:sticky; top:0; z-index:5; gap:16px; }
   .topbar .crumb { font-size:11px; color:var(--pp-text-body); }
-  .topbar .title { font-size:17px; font-weight:700; color:var(--pp-text-heading); margin-top:2px; }
-  .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:10.5px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; }
-  .badge.info { background:var(--pp-indigo-bg); color:var(--pp-indigo); }
-  .content { padding:28px; display:flex; flex-direction:column; gap:16px; }
+  .topbar .crumb .crumb-back { color:var(--pp-text-heading); font-weight:600; cursor:pointer; }
+  .topbar .crumb .crumb-back:hover { color:var(--pp-teal-700); }
+  .topbar .title { font-size:var(--text-lg); font-weight:700; color:var(--pp-text-heading); margin-top:2px; }
+  .topbar-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  /* Badge — matches PeakPowerDesignSystem Badge.jsx exactly (11px/600,
+     4px 12px, and every tone carries a real 1px border). */
+  .badge { display:inline-block; padding:4px 12px; border-radius:var(--radius-pill); font-size:11px; font-weight:600; line-height:1.2; border:1px solid transparent; white-space:nowrap; }
+  .badge.info { background:var(--pp-indigo-bg); color:#4338ca; border-color:#c7d2fe; }
+  .badge.success { background:var(--pp-green-bg); color:var(--pp-green-text); border-color:var(--pp-green-border); }
+  .badge.warning { background:var(--pp-amber-bg); color:var(--pp-amber-text); border-color:var(--pp-amber-border); }
+  .badge.critical { background:var(--pp-red-bg); color:var(--pp-red-text); border-color:var(--pp-red-border); }
+  .badge.brand { background:var(--pp-teal-100); color:var(--pp-teal-700); border-color:var(--pp-teal-300); }
+  .badge.neutral { background:var(--pp-surface-alt); color:var(--pp-text-body); border-color:var(--pp-border-strong); }
+  .content { padding:28px; }
+  .page { display:none; flex-direction:column; gap:16px; }
+  /* Consumption puts its sections straight in .page, so it gets the gap above.
+     The other six render everything into a single #<name>-body wrapper, which
+     would otherwise collapse .page's gap to nothing (one child) and stack its
+     own sections with no spacing — so the wrapper carries the gap itself. */
+  #dashboard-body, #connections-body, #prices-body,
+  #trading-body, #wallet-body, #invoices-body { display:flex; flex-direction:column; gap:16px; }
+  /* The mockup's Dashboard wrapper is the one screen using a 20px gap. */
+  #dashboard-body { gap:20px; }
+  .page.active { display:flex; animation:pp-fade-in .18s ease; }
+  @keyframes pp-fade-in { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
   .controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  select, input[type=date] { border:1px solid var(--pp-border-strong); border-radius:7px; padding:7px 10px; font-size:12.5px; color:var(--pp-text-heading); background:#fff; font-family:var(--font-sans); }
+  select, input[type=date], input[type=text], input[type=number], textarea { border:1px solid var(--pp-border-strong); border-radius:7px; padding:7px 10px; font-size:12.5px; color:var(--pp-text-heading); background:#fff; font-family:var(--font-sans); transition:border-color .15s ease, box-shadow .15s ease; }
+  textarea { width:100%; resize:vertical; min-height:56px; }
   select:disabled, input[type=date]:disabled { opacity:.5; cursor:not-allowed; }
-  .stat-row { display:flex; gap:14px; flex-wrap:wrap; }
-  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:8px; padding:12px 14px; min-width:160px; flex:1; }
-  .stat-card .label { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
-  .stat-card .value { font-size:20px; font-weight:700; margin-top:6px; color:var(--pp-text-heading); }
-  .stat-card .value.critical { color:var(--pp-red); }
+  select:focus, input[type=date]:focus, input[type=text]:focus, input[type=number]:focus, textarea:focus { outline:none; border-color:var(--pp-teal-500); box-shadow:0 0 0 3px rgba(20,184,166,0.15); }
+  .controls .ctl { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
+  .controls .spacer { flex:1; }
+  /* Volume figures on the first line, the three cost figures on their own line below. */
+  .stat-stack { display:flex; flex-direction:column; gap:12px; }
+  .stat-row { display:flex; gap:16px; flex-wrap:wrap; }
+  /* StatCard — matches PeakPowerDesignSystem StatCard.jsx (14px 16px,
+     label 11/600/.04em, value 23/700 mt8, sublabel 11 faint mt6). */
+  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; min-width:160px; flex:1; }
+  .stat-card .label { font-size:11px; font-weight:600; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
+  .stat-card .value { font-size:23px; font-weight:700; margin-top:8px; color:var(--pp-text-heading); }
+  /* DS tone names: critical is ORANGE in the design system (Dashboard's
+     "Uncovered volume"). Consumption's cost cards use .negative for red,
+     so they keep their own red/green cost semantics. */
+  .stat-card .value.critical { color:var(--pp-orange); }
+  .stat-card .value.negative { color:var(--pp-red); }
   .stat-card .value.success { color:var(--pp-green); }
+  /* .export / .short match the chart's Long (cyan) and Short (orange) bars. */
   .stat-card .value.export { color:var(--pp-cyan); }
-  .stat-card .sublabel { font-size:11px; color:var(--pp-text-faint); margin-top:4px; }
-  .card { background:#fff; border:1px solid var(--pp-border); border-radius:10px; padding:16px 18px; }
-  .card .card-title { font-size:14px; font-weight:700; color:var(--pp-text-heading); }
-  .card .card-subtitle { font-size:11.5px; color:var(--pp-text-body); margin-top:2px; margin-bottom:10px; }
+  .stat-card .value.short { color:var(--pp-orange); }
+  .stat-card .value.brand { color:var(--pp-teal-600); }
+  .stat-card .value.warning { color:var(--pp-amber); }
+  .stat-card .sublabel { font-size:11px; color:var(--pp-text-faint); margin-top:6px; }
+  /* Card — matches PeakPowerDesignSystem Card.jsx (18px 20px, title 13.5,
+     subtitle 11.5 with margin-bottom 14 and no margin-top). */
+  .card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:18px 20px; }
+  .card .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .card .card-title { font-size:13.5px; font-weight:700; color:var(--pp-text-heading); }
+  .card .card-subtitle { font-size:11.5px; color:var(--pp-text-body); margin-bottom:14px; }
+  .card .card-action { font-size:11px; font-weight:600; color:var(--pp-teal-700); white-space:nowrap; cursor:pointer; }
   .legend { display:flex; gap:22px; margin-top:10px; font-size:11px; color:var(--pp-text-body); flex-wrap:wrap; }
   .legend .swatch { width:12px; height:10px; display:inline-block; border-radius:2px; margin-right:6px; vertical-align:middle; }
   .table-wrap { max-height:420px; overflow:auto; border:1px solid var(--pp-border); border-radius:8px; }
@@ -54,10 +108,12 @@
   thead th.num, td.num { text-align:right; }
   tbody td { padding:6px 14px; border-bottom:1px solid var(--pp-border); }
   tbody tr:nth-child(even) { background:var(--pp-surface-zebra); }
+  tbody tr.clickable { cursor:pointer; }
   td.net-export { color:var(--pp-cyan); font-weight:600; }
   tbody tr.hovered { background:var(--pp-teal-100) !important; }
   .chart-tabs { display:flex; gap:4px; background:var(--pp-surface-alt); border-radius:8px; padding:3px; }
-  .chart-tab { border:none; background:transparent; padding:6px 14px; border-radius:6px; font-size:12.5px; font-weight:600; color:var(--pp-text-body); cursor:pointer; font-family:var(--font-sans); }
+  .chart-tab { border:none; background:transparent; padding:6px 14px; border-radius:6px; font-size:12.5px; font-weight:600; color:var(--pp-text-body); cursor:pointer; font-family:var(--font-sans); transition:background-color .15s ease, color .15s ease, box-shadow .15s ease; }
+  .chart-tab:hover:not(.active):not(:disabled) { color:var(--pp-teal-700); }
   .chart-tab.active { background:#fff; color:var(--pp-teal-700); box-shadow:0 1px 2px rgba(0,0,0,0.08); }
   .chart-tab:disabled { opacity:.5; cursor:not-allowed; }
   .chart-scroll { overflow-x:auto; }
@@ -65,77 +121,292 @@
   .chart-tooltip .tt-head { font-weight:700; margin-bottom:4px; color:#5eead4; }
   .chart-tooltip .tt-row { display:flex; justify-content:space-between; gap:14px; }
   .chart-tooltip .tt-row span:last-child { font-weight:600; }
+  /* Buttons — match PeakPowerDesignSystem Button.jsx: 600 weight, 13px,
+     10px 20px (md) / 7px 14px (sm), and a 1px border on every variant so
+     primary and secondary are the same height. */
+  .btn-primary, .btn-secondary { display:inline-flex; align-items:center; gap:8px; border-radius:var(--radius-md); padding:10px 20px; font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans); border:1px solid; transition:background .15s ease, border-color .15s ease; }
+  .btn-primary { background:var(--pp-teal-600); border-color:var(--pp-teal-600); color:#fff; }
+  .btn-primary:hover:not(:disabled) { background:var(--pp-teal-700); border-color:var(--pp-teal-700); }
+  .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-secondary { background:#fff; border-color:var(--pp-border-strong); color:var(--pp-text-heading); }
+  .btn-secondary:hover:not(:disabled) { background:var(--pp-surface-alt); }
+  .btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
+  .btn-sm { padding:7px 14px; font-size:12px; }
+  .btn-link { background:none; border:none; padding:0; color:var(--pp-teal-700); font-weight:600; font-size:12px; cursor:pointer; font-family:var(--font-sans); transition:color .15s ease; }
+  .btn-link:hover { text-decoration:underline; color:var(--pp-teal-900); }
+
+  /* ---- CSS-grid "tables" used by Dashboard/Connections/Prices/Trading/Wallet/Invoices ---- */
+  .grid-table { border:1px solid var(--pp-border); border-radius:var(--radius-lg); overflow:hidden; background:#fff; }
+  /* The mockup uses TWO table densities. Default = top-level list tables
+     (Connections / Trading / Invoices lists): head 10px 16px @10.5px,
+     row 13px 16px @12.5px, 14px column gap. */
+  .gt-head { display:grid; background:var(--pp-surface-alt); font-size:10.5px; font-weight:700; color:var(--pp-text-body); letter-spacing:.03em; padding:10px 16px; gap:14px; border-bottom:1px solid var(--pp-border); }
+  .gt-row { display:grid; padding:13px 16px; font-size:12.5px; color:var(--pp-text-heading); border-top:1px solid var(--pp-border); align-items:center; gap:14px; transition:background-color .12s ease; }
+  .gt-head + .gt-row { border-top:none; }
+  /* .dense = tables nested inside a card (Wallet ledger & top-ups, invoice
+     line items, connection block positions, wizard volumes). */
+  .grid-table.dense .gt-head { padding:9px 12px; font-size:10px; gap:10px; }
+  .grid-table.dense .gt-row { padding:11px 12px; font-size:12px; gap:10px; }
+  .gt-row.clickable { cursor:pointer; }
+  .gt-row.clickable:hover { background:var(--pp-surface-alt); }
+  .gt-row.disabled-row { cursor:default; color:var(--pp-text-faint); }
+  .gt-mono { transition:color .15s ease; }
+  .gt-cell-num { text-align:right; }
+  .gt-cell-sub { font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
+  .gt-mono { font-family:var(--font-mono); font-size:11px; }
+  .gt-scroll { max-height:440px; overflow:auto; }
+
+  .cov-bar-wrap { display:flex; align-items:center; gap:6px; justify-content:flex-end; }
+  .cov-bar-track { width:52px; height:5px; border-radius:99px; background:var(--pp-border); overflow:hidden; flex-shrink:0; }
+  .cov-bar-fill { height:100%; background:var(--pp-teal-500); }
+  .cov-bar-label { font-size:11px; font-weight:600; color:var(--pp-text-body); width:34px; text-align:right; }
+
+  .banner { display:flex; align-items:center; gap:12px; border-radius:var(--radius-lg); padding:12px 16px; font-size:12.5px; }
+  .banner-amber { background:var(--pp-amber-bg); border:1px solid var(--pp-amber-border); color:var(--pp-amber-text); }
+  .banner-teal { background:var(--pp-teal-100); border:1px solid var(--pp-teal-300); color:var(--pp-teal-900); }
+  .banner-icon { width:22px; height:22px; border-radius:50%; background:var(--pp-amber); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+  .banner-body { flex:1; }
+  .banner-title { font-weight:700; }
+  .banner-sub { margin-top:2px; }
+  .banner-actions { flex-shrink:0; }
+  .caption { font-size:11px; color:var(--pp-text-faint); }
+
+  /* The mockup's key/value rows carry no divider lines — just 6px padding. */
+  .kv-row { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:6px 0; }
+  .kv-row .k { color:var(--pp-text-body); }
+  .kv-row .v { font-weight:600; text-align:right; }
+  .kv-row .v.mono { font-family:var(--font-mono); font-weight:500; font-size:11.5px; }
+  .empty-state { color:var(--pp-text-faint); font-size:12.5px; padding:22px 10px; text-align:center; }
+
+  /* Connections detail */
+  .field-box { border:1.5px solid var(--pp-teal-300); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:12px; transition:border-color .15s ease; }
+  .field-box:hover { border-color:var(--pp-teal-500); }
+  .field-box .field-label { font-size:10px; font-weight:700; letter-spacing:.05em; color:var(--pp-text-body); text-transform:uppercase; }
+  .field-box .field-value { font-size:13.5px; font-weight:600; margin-top:3px; }
+  .dq-grid { display:grid; grid-template-columns:repeat(14,1fr); gap:6px; }
+  .dq-cell { border-radius:6px; padding:6px 2px; text-align:center; font-size:10px; border:1px solid; }
+  .dq-cell .dq-day { font-weight:700; font-size:11px; }
+  .dq-cell .dq-label { font-size:8.5px; margin-top:1px; }
+  .dq-final { background:var(--pp-green-bg); border-color:var(--pp-green-border); color:var(--pp-green-text); }
+  .dq-prov { background:var(--pp-amber-bg); border-color:var(--pp-amber-border); color:var(--pp-amber-text); }
+  .dq-corr { background:var(--pp-indigo-bg); border-color:#a5b4fc; color:var(--pp-indigo); }
+  .dq-none { background:var(--pp-red-bg); border-color:var(--pp-red-border); color:var(--pp-red-text); }
+
+  /* Price cards */
+  .price-card-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  /* Price cards follow the mockup: 18px padding, price+delta on one
+     baseline row, meta split left/right, and a divided footer row. */
+  .price-card { border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:18px; background:#fff; position:relative; }
+  .price-card.stale { border:1.5px solid var(--pp-amber-border); }
+  .price-card .pc-head { display:flex; justify-content:space-between; align-items:flex-start; }
+  .price-card .pc-label { font-size:11.5px; color:var(--pp-text-body); font-weight:600; margin-top:14px; }
+  .price-card .pc-period { font-size:13px; color:var(--pp-text-heading); font-weight:600; margin-top:2px; }
+  .price-card .pc-price-row { display:flex; justify-content:space-between; align-items:baseline; margin-top:10px; }
+  .price-card .pc-price { font-size:28px; font-weight:700; }
+  .price-card .pc-price.faint { color:var(--pp-text-faint); }
+  .price-card .pc-delta { font-size:14px; font-weight:700; }
+  .price-card .pc-delta.up { color:var(--pp-green); }
+  .price-card .pc-delta.down { color:var(--pp-red); }
+  .price-card .pc-meta { display:flex; justify-content:space-between; font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
+  .price-card .pc-foot { border-top:1px solid var(--pp-border); margin-top:12px; padding-top:10px; display:flex; justify-content:space-between; align-items:center; }
+  .price-card .pc-foot .pc-note { font-size:10px; color:var(--pp-text-faint); }
+  .price-card .pc-request { color:var(--pp-teal-700); font-weight:600; font-size:11px; cursor:pointer; transition:color .15s ease; }
+  .price-card .pc-request:hover { text-decoration:underline; color:var(--pp-teal-900); }
+
+  /* Trading */
+  .offer-banner { background:var(--pp-teal-900); color:#fff; border-radius:var(--radius-lg); padding:18px 20px; }
+  .offer-banner .ob-eyebrow { font-size:10.5px; font-weight:700; letter-spacing:.08em; color:var(--pp-teal-300); text-transform:uppercase; }
+  .offer-banner .ob-price { font-size:32px; font-weight:700; margin-top:8px; }
+  .offer-banner .ob-price span { font-size:13px; font-weight:500; color:#cbd5e1; }
+  .offer-banner .ob-sub { font-size:12px; color:#cbd5e1; margin-top:4px; }
+  .offer-banner .ob-actions { display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; align-items:center; }
+  .offer-banner .ob-countdown { font-family:var(--font-mono); font-size:15px; font-weight:700; color:var(--pp-teal-300); margin-left:auto; }
+  .btn-accept { background:var(--pp-teal-500); color:var(--pp-teal-900); border:none; border-radius:var(--radius-md); padding:8px 18px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:var(--font-sans); transition:background-color .15s ease; }
+  .btn-accept:hover { background:#7dd8c9; }
+  .btn-reject { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.4); border-radius:var(--radius-md); padding:8px 18px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:var(--font-sans); transition:background-color .15s ease, border-color .15s ease; }
+  .btn-reject:hover { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.65); }
+  .btn-ghost { background:transparent; color:#cbd5e1; border:none; padding:8px 4px; font-size:12px; font-weight:600; cursor:pointer; text-decoration:underline; font-family:var(--font-sans); transition:color .15s ease; }
+  .btn-ghost:hover { color:#fff; }
+
+  .timeline { display:flex; flex-direction:column; }
+  .timeline-item { display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--pp-border); }
+  .timeline-item:last-child { border-bottom:none; }
+  .timeline-dot { width:10px; height:10px; border-radius:50%; margin-top:4px; flex-shrink:0; }
+  .timeline-title { font-weight:700; font-size:12.5px; }
+  .timeline-actor { font-size:11px; color:var(--pp-text-body); margin-top:1px; }
+  .timeline-ts { font-size:10.5px; color:var(--pp-text-faint); margin-top:1px; }
+  .timeline-body { font-size:12px; color:var(--pp-text-body); margin-top:5px; line-height:1.5; }
+
+  .linked-tile { border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:9px 12px; margin-top:8px; }
+  .linked-tile .lt-label { font-size:10px; color:var(--pp-text-faint); text-transform:uppercase; letter-spacing:.04em; }
+  .linked-tile .lt-value { font-size:12.5px; font-weight:700; color:var(--pp-teal-700); margin-top:2px; }
+  .linked-tile .lt-note { font-size:10.5px; color:var(--pp-text-faint); margin-top:1px; }
+
+  /* Wizard */
+  /* The mockup wraps the step rail in its own white card. */
+  .step-indicator { display:flex; align-items:center; background:#fff; border:1px solid var(--pp-border); border-radius:9px; padding:16px 28px; }
+  .step-indicator .step-item { display:flex; align-items:center; flex:1; }
+  .step-indicator .step-circle { width:24px; height:24px; min-width:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; border:1.5px solid var(--pp-border-strong); color:var(--pp-text-faint); background:#fff; flex-shrink:0; }
+  .step-indicator .step-circle.done { background:var(--pp-teal-600); border-color:var(--pp-teal-600); color:#fff; }
+  .step-indicator .step-circle.current { border-color:var(--pp-teal-600); color:var(--pp-teal-700); }
+  .step-indicator .step-label { font-size:12.5px; font-weight:600; color:var(--pp-text-body); margin-left:10px; white-space:nowrap; }
+  .step-indicator .step-line { flex:1; height:1px; background:var(--pp-border-strong); margin:0 16px; min-width:20px; }
+
+  .seg-tabs { display:inline-flex; gap:4px; background:var(--pp-surface-alt); border-radius:8px; padding:3px; }
+  .seg-tab { border:none; background:transparent; padding:6px 16px; border-radius:6px; font-size:12.5px; font-weight:600; color:var(--pp-text-body); cursor:pointer; font-family:var(--font-sans); transition:background-color .15s ease, color .15s ease, box-shadow .15s ease; }
+  .seg-tab:hover:not(.active) { color:var(--pp-teal-700); }
+  .seg-tab.active { background:#fff; color:var(--pp-teal-700); box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+  .field-group { margin-bottom:14px; }
+  .field-group .fg-label { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; margin-bottom:6px; }
+
+  .bar-chart-row { display:flex; align-items:flex-end; gap:10px; height:130px; margin-top:12px; }
+  .bar-chart-col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; cursor:pointer; }
+  .bar-chart-price { font-size:11px; font-weight:700; color:var(--pp-text-body); margin-bottom:6px; transition:color .15s ease; }
+  .bar-chart-bar { width:70%; border-radius:4px 4px 0 0; background:var(--pp-border-strong); transition:background-color .15s ease, height .15s ease; }
+  .bar-chart-bar.selected { background:var(--pp-teal-600); }
+  .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-teal-300); }
+  .bar-chart-col:hover .bar-chart-price { color:var(--pp-teal-700); }
+  .bar-chart-period { font-size:10.5px; color:var(--pp-text-body); margin-top:6px; font-weight:600; }
+
+  .price-readout { background:var(--pp-surface-alt); border-radius:var(--radius-md); padding:12px 16px; margin-top:14px; }
+  .price-readout .pr-eyebrow { font-size:10px; font-weight:700; letter-spacing:.05em; color:var(--pp-text-body); text-transform:uppercase; }
+  .price-readout .pr-price { font-size:24px; font-weight:700; margin-top:4px; }
+  .price-readout .pr-meta { font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
+
+  .balance-box { background:var(--pp-surface-alt); border-radius:var(--radius-md); padding:12px 14px; margin-top:10px; }
+  .balance-box .bb-row { display:flex; justify-content:space-between; font-size:12px; padding:3px 0; color:var(--pp-text-body); }
+  .balance-box .bb-row.total { font-weight:700; color:var(--pp-text-heading); border-top:1px solid var(--pp-border); margin-top:4px; padding-top:6px; }
+  .fund-badge { display:inline-block; margin-top:8px; }
+
+  .wizard-vol-input { width:90px; text-align:right; }
+  .wizard-actions { display:flex; gap:10px; margin-top:16px; }
+
+  /* Wallet */
+  .ideal-card { border:1.5px solid var(--pp-teal-300); border-radius:var(--radius-lg); padding:20px 22px; background:#fff; display:flex; flex-direction:column; gap:14px; }
+  .bank-card { border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:20px 22px; background:#fff; display:flex; flex-direction:column; gap:10px; }
+  .amount-input-wrap { display:flex; align-items:center; gap:8px; border:1.5px solid var(--pp-teal-300); border-radius:var(--radius-md); padding:9px 12px; margin-top:8px; transition:border-color .15s ease, box-shadow .15s ease; }
+  .amount-input-wrap:focus-within { border-color:var(--pp-teal-600); box-shadow:0 0 0 3px rgba(20,184,166,0.15); }
+  .amount-input-wrap span { font-weight:700; color:var(--pp-teal-700); }
+  .amount-input-wrap input { border:none; outline:none; font-size:16px; font-weight:700; flex:1; padding:0; }
+  .amount-chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .amount-chip { border:1px solid var(--pp-border-strong); background:#fff; border-radius:999px; padding:6px 14px; font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font-sans); color:var(--pp-text-heading); transition:border-color .15s ease, color .15s ease, background-color .15s ease; }
+  .amount-chip:hover { border-color:var(--pp-teal-600); color:var(--pp-teal-700); background:var(--pp-teal-100); }
+  .amount-chip.selected { border-color:var(--pp-teal-600); background:var(--pp-teal-600); color:#fff; }
+
+  .copy-row { display:flex; justify-content:space-between; align-items:center; gap:10px; background:var(--pp-surface-alt); border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:10px 14px; font-size:12.5px; transition:border-color .15s ease, background-color .15s ease; }
+  .copy-row:hover { border-color:var(--pp-border-strong); }
+  .copy-row .cr-label { color:var(--pp-text-body); font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+  .copy-row .cr-value { font-weight:600; font-family:var(--font-mono); font-size:13px; margin-top:3px; }
+  .copy-row.highlight { background:var(--pp-teal-100); border-color:var(--pp-teal-300); }
+  .copy-row.highlight:hover { border-color:var(--pp-teal-500); }
+  .copy-row.highlight .cr-label { color:var(--pp-teal-700); }
+  .copy-affordance { font-size:11px; color:var(--pp-teal-600); cursor:pointer; font-weight:600; transition:color .15s ease; flex-shrink:0; }
+  .copy-affordance:hover { color:var(--pp-teal-900); text-decoration:underline; }
+
+  .readonly-field { background:var(--pp-surface-alt); border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:9px 12px; font-size:12.5px; color:var(--pp-text-body); }
 </style>
 </head>
 <body>
 <div class="app">
   <div class="sidebar">
     <div class="brand">Customer portal</div>
-    <nav>
-      <a>Dashboard</a>
-      <a>Connections</a>
-      <a class="active">Consumption</a>
-      <a>Prices</a>
-      <a>Trading</a>
-      <a>Wallet</a>
-      <a>Invoices</a>
+    <nav id="sidebar-nav">
+      <a href="#" data-page="dashboard" class="active">Dashboard</a>
+      <a href="#" data-page="connections">Connections</a>
+      <a href="#" data-page="consumption">Consumption</a>
+      <a href="#" data-page="prices">Prices</a>
+      <a href="#" data-page="trading">Trading</a>
+      <a href="#" data-page="wallet">Wallet</a>
+      <a href="#" data-page="invoices">Invoices</a>
     </nav>
+    <div class="sidebar-footer">J. de Vries<span>Vandersteen Koeling B.V.</span></div>
   </div>
   <div class="main">
     <div class="topbar">
       <div>
         <div class="crumb" id="crumb"></div>
-        <div class="title">Consumption</div>
+        <div class="title" id="page-title">Dashboard</div>
       </div>
-      <span class="badge info" id="status-badge">Loading live data…</span>
+      <div class="topbar-actions">
+        <span id="topbar-page-actions"></span>
+      </div>
     </div>
     <div class="content">
-      <div class="controls">
-        <select id="site-select" disabled></select>
-        <input type="date" id="date-input" disabled>
+
+      <div class="page active" id="page-dashboard">
+        <div id="dashboard-body"></div>
       </div>
-      <div class="stat-row" id="stat-row">
-        <div class="stat-card"><div class="label">Loading</div><div class="value">…</div><div class="sublabel">Fetching source data and calculating in the browser</div></div>
+
+      <div class="page" id="page-connections">
+        <div id="connections-body"></div>
       </div>
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-          <div>
-            <div class="card-title">Consumption &amp; production — 15-minute intervals</div>
-            <div class="card-subtitle" id="chart-subtitle"></div>
+
+      <div class="page" id="page-consumption">
+        <div class="controls">
+          <select id="site-select" disabled></select>
+          <span class="ctl">From <input type="date" id="from-date" disabled></span>
+          <span class="ctl">To <input type="date" id="to-date" disabled></span>
+          <div class="chart-tabs">
+            <button type="button" class="chart-tab active" data-period="day" disabled>Day</button>
+            <button type="button" class="chart-tab" data-period="month" disabled>Month</button>
+            <button type="button" class="chart-tab" data-period="quarter" disabled>Quarter</button>
           </div>
-          <div style="display:flex;gap:10px;align-items:center">
-            <div class="chart-tabs">
-              <button type="button" class="chart-tab active" data-mode="day" disabled>Day</button>
-              <button type="button" class="chart-tab" data-mode="month" disabled>Month</button>
+          <span class="spacer"></span>
+          <button type="button" class="btn-primary" id="export-csv" disabled>Export CSV</button>
+        </div>
+        <div class="stat-stack" id="stat-row">
+          <div class="stat-row"><div class="stat-card"><div class="label">Loading</div><div class="value">…</div><div class="sublabel">Fetching source data and calculating in the browser</div></div></div>
+        </div>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="card-title">Consumption &amp; production — 15-minute intervals</div>
+              <div class="card-subtitle" id="chart-subtitle"></div>
             </div>
-            <select id="month-select" style="display:none" disabled></select>
+          </div>
+          <div id="day-chart-wrap">
+            <svg id="chart" viewBox="0 0 960 260" style="width:100%;height:260px;display:block"></svg>
+          </div>
+          <div id="month-chart-wrap" class="chart-scroll" style="display:none">
+            <svg id="month-chart" viewBox="0 0 960 260" height="260" style="display:block"></svg>
+          </div>
+          <div class="legend">
+            <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Actual usage</div>
+            <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed var(--pp-indigo)"></span>Hedge volume</div>
+            <div><span class="swatch" style="background:#facc15;opacity:.2"></span>Covered (min of actual &amp; hedge)</div>
+            <div><span class="swatch" style="background:var(--pp-orange);opacity:.55"></span>Short — bought at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-cyan);opacity:.3"></span>Long — sold at day-ahead</div>
           </div>
         </div>
-        <div id="day-chart-wrap">
-          <svg id="chart" viewBox="0 0 960 260" style="width:100%;height:260px;display:block"></svg>
-        </div>
-        <div id="month-chart-wrap" class="chart-scroll" style="display:none">
-          <svg id="month-chart" viewBox="0 0 960 260" height="260" style="display:block"></svg>
-        </div>
-        <div class="legend">
-          <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Actual usage</div>
-          <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed var(--pp-indigo)"></span>Hedge volume</div>
-          <div><span class="swatch" style="background:#facc15;opacity:.2"></span>Covered (min of actual &amp; hedge)</div>
-          <div><span class="swatch" style="background:var(--pp-orange);opacity:.55"></span>Short — bought at day-ahead</div>
-          <div><span class="swatch" style="background:var(--pp-cyan);opacity:.3"></span>Long — sold at day-ahead</div>
+        <div class="card">
+          <div class="card-title">15-minute interval detail</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Date</th><th>Time</th><th class="num">Consumption (kWh)</th><th class="num">Production (kWh)</th><th class="num">EPEX (€/kWh)</th><th class="num">Usage Cost (€)</th><th class="num">Actual Usage (kWh)</th><th class="num">Base Volume (kWh)</th><th class="num">Peak Volume (kWh)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Uncovered (kWh)</th><th class="num">Long (kWh)</th><th class="num">Short (kWh)</th><th class="num">Delta Cost (€)</th><th class="num">Hedge Cost (€)</th><th class="num">Total Cost (€)</th></tr>
+              </thead>
+              <tbody id="table-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
-      <div class="card">
-        <div class="card-title">15-minute interval detail</div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Date</th><th>Time</th><th class="num">Consumption (kWh)</th><th class="num">Production (kWh)</th><th class="num">TUF (€/kWh)</th><th class="num">FDF (€/kWh)</th><th class="num">EPEX (€/kWh)</th><th class="num">Usage Cost (€)</th><th class="num">Actual Usage (kWh)</th><th class="num">Base Volume (kWh)</th><th class="num">Peak Volume (kWh)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Uncovered (kWh)</th><th class="num">Long (kWh)</th><th class="num">Short (kWh)</th><th class="num">Delta Cost (€)</th></tr>
-            </thead>
-            <tbody id="table-body"></tbody>
-          </table>
-        </div>
+
+      <div class="page" id="page-prices">
+        <div id="prices-body"></div>
       </div>
+
+      <div class="page" id="page-trading">
+        <div id="trading-body"></div>
+      </div>
+
+      <div class="page" id="page-wallet">
+        <div id="wallet-body"></div>
+      </div>
+
+      <div class="page" id="page-invoices">
+        <div id="invoices-body"></div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -143,24 +414,983 @@
 
 <script src="consumption-calc.js"></script>
 <script src="consumption-data-loader.js"></script>
+<script src="portal-seed-data.js"></script>
 <script>
 (function () {
   "use strict";
   var DATA = null;
   var siteSelect = document.getElementById("site-select");
-  var dateInput = document.getElementById("date-input");
+  var fromDate = document.getElementById("from-date");
+  var toDate = document.getElementById("to-date");
+  var exportBtn = document.getElementById("export-csv");
   var crumb = document.getElementById("crumb");
+  var pageTitle = document.getElementById("page-title");
   var chartSubtitle = document.getElementById("chart-subtitle");
   var statRow = document.getElementById("stat-row");
-  var statusBadge = document.getElementById("status-badge");
   var chart = document.getElementById("chart");
   var tableBody = document.getElementById("table-body");
+  var topbarActionsEl = document.getElementById("topbar-page-actions");
 
   var allDates = [];
   var MIN_DATE = null;
   var MAX_DATE = null;
-  var MONTH_OPTIONS = [];
-  var monthSelect = document.getElementById("month-select");
+
+  // ---------------------------------------------------------------------
+  // Multi-page shell: Dashboard/Connections/Consumption/Prices/Trading/
+  // Wallet/Invoices are all native sections of this one page (no iframe,
+  // no separate HTML files) — see CLAUDE.md's "Customer Portal (Live Data)
+  // page" section. Consumption is the only screen backed by real
+  // per-interval data (consumption-calc.js / consumption-data-loader.js,
+  // untouched below). The other six screens are a faithful port of
+  // Customer Portal - Preview.html's own state machine and seeded demo
+  // data (portal-seed-data.js) — that mockup is itself a static seeded
+  // demo, so matching it means matching its numbers and copy verbatim,
+  // not deriving them from the real hedge/consumption datasets.
+  // ---------------------------------------------------------------------
+
+  function cardHtml(title, subtitle, bodyHtml, actionHtml) {
+    var head = actionHtml
+      ? '<div class="card-head"><div><div class="card-title">' + title + '</div>' +
+        (subtitle ? '<div class="card-subtitle">' + subtitle + '</div>' : '<div style="height:10px"></div>') +
+        '</div><div class="card-action">' + actionHtml + '</div></div>'
+      : '<div class="card-title">' + title + '</div>' +
+        (subtitle ? '<div class="card-subtitle">' + subtitle + '</div>' : '<div style="height:10px"></div>');
+    return '<div class="card">' + head + bodyHtml + '</div>';
+  }
+
+  function badge(text, tone) {
+    return '<span class="badge ' + (tone || "neutral") + '">' + text + '</span>';
+  }
+
+  // ------------------------- State machine (ported from the mockup) -----
+
+  var state = {
+    page: "Dashboard", connId: null,
+    tradingView: "list", tradeId: null, wizardStep: 0,
+    walletView: "ledger",
+    walletAvailable: PortalSeedData.WALLET_AVAILABLE_BALANCE, walletSettled: 29122.00, walletReserved: 9400.00,
+    walletLedgerExtra: [], topupsExtra: [], topupAmount: 12400,
+    wizard: { direction: "Buy", shape: "Peak", periodType: "quarter", monthIdx: 0, quarterIdx: 1,
+              volumes: { rot: 0.200, venlo: 0.300, tilburg: 0.400, almere: 0.100 }, note: "" },
+    invoiceId: null,
+    trades: PortalSeedData.TRADES_SEED.slice(),
+    nextSeq: 1079,
+    hoverBar: null
+  };
+
+  function activatePageDom(pageLower) {
+    var pages = document.querySelectorAll(".page");
+    for (var i = 0; i < pages.length; i++) { pages[i].classList.toggle("active", pages[i].id === "page-" + pageLower); }
+    var links = document.querySelectorAll("#sidebar-nav a");
+    for (var l = 0; l < links.length; l++) { links[l].classList.toggle("active", links[l].getAttribute("data-page") === pageLower); }
+  }
+
+  function resetSubViewsFor(pageCap) {
+    state.page = pageCap; state.connId = null; state.tradingView = "list"; state.tradeId = null;
+    state.invoiceId = null; state.wizardStep = 0; state.walletView = "ledger";
+  }
+
+  function goTo(pageCap) {
+    activatePageDom(pageCap.toLowerCase());
+    resetSubViewsFor(pageCap);
+    if (pageCap.toLowerCase() === "consumption") {
+      pageTitle.textContent = "Consumption";
+      render();
+    } else {
+      renderApp();
+    }
+  }
+
+  // Deep-link from another screen: focus one site on one day.
+  function goToConsumption(siteId, dateStr) {
+    if (siteId && DATA) { siteSelect.value = siteId; }
+    if (dateStr && DATA) {
+      fromDate.value = clampDate(dateStr);
+      toDate.value = clampDate(dateStr);
+      markActivePreset();
+    }
+    goTo("Consumption");
+  }
+
+  function openConnection(id) { state.connId = id; renderApp(); }
+  function closeConnection() { state.connId = null; renderApp(); }
+
+  function openTrade(id) {
+    state.page = "Trading"; activatePageDom("trading");
+    state.tradingView = "detail"; state.tradeId = id;
+    renderApp();
+  }
+  function backToTrades() { state.tradingView = "list"; state.tradeId = null; renderApp(); }
+
+  function defaultWizard(shape, periodType, monthIdx, quarterIdx) {
+    return {
+      direction: "Buy", shape: shape, periodType: periodType, monthIdx: monthIdx, quarterIdx: quarterIdx,
+      volumes: { rot: 0.200, venlo: 0.300, tilburg: 0.400, almere: 0.100 }, note: ""
+    };
+  }
+
+  function startWizard() {
+    state.tradingView = "wizard"; state.wizardStep = 0;
+    state.wizard = defaultWizard("Peak", "quarter", 0, 1);
+    renderApp();
+  }
+  function startWizardFromPrice(shape, periodType) {
+    state.page = "Trading"; activatePageDom("trading");
+    state.tradingView = "wizard"; state.wizardStep = 0;
+    state.wizard = defaultWizard(shape, periodType, 0, 0);
+    renderApp();
+  }
+  function cancelWizard() { state.tradingView = "list"; state.wizardStep = 0; renderApp(); }
+  function wizardGoStep0() { state.wizardStep = 0; renderApp(); }
+  function wizardGoStep1() { state.wizardStep = 1; renderApp(); }
+  function wizardGoStep2() { state.wizardStep = 2; renderApp(); }
+
+  function setDirIdx(i) { state.wizard.direction = i === 0 ? "Buy" : "Sell"; renderApp(); }
+  function setShapeIdx(i) { state.wizard.shape = i === 0 ? "Base" : "Peak"; renderApp(); }
+  function setPeriodType(i) { state.wizard.periodType = i === 0 ? "month" : (i === 1 ? "quarter" : "year"); renderApp(); }
+  function selectWizardBar(type, i) {
+    if (type === "month") { state.wizard.monthIdx = i; } else { state.wizard.quarterIdx = i; }
+    renderApp();
+  }
+  function setHoverBar(type, i) { state.hoverBar = type + ":" + i; renderApp(); }
+  function clearHoverBar() { state.hoverBar = null; renderApp(); }
+  function setWizardVolume(id, raw) {
+    var n = parseFloat(String(raw).replace(",", "."));
+    state.wizard.volumes[id] = isNaN(n) ? 0 : n;
+    renderApp();
+  }
+  function onWizardNoteChange(val) { state.wizard.note = val; renderApp(); }
+
+  function submitWizard() {
+    var id = "TRD-" + state.nextSeq;
+    var direction = state.wizard.direction, shape = state.wizard.shape, note = state.wizard.note;
+    var bodyText = note ? 'Comment: "' + note + '"' : (direction + " " + shape + " Q1 2027 · 1,000 MW across 4 connections.");
+    var trade = {
+      id: id, shape: shape, period: "Q1 2027", direction: direction, power: "1,000 MW", volume: "768,00 MWh",
+      price: null, value: null, status: "Awaiting price", statusTone: "info",
+      events: [{ title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "just now", body: bodyText, tone: "submit" }],
+      facts: [["Reference", id], ["Requested by", "J. de Vries"], ["State", "Awaiting price"], ["Direction", direction],
+        ["Shape", shape], ["Delivery period", "Q1 2027"], ["Total power", "1,000 MW"], ["Total volume", "768,00 MWh"]]
+    };
+    state.trades.unshift(trade);
+    state.nextSeq++;
+    state.page = "Trading"; state.tradingView = "list"; state.tradeId = null;
+    activatePageDom("trading");
+    renderApp();
+  }
+
+  function topUpWallet() { state.walletView = "topup"; renderApp(); }
+  function backToWallet() { state.walletView = "ledger"; renderApp(); }
+  function setTopupAmount(raw) {
+    var cleaned = String(raw).replace(/\./g, "").replace(",", ".");
+    var n = parseFloat(cleaned);
+    state.topupAmount = isNaN(n) ? 0 : n;
+    renderApp();
+  }
+  function setTopupAmountValue(v) { state.topupAmount = v; renderApp(); }
+  function performTopup() {
+    if (state.topupAmount <= 0) { return; }
+    var amt = state.topupAmount;
+    var now = new Date();
+    var pad = function (n) { return String(n).padStart(2, "0"); };
+    var dateStr = pad(now.getDate()) + "-" + pad(now.getMonth() + 1) + " " + pad(now.getHours()) + ":" + pad(now.getMinutes());
+    var monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var topupDateStr = now.getDate() + " " + monthNames[now.getMonth()] + " " + now.getFullYear() + ", " + pad(now.getHours()) + ":" + pad(now.getMinutes());
+    var ref = "PAY-" + (2292 + state.topupsExtra.length);
+    var newAvailable = state.walletAvailable + amt;
+    var ledgerEntry = {
+      date: dateStr, type: "Deposit (iDEAL)", tone: "success", desc: "Top-up via iDEAL",
+      by: "J. de Vries", byNote: "", ref: ref, refKind: "none", debit: "",
+      credit: PortalSeedData.formatEUR(amt), after: PortalSeedData.formatEUR(newAvailable)
+    };
+    var topupEntry = { date: topupDateStr, method: "iDEAL · ING", ref: ref, status: "Succeeded", amount: PortalSeedData.formatEUR(amt) };
+    state.walletAvailable += amt;
+    state.walletSettled += amt;
+    state.walletLedgerExtra.unshift(ledgerEntry);
+    state.topupsExtra.unshift(topupEntry);
+    state.walletView = "ledger";
+    renderApp();
+  }
+
+  function openInvoice(id) {
+    state.page = "Invoices"; activatePageDom("invoices");
+    state.invoiceId = id;
+    renderApp();
+  }
+  function closeInvoice() { state.invoiceId = null; renderApp(); }
+
+  window.PP = {
+    goTo: goTo, goToConsumption: goToConsumption,
+    openConnection: openConnection, closeConnection: closeConnection,
+    openTrade: openTrade, backToTrades: backToTrades,
+    startWizard: startWizard, startWizardFromPrice: startWizardFromPrice, cancelWizard: cancelWizard,
+    wizardGoStep0: wizardGoStep0, wizardGoStep1: wizardGoStep1, wizardGoStep2: wizardGoStep2,
+    setDirIdx: setDirIdx, setShapeIdx: setShapeIdx, setPeriodType: setPeriodType,
+    selectWizardBar: selectWizardBar, setHoverBar: setHoverBar, clearHoverBar: clearHoverBar,
+    setWizardVolume: setWizardVolume, onWizardNoteChange: onWizardNoteChange, submitWizard: submitWizard,
+    topUpWallet: topUpWallet, backToWallet: backToWallet,
+    setTopupAmount: setTopupAmount, setTopupAmountValue: setTopupAmountValue, performTopup: performTopup,
+    openInvoice: openInvoice, closeInvoice: closeInvoice,
+    noop: function () {}
+  };
+
+  // Ticks the one pending trade's countdown once a second (fidelity to the
+  // mockup's live countdown; the ring itself is simplified to mm:ss text —
+  // see CLAUDE.md).
+  setInterval(function () {
+    var changed = false;
+    state.trades.forEach(function (t) {
+      if (t.pending && typeof t.secondsRemaining === "number" && t.secondsRemaining > 0) {
+        t.secondsRemaining -= 1;
+        changed = true;
+      }
+    });
+    if (changed && (state.page === "Trading" || state.page === "Dashboard")) { renderApp(); }
+  }, 1000);
+
+  (function attachSidebarNav() {
+    var links = document.querySelectorAll("#sidebar-nav a");
+    for (var i = 0; i < links.length; i++) {
+      links[i].addEventListener("click", function (evt) {
+        evt.preventDefault();
+        var p = this.getAttribute("data-page");
+        goTo(p.charAt(0).toUpperCase() + p.slice(1));
+      });
+    }
+  })();
+
+  function mmss(seconds) {
+    var s = Math.max(0, seconds || 0);
+    var mm = Math.floor(s / 60), ss = s % 60;
+    return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
+  }
+
+  // ------------------------- Topbar chrome (title/crumb/actions) --------
+
+  function setCrumb(restHtml, backLabel, backFn) {
+    var backHtml = backLabel ? '<a class="crumb-back" onclick="PP.' + backFn + '()">' + backLabel + '</a> › ' : "";
+    crumb.innerHTML = backHtml + restHtml;
+  }
+
+  function renderTopbarChrome() {
+    var page = state.page;
+    var title = page;
+    var actionsHtml = "";
+    crumb.innerHTML = "";
+
+    if (page === "Dashboard") {
+      setCrumb("Vandersteen Koeling B.V. · 6 connections");
+    } else if (page === "Connections" && state.connId) {
+      var conn = PortalSeedData.CONNECTIONS.filter(function (c) { return c.id === state.connId; })[0];
+      title = conn ? conn.name : "Connections";
+      setCrumb("EAN " + (conn ? conn.ean : ""), "Connections", "closeConnection");
+      actionsHtml = '<button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button>';
+    } else if (page === "Connections") {
+      setCrumb("6 electricity connections · 1 gas (not tradeable)");
+      actionsHtml = '<button type="button" class="btn-secondary" onclick="PP.noop()">Export CSV</button>';
+    } else if (page === "Prices") {
+      setCrumb("Dutch power · indicative only");
+    } else if (page === "Trading" && state.tradingView === "detail") {
+      var trade = state.trades.filter(function (t) { return t.id === state.tradeId; })[0];
+      title = trade ? "Trade " + trade.id : "Trading";
+      setCrumb(trade ? (trade.shape + " " + trade.period + " · " + trade.power + " · " + trade.status) : "", "Trading", "backToTrades");
+      actionsHtml = '<button type="button" class="btn-secondary" onclick="PP.noop()">Export history</button>';
+    } else if (page === "Trading" && state.tradingView === "wizard") {
+      title = "Request a trade";
+      setCrumb("Step " + (state.wizardStep + 1) + " of 3");
+    } else if (page === "Trading") {
+      setCrumb("Vandersteen Koeling B.V. · 6 open or recent trades");
+      actionsHtml = '<button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button>';
+    } else if (page === "Wallet" && state.walletView === "topup") {
+      title = "Top up your wallet";
+      setCrumb("Add funds", "Wallet", "backToWallet");
+    } else if (page === "Wallet") {
+      setCrumb("Vandersteen Koeling B.V. · EUR");
+      actionsHtml = '<button type="button" class="btn-primary" onclick="PP.topUpWallet()">Top up</button>' +
+        '<button type="button" class="btn-secondary" onclick="PP.noop()">Statement</button>';
+    } else if (page === "Invoices" && state.invoiceId) {
+      var inv = PortalSeedData.INVOICES.filter(function (x) { return x.id === state.invoiceId; })[0];
+      title = inv ? "Invoice " + inv.id : "Invoices";
+      setCrumb(inv ? (inv.period + " · settled " + inv.settledDate) : "", "Invoices", "closeInvoice");
+      actionsHtml = '<button type="button" class="btn-primary" onclick="PP.noop()">Download PDF</button>' +
+        '<button type="button" class="btn-secondary" onclick="PP.noop()">Export CSV</button>';
+    } else if (page === "Invoices") {
+      setCrumb("Vandersteen Koeling B.V. · monthly invoices");
+    }
+
+    pageTitle.textContent = title;
+    topbarActionsEl.innerHTML = actionsHtml;
+  }
+
+  function renderApp() {
+    renderTopbarChrome();
+    var pageLower = state.page.toLowerCase();
+    if (pageLower === "dashboard") { renderDashboardPage(); }
+    else if (pageLower === "connections") { renderConnectionsPage(); }
+    else if (pageLower === "prices") { renderPricesPage(); }
+    else if (pageLower === "trading") { renderTradingPage(); }
+    else if (pageLower === "wallet") { renderWalletPage(); }
+    else if (pageLower === "invoices") { renderInvoicesPage(); }
+  }
+
+  function renderCurrentPage() {
+    if (state.page === "Consumption") { render(); } else { renderApp(); }
+  }
+
+  // --- Dashboard ----------------------------------------------------------
+
+  function buildMiniChartSvg(times, actualUsage, hedgeVolume) {
+    var n = times.length;
+    var width = 960, height = 180, padLeft = 10, padRight = 10, padTop = 10, padBottom = 10;
+    var plotW = width - padLeft - padRight;
+    var plotH = height - padTop - padBottom;
+    var minVal = 0, maxVal = 0, i;
+    for (i = 0; i < n; i++) {
+      minVal = Math.min(minVal, actualUsage[i], hedgeVolume[i]);
+      maxVal = Math.max(maxVal, actualUsage[i], hedgeVolume[i]);
+    }
+    if (minVal === maxVal) { maxVal = minVal + 1; }
+    var range = maxVal - minVal;
+    function yFor(val) { return padTop + (maxVal - val) / range * plotH; }
+    var zeroY = yFor(0);
+    var stepX = n > 1 ? plotW / (n - 1) : 0;
+    var netPoints = "", hedgePoints = "";
+    for (i = 0; i < n; i++) {
+      var px = padLeft + i * stepX;
+      netPoints += px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1) + " ";
+      hedgePoints += px.toFixed(1) + "," + yFor(hedgeVolume[i]).toFixed(1) + " ";
+    }
+    return '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
+      '<polyline points="' + netPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="2"></polyline>' +
+      '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4f46e5" stroke-width="2" stroke-dasharray="5,3"></polyline>';
+  }
+
+  function renderDashboardPage() {
+    var pending = state.trades.filter(function (t) { return t.pending; })[0];
+
+    var kpiHtml =
+      statCardHtml("Available balance", "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2), "",
+        "settled € " + ConsumptionCalc.formatNL(state.walletSettled, 0) + " · reserved € " + ConsumptionCalc.formatNL(state.walletReserved, 0)) +
+      statCardHtml("Coverage — August", "78,4 %", "brand", "of forecast volume hedged") +
+      statCardHtml("Uncovered volume", "214,4 MWh", "critical", "≈ € 18.953 at day-ahead") +
+      statCardHtml("Open trades", "2", "warning", "1 awaiting your response");
+
+    var offerBannerHtml = "";
+    if (pending) {
+      offerBannerHtml = '<div class="banner banner-amber"><div class="banner-icon">!</div>' +
+        '<div class="banner-body"><div class="banner-title">Offer received — Base Nov-2026 · 0,2 MW · € 102,4000/MWh · € 14.745,60</div>' +
+        '<div class="banner-sub">Respond within ' + mmss(pending.secondsRemaining) + ' — the price is firm until then.</div></div>' +
+        '<div class="banner-actions"><button type="button" class="btn-primary" onclick="PP.openTrade(\'' + pending.id + '\')">View offer</button></div></div>';
+    }
+
+    var tilesHtml = PortalSeedData.DASHBOARD_PRICE_TILES.map(function (t) {
+      return '<div class="price-card" style="padding:10px 12px"><div class="pc-label" style="margin-top:0">' + t[0] + '</div>' +
+        '<div class="pc-price" style="font-size:17px">' + t[1] + '</div>' +
+        '<div class="pc-delta ' + (t[3] ? "up" : "down") + '">' + (t[3] ? "▲" : "▼") + " " + t[2] + '</div></div>';
+    }).join("");
+
+    var activityHtml = PortalSeedData.DASHBOARD_RECENT_ACTIVITY.map(function (a, idx) {
+      var toneColor = PortalSeedData.TONE_COLOR[a[3]] || "#94a3b8";
+      return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;' + (idx > 0 ? "border-top:1px solid var(--pp-border)" : "") + '">' +
+        '<span style="width:8px;height:8px;border-radius:999px;margin-top:5px;flex-shrink:0;background:' + toneColor + '"></span>' +
+        '<div style="flex:1"><div style="font-weight:600;font-size:12.5px">' + a[0] + '</div>' +
+        '<div style="font-size:11.5px;color:var(--pp-text-body);margin-top:2px">' + a[1] + '</div></div>' +
+        '<div style="font-size:11px;color:var(--pp-text-faint);white-space:nowrap">' + a[2] + '</div></div>';
+    }).join("");
+
+    var chartTitle = "Consumption — Wednesday 12 August 2026";
+    var chartHtml = '<div class="empty-state">Loading live data…</div>';
+    if (DATA) {
+      var siteId = "rot", date = MAX_DATE;
+      var dateSeries = DATA.byDate[date];
+      var siteSeries = DATA.bySite[siteId] && DATA.bySite[siteId][date];
+      var hedgeBlocks = DATA.hedge && DATA.hedge[siteId];
+      if (dateSeries && siteSeries) {
+        var dSeries = ConsumptionCalc.computeIntervalSeries(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
+        chartHtml = '<svg viewBox="0 0 960 220" style="width:100%;height:220px;display:block">' +
+          buildMiniChartSvg(dateSeries.t, dSeries.actualUsage, dSeries.hedgeVolume) + '</svg>';
+        chartTitle = "Consumption — " + formatDateLong(date);
+      }
+    }
+
+    var html =
+      '<div class="stat-row">' + kpiHtml + '</div>' +
+      offerBannerHtml +
+      cardHtml("Price indications", "Indicative only — not an offer", '<div class="price-card-grid" style="grid-template-columns:repeat(6,1fr);gap:10px">' + tilesHtml + '</div>') +
+      '<div style="display:flex;gap:20px;align-items:flex-start">' +
+        '<div style="flex:1.7;min-width:0">' + cardHtml(chartTitle, "Rotterdam DC · provisional data", chartHtml) + '</div>' +
+        '<div style="flex:1;min-width:0">' + cardHtml("Recent activity", "", activityHtml) + '</div>' +
+      '</div>';
+
+    document.getElementById("dashboard-body").innerHTML = html;
+  }
+
+  // --- Connections ----------------------------------------------------------
+
+  function renderConnectionsPage() {
+    if (state.connId) { renderConnectionDetail(); return; }
+
+    var cols = "2.2fr 1fr 1fr 1.3fr 1fr 1.4fr";
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>CONNECTION</div><div>COMMODITY</div><div>STATUS</div>' +
+      '<div>LATEST DATA</div><div class="gt-cell-num">AUGUST VOLUME</div><div class="gt-cell-num">BLOCK COVERAGE</div></div>';
+    var rows = PortalSeedData.CONNECTIONS.map(function (c) {
+      var clickable = !c.notTradeable;
+      var covHtml = c.coverage != null
+        ? '<div class="cov-bar-wrap"><div class="cov-bar-track"><div class="cov-bar-fill" style="width:' + c.coverage + '%"></div></div><span class="cov-bar-label">' + c.coverage + ' %</span></div>'
+        : "";
+      var cells =
+        '<div><div style="font-weight:700' + (c.notTradeable ? ";color:var(--pp-text-faint)" : "") + '">' + c.name + '</div><div class="gt-cell-sub gt-mono">' + c.ean + '</div></div>' +
+        '<div>' + c.commodity + '</div>' +
+        '<div>' + badge(c.status, c.statusTone) + '</div>' +
+        '<div>' + c.latestDate + (c.latestNote ? '<div class="gt-cell-sub">' + c.latestNote + '</div>' : "") + '</div>' +
+        '<div class="gt-cell-num">' + c.volume + '</div>' +
+        '<div class="gt-cell-num">' + covHtml + '</div>';
+      return '<div class="gt-row' + (clickable ? ' clickable' : ' disabled-row') + '" style="grid-template-columns:' + cols + '"' +
+        (clickable ? ' onclick="PP.openConnection(\'' + c.id + '\')"' : '') + '>' + cells + '</div>';
+    }).join("");
+    var table = '<div class="grid-table">' + head + '<div class="gt-scroll">' + rows + '</div></div>';
+
+    var topRow = '<div class="controls"><input type="text" class="search-input" style="flex:1;max-width:340px" placeholder="Search name, description or EAN…">' +
+      badge("Electricity", "brand") + badge("All statuses", "neutral") + '</div>';
+
+    var banner = '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">' +
+      'Almere office has reported no data since 10 August. PeakPower has been notified automatically.</div></div>';
+
+    var caption = '<div class="caption">Give a connection a name and description to use it everywhere — charts, trade requests, invoices and alerts.</div>';
+
+    document.getElementById("connections-body").innerHTML = topRow + table + banner + caption;
+  }
+
+  function renderConnectionDetail() {
+    var c = PortalSeedData.CONNECTIONS.filter(function (x) { return x.id === state.connId; })[0];
+    if (!c) { closeConnection(); return; }
+
+    var labelsCard = cardHtml("Your labels", "Visible only to your organisation",
+      '<div class="field-box"><div class="field-label">Name</div><div class="field-value">' + c.name + '</div></div>' +
+      '<div class="field-box"><div class="field-label">Description</div><div class="field-value">' + c.description + '</div></div>' +
+      '<div class="caption">' + (c.lastChanged === "—" ? "Not yet named" : "Last changed by you on " + c.lastChanged) + '</div>' +
+      '<div style="display:flex;gap:10px;margin-top:12px"><button type="button" class="btn-primary" onclick="PP.noop()">Save</button>' +
+      '<button type="button" class="btn-secondary" onclick="PP.noop()">Cancel</button></div>');
+
+    var detailRows = [["EAN", c.ean], ["Commodity", c.commodity], ["Grid operator", c.gridOperator], ["Connection capacity", c.capacity],
+      ["Address", c.address], ["Active since", c.activeSince], ["Contract until", c.contractUntil]];
+    var detailHtml = detailRows.map(function (f) {
+      return '<div class="kv-row"><span class="k">' + f[0] + '</span><span class="v' + (f[0] === "EAN" ? " mono" : "") + '">' + f[1] + '</span></div>';
+    }).join("");
+    var detailsCard = cardHtml("Connection details", "", detailHtml);
+
+    var dqCells = (c.dq || []).map(function (code, i) {
+      var cls = code === "F" ? "dq-final" : (code === "P" ? "dq-prov" : (code === "C" ? "dq-corr" : "dq-none"));
+      var lbl = code === "F" ? "final" : (code === "P" ? "prov." : (code === "C" ? "corr." : "none"));
+      return '<div class="dq-cell ' + cls + '"><div class="dq-day">' + (18 + i) + '</div><div class="dq-label">' + lbl + '</div></div>';
+    }).join("");
+    var dqLegend = '<div class="legend">' +
+      '<div><span class="swatch" style="background:var(--pp-green-bg);border:1px solid var(--pp-green-border)"></span>Final</div>' +
+      '<div><span class="swatch" style="background:var(--pp-amber-bg);border:1px solid var(--pp-amber-border)"></span>Provisional</div>' +
+      '<div><span class="swatch" style="background:var(--pp-indigo-bg);border:1px solid #a5b4fc"></span>Corrected</div>' +
+      '<div><span class="swatch" style="background:var(--pp-red-bg);border:1px solid var(--pp-red-border)"></span>None</div></div>';
+    var dqCard = cardHtml("Data quality", "Last 14 delivery dates",
+      '<div class="dq-grid">' + dqCells + '</div>' + dqLegend +
+      '<div class="banner banner-amber" style="margin-top:10px"><div class="banner-icon">!</div><div class="banner-body">Data for 12 August is provisional. PVNed may still correct it until 27 August.</div></div>' +
+      '<div class="caption" style="margin-top:8px">Intervals received today: 96 of 96 · consumption and production</div>' +
+      '<div class="caption">Corrections received this month: 1 (31 July, received 1 August 08:00)</div>');
+
+    var blocksBodyHtml;
+    if (c.blocks && c.blocks.length) {
+      var bcols = "1fr 1fr 1fr 1fr 1fr 1fr 1fr";
+      var bhead = '<div class="gt-head" style="grid-template-columns:' + bcols + '"><div>TRADE</div><div>SHAPE</div><div>PERIOD</div>' +
+        '<div class="gt-cell-num">ALLOCATED</div><div class="gt-cell-num">PRICE</div><div class="gt-cell-num">VOLUME</div><div>STATUS</div></div>';
+      var brows = c.blocks.map(function (b) {
+        var negStyle = b.negative ? ' style="color:var(--pp-red)"' : "";
+        return '<div class="gt-row" style="grid-template-columns:' + bcols + '">' +
+          '<div class="gt-mono" style="color:var(--pp-indigo);cursor:pointer" onclick="PP.openTrade(\'' + b.trade + '\')">' + b.trade + '</div>' +
+          '<div>' + b.shape + '</div><div>' + b.period + '</div>' +
+          '<div class="gt-cell-num"' + negStyle + '>' + b.allocated + '</div>' +
+          '<div class="gt-cell-num">' + b.price + '</div>' +
+          '<div class="gt-cell-num"' + negStyle + '>' + b.volume + '</div>' +
+          '<div>' + badge(b.status, "success") + '</div></div>';
+      }).join("");
+      blocksBodyHtml = '<div class="grid-table dense">' + bhead + brows + '</div>';
+    } else {
+      blocksBodyHtml = '<div class="empty-state">No active block positions on this connection.</div>';
+    }
+    var blocksCard = cardHtml("Block positions on this connection", "", blocksBodyHtml, ((c.blocks ? c.blocks.length : 0) + " active"));
+
+    document.getElementById("connections-body").innerHTML =
+      '<div style="display:grid;grid-template-columns:400px 1fr;gap:16px;align-items:start">' +
+      '<div style="display:flex;flex-direction:column;gap:16px">' + labelsCard + detailsCard + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:16px">' + dqCard + blocksCard + '</div>' +
+      '</div>';
+  }
+
+  // --- Prices ----------------------------------------------------------
+
+  function buildPriceTrendSvg() {
+    var n = 90, width = 900, height = 200, padLeft = 34, padBottom = 24, padTop = 14, padRight = 10;
+    var plotW = width - padLeft - padRight, plotH = height - padTop - padBottom;
+    var pts = [], i;
+    for (i = 0; i < n; i++) { pts.push(78 + Math.sin(i / 9) * 4 + Math.sin(i / 29) * 2.5 + (i / n) * 2); }
+    var minV = Math.min.apply(null, pts), maxV = Math.max.apply(null, pts);
+    var range = (maxV - minV) || 1;
+    function yFor(v) { return padTop + (maxV - v) / range * plotH; }
+    var stepX = plotW / (n - 1);
+    var linePts = "", areaPts = padLeft + "," + (padTop + plotH) + " ";
+    for (i = 0; i < n; i++) {
+      var x = padLeft + i * stepX, y = yFor(pts[i]);
+      linePts += x.toFixed(1) + "," + y.toFixed(1) + " ";
+      areaPts += x.toFixed(1) + "," + y.toFixed(1) + " ";
+    }
+    areaPts += (padLeft + plotW) + "," + (padTop + plotH);
+    var gridlines = "";
+    for (var g = 0; g <= 4; g++) {
+      var gy = padTop + g / 4 * plotH;
+      gridlines += '<line x1="' + padLeft + '" y1="' + gy.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + gy.toFixed(1) + '" stroke="#eef2f6"></line>';
+    }
+    var monthLabels = "";
+    var months = ["May", "Jun", "Jul", "Aug"];
+    for (var m = 0; m < months.length; m++) {
+      var mx = padLeft + (m / (months.length - 1)) * plotW;
+      monthLabels += '<text x="' + mx.toFixed(1) + '" y="' + (height - 6) + '" font-size="10" fill="#64748b">' + months[m] + '</text>';
+    }
+    return '<svg viewBox="0 0 ' + width + ' ' + height + '" style="width:100%;height:200px;display:block">' + gridlines +
+      '<polygon points="' + areaPts + '" fill="#ccfbf1" opacity="0.6"></polygon>' +
+      '<polyline points="' + linePts.trim() + '" fill="none" stroke="#0d9488" stroke-width="2"></polyline>' +
+      monthLabels + '</svg>';
+  }
+
+  function renderPricesPage() {
+    var infoBar = '<div class="banner banner-teal">These are indicative market prices, not offers. A firm, time-limited price is issued only in response to a trade request.</div>';
+
+    var cardsHtml = PortalSeedData.PRICES.map(function (p) {
+      var periodType = p.label === "Next month" ? "month" : (p.label === "Next quarter" ? "quarter" : "year");
+      var staleCls = p.stale ? " stale" : "";
+      var staleBadge = p.stale ? badge("STALE 1h42", "warning") : "";
+      return '<div class="price-card' + staleCls + '">' +
+        '<div class="pc-head">' + badge(p.shape.toUpperCase(), p.shape === "Base" ? "brand" : "info") + staleBadge + '</div>' +
+        '<div class="pc-label">' + p.label + '</div><div class="pc-period">' + p.period + '</div>' +
+        '<div class="pc-price-row">' +
+          '<span class="pc-price' + (p.stale ? " faint" : "") + '">€ ' + ConsumptionCalc.formatNL(p.price, 2) + '</span>' +
+          '<span class="pc-delta ' + (p.up ? "up" : "down") + '">' + (p.up ? "▲" : "▼") + " " + p.delta + '</span>' +
+        '</div>' +
+        '<div class="pc-meta"><span>€ / MWh</span><span>observed ' + p.observed + '</span></div>' +
+        '<div class="pc-foot">' +
+          '<span class="pc-note">Indication — not an offer</span>' +
+          '<span class="pc-request" onclick="PP.startWizardFromPrice(\'' + p.shape + '\',\'' + periodType + '\')">Request a price →</span>' +
+        '</div>' +
+        '</div>';
+    }).join("");
+
+    var trendCard = cardHtml("Base — next month · 90-day trend", "", buildPriceTrendSvg());
+
+    document.getElementById("prices-body").innerHTML = infoBar + '<div class="price-card-grid">' + cardsHtml + '</div>' + trendCard;
+  }
+
+  // --- Trading ----------------------------------------------------------
+
+  function renderTradingPage() {
+    if (state.tradingView === "wizard") { renderWizard(); return; }
+    if (state.tradingView === "detail") { renderTradeDetail(); return; }
+
+    var cols = "1fr 1fr 1fr 0.8fr 1fr 1.2fr 1.4fr";
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>TRADE</div><div>SHAPE</div><div>PERIOD</div>' +
+      '<div>DIRECTION</div><div class="gt-cell-num">POWER</div><div class="gt-cell-num">VALUE</div><div>STATUS</div></div>';
+    var rows = state.trades.map(function (t) {
+      return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openTrade(\'' + t.id + '\')">' +
+        '<div class="gt-mono" style="color:var(--pp-indigo)">' + t.id + '</div>' +
+        '<div>' + t.shape + '</div><div>' + t.period + '</div><div>' + t.direction + '</div>' +
+        '<div class="gt-cell-num">' + t.power + '</div>' +
+        '<div class="gt-cell-num">' + (t.value || "—") + '</div>' +
+        '<div>' + badge(t.status, t.statusTone) + '</div></div>';
+    }).join("");
+    document.getElementById("trading-body").innerHTML = '<div class="grid-table">' + head + '<div class="gt-scroll">' + rows + '</div></div>';
+  }
+
+  function renderTradeDetail() {
+    var t = state.trades.filter(function (x) { return x.id === state.tradeId; })[0];
+    if (!t) { backToTrades(); return; }
+
+    var offerHtml = "";
+    if (t.pending) {
+      offerHtml = '<div class="offer-banner">' +
+        '<div class="ob-eyebrow">Firm offer — respond before ' + t.expiresLabel + '</div>' +
+        '<div class="ob-price">' + t.price + ' <span>/ MWh</span></div>' +
+        '<div class="ob-sub">' + t.volume + ' · total ' + t.value + ' · VAT excluded</div>' +
+        '<div class="ob-actions">' +
+        '<button type="button" class="btn-accept" onclick="PP.noop()">Accept</button>' +
+        '<button type="button" class="btn-reject" onclick="PP.noop()">Reject</button>' +
+        '<button type="button" class="btn-ghost" onclick="PP.noop()">Ask a question</button>' +
+        '<span class="ob-countdown">' + mmss(t.secondsRemaining) + '</span>' +
+        '</div></div>';
+    }
+
+    var timelineHtml = t.events.map(function (e) {
+      var color = PortalSeedData.TONE_COLOR[e.tone] || "#94a3b8";
+      return '<div class="timeline-item"><div class="timeline-dot" style="background:' + color + '"></div>' +
+        '<div style="flex:1"><div class="timeline-title">' + e.title + '</div>' +
+        '<div class="timeline-actor">' + e.actor + '</div>' +
+        '<div class="timeline-ts">' + e.ts + '</div>' +
+        '<div class="timeline-body">' + e.body + '</div></div></div>';
+    }).join("");
+    var historyCard = cardHtml("History", "The same timeline PeakPower sees", '<div class="timeline">' + timelineHtml + '</div>');
+
+    var factsHtml = t.facts.map(function (f) {
+      return '<div class="kv-row"><span class="k">' + f[0] + '</span><span class="v">' + f[1] + '</span></div>';
+    }).join("") + (t.value ? '<div class="kv-row"><span class="k">Total value</span><span class="v">' + t.value + '</span></div>' : "");
+    var tradeCard = cardHtml("Trade", "", factsHtml);
+
+    var linkedCard = "";
+    if (t.linked && t.linked.length) {
+      var linkedHtml = t.linked.map(function (l) {
+        return '<div class="linked-tile"><div class="lt-label">' + l.label + '</div><div class="lt-value">' + l.value + '</div><div class="lt-note">' + l.note + '</div></div>';
+      }).join("");
+      linkedCard = cardHtml("Linked records", "", linkedHtml);
+    }
+
+    document.getElementById("trading-body").innerHTML = offerHtml +
+      '<div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start;margin-top:' + (offerHtml ? "16px" : "0") + '">' +
+      '<div>' + historyCard + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:16px">' + tradeCard + linkedCard + '</div>' +
+      '</div>';
+  }
+
+  function countDaysInRange(startStr, endStr) {
+    var start = new Date(startStr + "T00:00:00"), end = new Date(endStr + "T00:00:00");
+    return Math.round((end - start) / 86400000) + 1;
+  }
+  function countWeekdaysInRange(startStr, endStr) {
+    var days = countDaysInRange(startStr, endStr);
+    var cur = new Date(startStr + "T00:00:00"), count = 0;
+    for (var i = 0; i < days; i++) {
+      var wd = cur.getDay();
+      if (wd >= 1 && wd <= 5) { count++; }
+      cur.setDate(cur.getDate() + 1);
+    }
+    return count;
+  }
+
+  function getSelectedWizardPeriod() {
+    var w = state.wizard;
+    if (w.periodType === "year") { return PortalSeedData.WIZARD_YEAR; }
+    var list = PortalSeedData.WIZARD_PERIODS[w.periodType];
+    var idx = w.periodType === "month" ? w.monthIdx : w.quarterIdx;
+    return list[idx] || list[0];
+  }
+  function wizardTotalMW() {
+    var sum = 0;
+    Object.keys(state.wizard.volumes).forEach(function (k) { sum += (state.wizard.volumes[k] || 0); });
+    return sum;
+  }
+  function wizardHours(period) {
+    if (state.wizard.shape === "Base") { return countDaysInRange(period.start, period.end) * 24; }
+    return countWeekdaysInRange(period.start, period.end) * 12;
+  }
+  function wizardSummaryRows(period, totalMW, hours) {
+    var w = state.wizard;
+    var rows = [["Direction", w.direction], ["Shape", w.shape], ["Delivery period", period.period]];
+    if (w.shape === "Peak") {
+      rows.push(["Peak days in period", String(countWeekdaysInRange(period.start, period.end))]);
+      rows.push(["Peak hours", "Mon–Fri 08:00–20:00"]);
+    } else {
+      rows.push(["Base days in period", String(countDaysInRange(period.start, period.end))]);
+      rows.push(["Base hours", "00:00–24:00"]);
+    }
+    rows.push(["Total power", ConsumptionCalc.formatNL(totalMW, 3) + " MW"]);
+    rows.push(["Total volume", ConsumptionCalc.formatNL(totalMW * hours, 2) + " MWh"]);
+    return rows;
+  }
+  function wizardFundsSufficient() {
+    var period = getSelectedWizardPeriod();
+    var totalMW = wizardTotalMW();
+    var hours = wizardHours(period);
+    var priceVal = state.wizard.shape === "Base" ? period.base : period.peak;
+    return (state.walletAvailable - priceVal * totalMW * hours) >= 0;
+  }
+
+  function segTabs(labels, activeIdx, fnName) {
+    return '<div class="seg-tabs">' + labels.map(function (l, i) {
+      return '<button type="button" class="seg-tab' + (i === activeIdx ? " active" : "") + '" onclick="PP.' + fnName + '(' + i + ')">' + l + '</button>';
+    }).join("") + '</div>';
+  }
+
+  function buildStepIndicator(step) {
+    var labels = ["Product & period", "Volume per connection", "Review & submit"];
+    // Each step is its own flex:1 group (circle + label + trailing connector),
+    // matching the mockup so the connectors distribute evenly.
+    var html = '<div class="step-indicator">';
+    for (var i = 0; i < 3; i++) {
+      var cls = i < step ? "done" : (i === step ? "current" : "");
+      html += '<div class="step-item">' +
+        '<div class="step-circle ' + cls + '">' + (i < step ? "✓" : (i + 1)) + '</div>' +
+        '<div class="step-label">' + labels[i] + '</div>' +
+        (i < 2 ? '<div class="step-line"></div>' : "") +
+        '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function buildWizardBarChart() {
+    var w = state.wizard;
+    var list = PortalSeedData.WIZARD_PERIODS[w.periodType];
+    var idx = w.periodType === "month" ? w.monthIdx : w.quarterIdx;
+    var vals = list.map(function (p) { return w.shape === "Base" ? p.base : p.peak; });
+    var minV = Math.min.apply(null, vals), maxV = Math.max.apply(null, vals);
+    var range = (maxV - minV) || 1;
+    var cols = list.map(function (p, i) {
+      var v = w.shape === "Base" ? p.base : p.peak;
+      var pct = 30 + (v - minV) / range * 70;
+      var sel = i === idx;
+      return '<div class="bar-chart-col" onclick="PP.selectWizardBar(\'' + w.periodType + '\',' + i + ')">' +
+        '<div class="bar-chart-price">€ ' + ConsumptionCalc.formatNL(v, 2) + '</div>' +
+        '<div class="bar-chart-bar' + (sel ? " selected" : "") + '" style="height:' + pct.toFixed(0) + '%"></div>' +
+        '<div class="bar-chart-period">' + p.period + '</div></div>';
+    }).join("");
+    return '<div class="bar-chart-row">' + cols + '</div>';
+  }
+
+  function buildPriceReadout(period, priceVal) {
+    var w = state.wizard;
+    return '<div class="price-readout"><div class="pr-eyebrow">Indicative price — ' + w.shape.toUpperCase() + ' · ' + period.period + '</div>' +
+      '<div class="pr-price">€ ' + ConsumptionCalc.formatNL(priceVal, 2) + ' <span style="font-size:12px;font-weight:500;color:var(--pp-text-faint)">/ MWh</span></div>' +
+      '<div class="pr-meta">observed ' + period.observed + '</div></div>';
+  }
+
+  function buildWizardVolumeTable(totalMW) {
+    var cols = "2fr 1.3fr 1.2fr 1fr";
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>CONNECTION</div><div class="gt-cell-num">AUG CONSUMPTION</div>' +
+      '<div class="gt-cell-num">CURRENT COVER</div><div class="gt-cell-num">VOLUME (MW)</div></div>';
+    var rows = PortalSeedData.WIZARD_CONNECTIONS.map(function (c) {
+      var volCell = c.notEligible
+        ? '<span class="gt-mono" style="color:var(--pp-text-faint)">not eligible</span>'
+        : '<input type="text" class="wizard-vol-input" value="' + ConsumptionCalc.formatNL(state.wizard.volumes[c.id] || 0, 3) + '" onchange="PP.setWizardVolume(\'' + c.id + '\', this.value)">';
+      return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
+        '<div><div style="font-weight:600">' + c.name + '</div><div class="gt-cell-sub gt-mono">' + c.sub + '</div></div>' +
+        '<div class="gt-cell-num">' + c.consumption + '</div>' +
+        '<div class="gt-cell-num">' + c.cover + '</div>' +
+        '<div class="gt-cell-num">' + volCell + '</div></div>';
+    }).join("");
+    var table = '<div class="grid-table dense">' + head + rows + '</div>';
+
+    var belowMin = totalMW < 0.1;
+    var totalLine = '<div style="margin-top:10px;font-size:13px;font-weight:700;color:' + (belowMin ? "var(--pp-red)" : "var(--pp-teal-700)") + '">Requested total: ' + ConsumptionCalc.formatNL(totalMW, 3) + ' MW</div>';
+    var noteBox = belowMin
+      ? '<div class="banner banner-amber" style="margin-top:8px">Minimum requestable volume is 0,100 MW — increase one or more connections above.</div>'
+      : '<div class="banner banner-teal" style="margin-top:8px">This volume will be split across the connections above once the trade is confirmed.</div>';
+    var noteField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Note (optional)</div>' +
+      '<textarea onchange="PP.onWizardNoteChange(this.value)">' + (state.wizard.note || "") + '</textarea></div>';
+    var disabled = (belowMin || !wizardFundsSufficient()) ? " disabled" : "";
+    var actions = '<div class="wizard-actions"><button type="button" class="btn-primary"' + disabled + ' onclick="PP.wizardGoStep2()">Continue to review</button>' +
+      '<button type="button" class="btn-secondary" onclick="PP.wizardGoStep0()">Back</button></div>';
+
+    return table + totalLine + noteBox + noteField + actions;
+  }
+
+  function buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue) {
+    var rows = wizardSummaryRows(period, totalMW, hours);
+    var rowsHtml = rows.map(function (r) { return '<div class="kv-row"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>'; }).join("");
+    var afterReservation = state.walletAvailable - estimatedValue;
+    var sufficient = afterReservation >= 0;
+    var balanceHtml = '<div class="balance-box">' +
+      '<div class="bb-row"><span>Available balance</span><span>€ ' + ConsumptionCalc.formatNL(state.walletAvailable, 2) + '</span></div>' +
+      '<div class="bb-row total"><span>After reservation</span><span style="color:' + (sufficient ? "var(--pp-green)" : "var(--pp-red)") + '">€ ' + ConsumptionCalc.formatNL(afterReservation, 2) + '</span></div>' +
+      '</div><div class="fund-badge">' + badge(sufficient ? "SUFFICIENT FUNDS" : "INSUFFICIENT FUNDS", sufficient ? "success" : "critical") + '</div>';
+
+    return rowsHtml +
+      '<div class="kv-row"><span class="k">Indicative price</span><span class="v">€ ' + ConsumptionCalc.formatNL(priceVal, 2) + ' / MWh</span></div>' +
+      '<div class="kv-row"><span class="k">Estimated value</span><span class="v">€ ' + ConsumptionCalc.formatNL(estimatedValue, 2) + '</span></div>' +
+      balanceHtml;
+  }
+
+  function buildWizardReviewBody(period, totalMW, hours, priceVal, estimatedValue) {
+    var rows = wizardSummaryRows(period, totalMW, hours);
+    var rowsHtml = rows.map(function (r) { return '<div class="kv-row"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>'; }).join("");
+    var noteHtml = state.wizard.note ? '<div class="banner banner-teal" style="margin-top:10px">Note: "' + state.wizard.note + '"</div>' : "";
+    return rowsHtml +
+      '<div class="kv-row"><span class="k">Estimated value</span><span class="v">€ ' + ConsumptionCalc.formatNL(estimatedValue, 2) + '</span></div>' +
+      noteHtml +
+      '<div class="wizard-actions"><button type="button" class="btn-primary" onclick="PP.submitWizard()">Submit request</button>' +
+      '<button type="button" class="btn-secondary" onclick="PP.wizardGoStep1()">Back</button></div>';
+  }
+
+  function renderWizard() {
+    var w = state.wizard;
+    var period = getSelectedWizardPeriod();
+    var totalMW = wizardTotalMW();
+    var hours = wizardHours(period);
+    var priceVal = w.shape === "Base" ? period.base : period.peak;
+    var estimatedValue = priceVal * totalMW * hours;
+
+    var stepIndicator = buildStepIndicator(state.wizardStep);
+    var bodyHtml = "";
+
+    if (state.wizardStep === 0) {
+      bodyHtml = cardHtml("Product & period", "",
+        '<div class="field-group"><div class="fg-label">Direction</div>' + segTabs(["Buy", "Sell"], w.direction === "Buy" ? 0 : 1, "setDirIdx") + '</div>' +
+        '<div class="field-group"><div class="fg-label">Shape</div>' + segTabs(["Base", "Peak"], w.shape === "Base" ? 0 : 1, "setShapeIdx") + '</div>' +
+        '<div class="field-group"><div class="fg-label">Delivery period</div>' + segTabs(["Month", "Quarter", "Next calendar year"], w.periodType === "month" ? 0 : (w.periodType === "quarter" ? 1 : 2), "setPeriodType") + '</div>' +
+        (w.periodType !== "year" ? buildWizardBarChart() : "") +
+        buildPriceReadout(period, priceVal) +
+        '<div class="wizard-actions"><button type="button" class="btn-primary" onclick="PP.wizardGoStep1()">Continue</button>' +
+        '<button type="button" class="btn-secondary" onclick="PP.cancelWizard()">Cancel</button></div>');
+    } else if (state.wizardStep === 1) {
+      bodyHtml = '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">' +
+        '<div>' + cardHtml("Volume per connection", "", buildWizardVolumeTable(totalMW)) + '</div>' +
+        '<div>' + cardHtml("Summary", "", buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
+        '</div>';
+    } else {
+      bodyHtml = '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">' +
+        '<div>' + cardHtml("Review & submit", "This submits a request only. PeakPower will respond with a firm, time-limited price; you then accept or reject it.",
+          buildWizardReviewBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
+        '<div>' + cardHtml("Summary", "", buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
+        '</div>';
+    }
+
+    document.getElementById("trading-body").innerHTML = stepIndicator + bodyHtml;
+  }
+
+  // --- Wallet ----------------------------------------------------------
+
+  function renderWalletPage() {
+    if (state.walletView === "topup") { renderWalletTopup(); return; }
+
+    var kpiHtml =
+      statCardHtml("Available balance", "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2), "brand", "ready to reserve for new trades") +
+      statCardHtml("Settled balance", "€ " + ConsumptionCalc.formatNL(state.walletSettled, 2), "", "cleared funds") +
+      statCardHtml("Reserved", "€ " + ConsumptionCalc.formatNL(state.walletReserved, 2), "warning", "1 accepted trade awaiting confirmation");
+
+    var lowBalanceBanner = state.walletAvailable < 25000
+      ? '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">Your minimum balance alert is set at € 25.000 — you are currently below it. Top up to keep trading.</div></div>'
+      : "";
+
+    var allLedger = state.walletLedgerExtra.concat(PortalSeedData.WALLET_LEDGER);
+    var cols = "0.9fr 1fr 1.8fr 1fr 1fr 0.8fr 0.8fr 1fr";
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>DATE &amp; TIME</div><div>TYPE</div><div>DESCRIPTION</div><div>BY</div>' +
+      '<div>REFERENCE</div><div class="gt-cell-num">DEBIT</div><div class="gt-cell-num">CREDIT</div><div class="gt-cell-num">AVAILABLE AFTER</div></div>';
+    var rows = allLedger.slice(0, 12).map(function (l) {
+      var refHtml = (l.refKind === "trade")
+        ? '<span class="gt-mono" style="color:var(--pp-teal-700);cursor:pointer" onclick="PP.openTrade(\'' + l.ref + '\')">' + l.ref + '</span>'
+        : ((l.refKind === "invoice")
+          ? '<span class="gt-mono" style="color:var(--pp-teal-700);cursor:pointer" onclick="PP.openInvoice(\'' + l.ref + '\')">' + l.ref + '</span>'
+          : '<span class="gt-mono">' + l.ref + '</span>');
+      return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
+        '<div>' + l.date + '</div>' +
+        '<div>' + badge(l.type, l.tone) + '</div>' +
+        '<div>' + l.desc + '</div>' +
+        '<div>' + l.by + (l.byNote ? ' <span style="color:var(--pp-text-faint)">(' + l.byNote + ')</span>' : "") + '</div>' +
+        '<div>' + refHtml + '</div>' +
+        '<div class="gt-cell-num">' + (l.debit || "—") + '</div>' +
+        '<div class="gt-cell-num"' + (l.credit ? ' style="color:var(--pp-green);font-weight:600"' : "") + '>' + (l.credit || "—") + '</div>' +
+        '<div class="gt-cell-num">' + l.after + '</div></div>';
+    }).join("");
+    var ledgerCard = cardHtml("Ledger", "Every movement, newest first", '<div class="grid-table dense">' + head + '<div class="gt-scroll">' + rows + '</div></div>' +
+      '<div class="caption" style="margin-top:8px">Every movement names the colleague who caused it. Reference links open the trade, invoice or payment.</div>' +
+      '<div class="caption">Showing ' + Math.min(12, allLedger.length) + ' of 146 entries</div>');
+
+    document.getElementById("wallet-body").innerHTML = '<div class="stat-row">' + kpiHtml + '</div>' + lowBalanceBanner + ledgerCard;
+  }
+
+  function renderWalletTopup() {
+    var shortfallBanner = '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">You are € 12.400,00 short for the trade you were composing (Peak Q1-2027 · 1,0 MW). Top up and you will be returned to it.</div></div>';
+
+    var chipsHtml = [10000, 25000, 50000, 100000].map(function (a) {
+      var sel = state.topupAmount === a ? " selected" : "";
+      return '<button type="button" class="amount-chip' + sel + '" onclick="PP.setTopupAmountValue(' + a + ')">€ ' + ConsumptionCalc.formatNL(a, 0) + '</button>';
+    }).join("");
+
+    var idealCard = '<div class="ideal-card">' +
+      '<div class="card-head"><div><div class="card-title">iDEAL</div><div class="card-subtitle" style="margin-bottom:0">Funds available within seconds</div></div>' + badge("RECOMMENDED", "brand") + '</div>' +
+      '<div class="field-group" style="margin-bottom:0">' +
+        '<div class="fg-label">Amount</div>' +
+        '<div class="amount-input-wrap"><span>€</span><input type="text" value="' + ConsumptionCalc.formatNL(state.topupAmount, 0) + '" onchange="PP.setTopupAmount(this.value)"></div>' +
+        '<div class="amount-chips">' + chipsHtml + '</div>' +
+      '</div>' +
+      '<div class="field-group" style="margin-bottom:0"><div class="fg-label">Your bank</div><div class="readonly-field">ING</div></div>' +
+      '<button type="button" class="btn-primary" style="width:100%" onclick="PP.performTopup()">Pay € ' + ConsumptionCalc.formatNL(state.topupAmount, 2) + ' with iDEAL</button>' +
+      '<div class="caption">You will be redirected to your bank to complete the payment. Funds are typically available within a few seconds.</div>' +
+      '</div>';
+
+    var bank = PortalSeedData.BANK_DETAILS;
+    var bankCard = '<div class="bank-card">' +
+      '<div class="card-head"><div><div class="card-title">Bank transfer</div><div class="card-subtitle" style="margin-bottom:0">Transfer from your own bank using the reference below</div></div>' + badge("1–2 BUSINESS DAYS", "neutral") + '</div>' +
+      '<div class="copy-row"><div><div class="cr-label">Account holder</div><div class="cr-value" style="font-family:var(--font-sans);font-weight:600">' + bank.accountHolder + '</div></div><span class="copy-affordance">copy</span></div>' +
+      '<div class="copy-row"><div><div class="cr-label">IBAN</div><div class="cr-value">' + bank.iban + '</div></div><span class="copy-affordance">copy</span></div>' +
+      '<div class="copy-row"><div><div class="cr-label">BIC</div><div class="cr-value">' + bank.bic + '</div></div><span class="copy-affordance">copy</span></div>' +
+      '<div class="copy-row highlight"><div><div class="cr-label">Payment reference</div><div class="cr-value" style="color:var(--pp-teal-700)">' + bank.reference + '</div></div><span class="copy-affordance">copy</span></div>' +
+      '<div class="caption">Always include the payment reference so we can match your transfer automatically.</div>' +
+      '<a class="btn-link" onclick="PP.noop()">Download instructions as PDF</a>' +
+      '</div>';
+
+    var allTopups = state.topupsExtra.concat(PortalSeedData.TOPUPS);
+    var cols = "1.4fr 1.2fr 1.2fr 1fr 1fr";
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>DATE</div><div>METHOD</div><div>REFERENCE</div><div>STATUS</div><div class="gt-cell-num">AMOUNT</div></div>';
+    var rows = allTopups.map(function (t) {
+      return '<div class="gt-row" style="grid-template-columns:' + cols + '"><div>' + t.date + '</div><div>' + t.method + '</div>' +
+        '<div class="gt-mono">' + t.ref + '</div><div>' + badge(t.status, "success") + '</div><div class="gt-cell-num">' + t.amount + '</div></div>';
+    }).join("");
+    var topupsCard = cardHtml("Recent top-ups", "", '<div class="grid-table dense">' + head + rows + '</div>');
+
+    document.getElementById("wallet-body").innerHTML = shortfallBanner +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;margin-top:16px">' + idealCard + bankCard + '</div>' +
+      '<div style="margin-top:16px">' + topupsCard + '</div>';
+  }
+
+  // --- Invoices ----------------------------------------------------------
+
+  function renderInvoicesPage() {
+    if (state.invoiceId) { renderInvoiceDetail(); return; }
+    var cols = "1.4fr 1fr 1fr 1fr 1fr 1fr";
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>INVOICE</div><div>PERIOD</div><div>CONNECTIONS</div>' +
+      '<div class="gt-cell-num">VOLUME</div><div class="gt-cell-num">TOTAL</div><div>STATUS</div></div>';
+    var rows = PortalSeedData.INVOICES.map(function (inv) {
+      return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openInvoice(\'' + inv.id + '\')">' +
+        '<div class="gt-mono" style="color:var(--pp-teal-700)">' + inv.id + '</div>' +
+        '<div>' + inv.period + '</div><div>' + inv.connectionsCount + '</div>' +
+        '<div class="gt-cell-num">' + inv.volume + '</div>' +
+        '<div class="gt-cell-num">' + inv.total + '</div>' +
+        '<div>' + badge("Settled", "success") + '</div></div>';
+    }).join("");
+    document.getElementById("invoices-body").innerHTML = '<div class="grid-table">' + head + rows + '</div>';
+  }
+
+  function renderInvoiceDetail() {
+    var inv = PortalSeedData.INVOICES.filter(function (x) { return x.id === state.invoiceId; })[0];
+    if (!inv) { closeInvoice(); return; }
+
+    var kpiHtml = statCardHtml("Invoice total", inv.total, "", "") +
+      statCardHtml("Billed volume", inv.volume, "", "across " + inv.connectionsCount + " connections") +
+      (inv.coverage ? statCardHtml("Block coverage", inv.coverage, "brand", "") : "") +
+      statCardHtml("Settled", inv.settledDate, "success", inv.settledNote);
+
+    var provisional = inv.provisionalNote ? '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">' + inv.provisionalNote + '</div></div>' : "";
+
+    var cols = "0.3fr 2.6fr 1fr 1fr 1fr 1fr";
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>#</div><div>DESCRIPTION</div><div>REFERENCE</div>' +
+      '<div class="gt-cell-num">VOLUME</div><div class="gt-cell-num">UNIT PRICE</div><div class="gt-cell-num">AMOUNT</div></div>';
+    var rows = inv.lines.map(function (l) {
+      var faintStyle = l.faint ? ' style="color:var(--pp-text-faint)"' : "";
+      var refColor = (l.ref.indexOf("TRD") === 0 || l.ref.indexOf("SUR") === 0) ? "var(--pp-teal-700)" : "var(--pp-text-faint)";
+      var amountStyle = l.green ? ' style="color:var(--pp-green);font-weight:600"' : (l.faint ? ' style="color:var(--pp-text-faint)"' : "");
+      return '<div class="gt-row" style="grid-template-columns:' + cols + '"' + faintStyle + '>' +
+        '<div>' + l.n + '</div>' +
+        '<div><div>' + l.desc + '</div><div class="gt-cell-sub">' + l.sub + '</div></div>' +
+        '<div class="gt-mono" style="color:' + refColor + '">' + l.ref + '</div>' +
+        '<div class="gt-cell-num">' + l.volume + '</div>' +
+        '<div class="gt-cell-num">' + l.unitPrice + '</div>' +
+        '<div class="gt-cell-num"' + amountStyle + '>' + l.amount + '</div></div>';
+    }).join("");
+    var lineTable = '<div class="grid-table dense">' + head + rows + '</div>';
+
+    var footer = '<div style="display:flex;justify-content:space-between;gap:16px;margin-top:12px;flex-wrap:wrap">' +
+      '<div><div class="caption">Volume check</div><div style="color:var(--pp-green);font-size:12px;margin-top:2px">' + inv.volumeCheck + '</div>' + badge("✓ RECONCILED", "success") + '</div>' +
+      '<div style="text-align:right"><div class="caption">Section subtotal</div><div style="font-size:20px;font-weight:700">' + inv.subtotal + '</div></div></div>';
+
+    var sectionCard = cardHtml(inv.sectionTitle, inv.sectionSubtitle, lineTable + footer, "Expand");
+
+    document.getElementById("invoices-body").innerHTML = '<div class="stat-row">' + kpiHtml + '</div>' + provisional + sectionCard;
+  }
+
+
+  // --- Consumption (existing, unchanged calculation/chart/table logic) ---
 
   function formatDateLong(dateStr) {
     var parts = dateStr.split("-").map(Number);
@@ -179,15 +1409,28 @@
 
   function renderStatCards(stats) {
     var actualUsageTone = stats.actualUsageKwh < 0 ? "export" : "";
-    var deltaCostTone = stats.deltaCostEur > 0 ? "critical" : (stats.deltaCostEur < 0 ? "success" : "");
-    statRow.innerHTML =
+    // .negative (red), not the DS's .critical (orange) — an additional cost
+    // reads as red here, while the design system reserves critical/orange for
+    // Dashboard's "Uncovered volume".
+    var deltaCostTone = stats.deltaCostEur > 0 ? "negative" : (stats.deltaCostEur < 0 ? "success" : "");
+    var totalCostTone = stats.totalCostEur > 0 ? "negative" : (stats.totalCostEur < 0 ? "success" : "");
+    var volumeCards =
       statCardHtml("Actual usage", ConsumptionCalc.formatNL(stats.actualUsageKwh, 1) + " kWh", actualUsageTone, stats.actualUsageKwh < 0 ? "net exporter" : "net importer") +
       statCardHtml("Long", ConsumptionCalc.formatNL(stats.longKwh, 1) + " kWh", "export", "over-hedged, sold at spot") +
-      statCardHtml("Short", ConsumptionCalc.formatNL(stats.shortKwh, 1) + " kWh", "", "under-hedged, bought at spot") +
-      statCardHtml("Base volume", ConsumptionCalc.formatNL(stats.baseVolumeKwh, 1) + " kWh", "", "24/7 hedge block") +
-      statCardHtml("Peak volume", ConsumptionCalc.formatNL(stats.peakVolumeKwh, 1) + " kWh", "", "Mon-Fri 08:00-20:00 hedge block") +
-      statCardHtml("Hedge volume", ConsumptionCalc.formatNL(stats.hedgeVolumeKwh, 1) + " kWh", "", "base + peak, locked in") +
-      statCardHtml("Delta cost", (stats.deltaCostEur >= 0 ? "+ " : "− ") + "€ " + ConsumptionCalc.formatNL(Math.abs(stats.deltaCostEur), 2), deltaCostTone, stats.deltaCostEur >= 0 ? "additional cost vs. hedge" : "savings / revenue vs. hedge");
+      statCardHtml("Short", ConsumptionCalc.formatNL(stats.shortKwh, 1) + " kWh", "short", "under-hedged, bought at spot") +
+      statCardHtml("Hedge volume", ConsumptionCalc.formatNL(stats.hedgeVolumeKwh, 1) + " kWh", "", "base + peak, locked in");
+    var costCards =
+      statCardHtml("Delta cost", (stats.deltaCostEur >= 0 ? "+ " : "− ") + "€ " + ConsumptionCalc.formatNL(Math.abs(stats.deltaCostEur), 2), deltaCostTone, stats.deltaCostEur >= 0 ? "additional cost vs. hedge" : "savings / revenue vs. hedge") +
+      statCardHtml("Hedge cost", "€ " + ConsumptionCalc.formatNL(stats.hedgeCostEur, 2), "", "hedge volume at block price") +
+      statCardHtml("Total cost", (stats.totalCostEur >= 0 ? "+ " : "− ") + "€ " + ConsumptionCalc.formatNL(Math.abs(stats.totalCostEur), 2), totalCostTone, "delta + hedge cost");
+    statRow.innerHTML =
+      '<div class="stat-row">' + volumeCards + "</div>" +
+      '<div class="stat-row">' + costCards + "</div>";
+  }
+
+  /** Loading / no-data / error placeholders share the stat-stack's row wrapper. */
+  function statusCardHtml(label, value, sublabel, tone) {
+    return '<div class="stat-row">' + statCardHtml(label, value, tone || "", sublabel) + "</div>";
   }
 
   function tdClass(value) {
@@ -201,8 +1444,6 @@
       rows += '<tr data-idx="' + i + '"><td>' + formatDateShort(dateStr) + "</td><td>" + times[i] + "</td>" +
         '<td class="num">' + ConsumptionCalc.formatNL(series.consumptionKwh[i], 1) + "</td>" +
         '<td class="num">' + ConsumptionCalc.formatNL(series.productionKwh[i], 1) + "</td>" +
-        '<td class="num">' + ConsumptionCalc.formatNL(ConsumptionCalc.DEFAULT_TUF, 4) + "</td>" +
-        '<td class="num">' + ConsumptionCalc.formatNL(ConsumptionCalc.DEFAULT_FDF, 4) + "</td>" +
         '<td class="num">' + ConsumptionCalc.formatNL(prices[i], 4) + "</td>" +
         "<td" + tdClass(series.usageCost[i]) + ">" + ConsumptionCalc.formatNL(series.usageCost[i], 2) + "</td>" +
         "<td" + tdClass(series.actualUsage[i]) + ">" + ConsumptionCalc.formatNL(series.actualUsage[i], 1) + "</td>" +
@@ -213,6 +1454,8 @@
         '<td class="num">' + ConsumptionCalc.formatNL(series.long[i], 1) + "</td>" +
         '<td class="num">' + ConsumptionCalc.formatNL(series.short[i], 1) + "</td>" +
         "<td" + tdClass(series.deltaCost[i]) + ">" + ConsumptionCalc.formatNL(series.deltaCost[i], 2) + "</td>" +
+        "<td" + tdClass(series.hedgeCost[i]) + ">" + ConsumptionCalc.formatNL(series.hedgeCost[i], 2) + "</td>" +
+        "<td" + tdClass(series.totalCost[i]) + ">" + ConsumptionCalc.formatNL(series.totalCost[i], 2) + "</td>" +
         "</tr>";
     }
     tableBody.innerHTML = rows;
@@ -297,11 +1540,16 @@
     var dateStr = resolveDate(context.dates, i);
     var s = context.series;
     var rows = [
-      ["Actual Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"],
-      ["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"],
-      ["Short", ConsumptionCalc.formatNL(s.short[i], 1) + " kWh"],
-      ["Delta Cost", ConsumptionCalc.formatNL(s.deltaCost[i], 2) + " €"]
+      ["Actual Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"]
     ];
+    // Long and Short are mutually exclusive per interval — only ever one of
+    // the two is non-zero, so hide whichever is 0 rather than showing a
+    // permanently-empty row.
+    if (s.long[i] !== 0) { rows.push(["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"]); }
+    if (s.short[i] !== 0) { rows.push(["Short", ConsumptionCalc.formatNL(s.short[i], 1) + " kWh"]); }
+    rows.push(["Delta Cost", ConsumptionCalc.formatNL(s.deltaCost[i], 2) + " €"]);
+    rows.push(["Hedge Cost", ConsumptionCalc.formatNL(s.hedgeCost[i], 2) + " €"]);
+    rows.push(["Total Cost", ConsumptionCalc.formatNL(s.totalCost[i], 2) + " €"]);
     var html = '<div class="tt-head">' + formatDateShort(dateStr) + " · " + context.times[i] + "</div>";
     for (var r = 0; r < rows.length; r++) {
       html += '<div class="tt-row"><span>' + rows[r][0] + '</span><span>' + rows[r][1] + '</span></div>';
@@ -364,37 +1612,41 @@
   var lastDayContext = null;
   attachChartInteraction(chart, "chart-crosshair", function () { return lastChartGeom; }, function () { return lastDayContext; }, highlightTableRow);
 
-  function monthLabel(year, month, daysPresent, lastDateStr) {
-    var monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-    var daysInMonth = new Date(year, month, 0).getDate();
-    var label = monthNames[month - 1] + " " + year;
-    if (daysPresent < daysInMonth) {
-      var lastDay = parseInt(lastDateStr.slice(8, 10), 10);
-      label += " (partial — through " + lastDay + " " + monthNames[month - 1].slice(0, 3) + ")";
+  // --- Date-range selection -------------------------------------------------
+  // The From/To inputs are the single source of truth for what's rendered; the
+  // Day/Month/Quarter buttons are just presets that snap the range to the
+  // period containing the current To date (the anchor), clamped to the dataset.
+
+  function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+  function isoDate(year, month, day) { return year + "-" + pad2(month) + "-" + pad2(day); }
+  function clampDate(d) { return d < MIN_DATE ? MIN_DATE : (d > MAX_DATE ? MAX_DATE : d); }
+
+  /** Start/end of the day, month, or quarter containing `anchor` (a YYYY-MM-DD). */
+  function periodRange(period, anchor) {
+    var year = parseInt(anchor.slice(0, 4), 10);
+    var month = parseInt(anchor.slice(5, 7), 10);
+    if (period === "day") { return { from: anchor, to: anchor }; }
+    if (period === "month") {
+      return { from: isoDate(year, month, 1), to: isoDate(year, month, new Date(year, month, 0).getDate()) };
     }
-    return label;
+    // quarter
+    var qStart = Math.floor((month - 1) / 3) * 3 + 1;
+    var qEnd = qStart + 2;
+    return { from: isoDate(year, qStart, 1), to: isoDate(year, qEnd, new Date(year, qEnd, 0).getDate()) };
   }
 
-  function buildMonthOptions() {
-    var byMonth = {};
-    allDates.forEach(function (d) {
-      var key = d.slice(0, 7);
-      if (!byMonth[key]) { byMonth[key] = []; }
-      byMonth[key].push(d);
-    });
-    var keys = Object.keys(byMonth).sort();
-    return keys.map(function (key) {
-      var dates = byMonth[key];
-      var year = parseInt(key.slice(0, 4), 10);
-      var month = parseInt(key.slice(5, 7), 10);
-      var lastDate = dates[dates.length - 1];
-      return { value: key, label: monthLabel(year, month, dates.length, lastDate), dates: dates };
-    });
+  /** Every date in the dataset falling within [from, to] inclusive. */
+  function datesInRange(from, to) {
+    return allDates.filter(function (d) { return d >= from && d <= to; });
   }
 
-  function concatMonthData(monthKey) {
-    var opt = MONTH_OPTIONS.filter(function (o) { return o.value === monthKey; })[0];
-    var dates = opt ? opt.dates : [];
+  function rangeLabel(from, to) {
+    if (from === to) { return formatDateLong(from); }
+    return formatDateShort(from) + " – " + formatDateShort(to);
+  }
+
+  function concatRangeData(from, to) {
+    var dates = datesInRange(from, to);
     var allTimes = [], allDatesPerIndex = [], allPrices = [], allC = [], allG = [];
     var siteId = siteSelect.value;
     dates.forEach(function (d) {
@@ -491,81 +1743,161 @@
   var lastMonthContext = null;
   attachChartInteraction(monthChart, "month-chart-crosshair", function () { return lastMonthChartGeom; }, function () { return lastMonthContext; }, highlightTableRow);
 
-  var chartMode = "day";
-
-  function switchMode(mode) {
-    chartMode = mode;
-    dateInput.style.display = mode === "day" ? "" : "none";
-    monthSelect.style.display = mode === "month" ? "" : "none";
-    document.getElementById("day-chart-wrap").style.display = mode === "day" ? "" : "none";
-    document.getElementById("month-chart-wrap").style.display = mode === "month" ? "" : "none";
-    var tabs = document.querySelectorAll(".chart-tab");
-    for (var i = 0; i < tabs.length; i++) {
-      tabs[i].classList.toggle("active", tabs[i].getAttribute("data-mode") === mode);
-    }
+  /**
+   * Snaps From/To to the day, month, or quarter containing the current To
+   * date, then re-renders. The preset is a one-shot action, not a mode:
+   * editing either date afterwards just widens/narrows the range freely.
+   */
+  function applyPeriodPreset(period) {
+    var anchor = clampDate(toDate.value || MAX_DATE);
+    var r = periodRange(period, anchor);
+    fromDate.value = clampDate(r.from);
+    toDate.value = clampDate(r.to);
+    markActivePreset();
     render();
   }
 
+  /** Lights up whichever preset button matches the range currently shown. */
+  function markActivePreset() {
+    var from = fromDate.value;
+    var to = toDate.value;
+    var match = null;
+    ["day", "month", "quarter"].forEach(function (p) {
+      if (match) { return; }
+      var r = periodRange(p, to);
+      if (clampDate(r.from) === from && clampDate(r.to) === to) { match = p; }
+    });
+    var tabs = document.querySelectorAll(".chart-tab[data-period]");
+    for (var i = 0; i < tabs.length; i++) {
+      tabs[i].classList.toggle("active", tabs[i].getAttribute("data-period") === match);
+    }
+  }
+
+  // Holds everything the CSV export needs for whatever range is on screen.
+  var lastRender = null;
+
   function render() {
+    if (!DATA) {
+      crumb.textContent = "";
+      chartSubtitle.textContent = "";
+      statRow.innerHTML = statusCardHtml("Loading", "…", "Fetching source data and calculating in the browser");
+      chart.innerHTML = "";
+      tableBody.innerHTML = "";
+      return;
+    }
     clearHighlightedRow();
     var siteId = siteSelect.value;
     var site = DATA.sites.filter(function (s) { return s.id === siteId; })[0];
     var hedgeBlocks = DATA.hedge && DATA.hedge[siteId];
 
-    if (chartMode === "month") {
-      var monthKey = monthSelect.value;
-      var month = concatMonthData(monthKey);
-      if (month.times.length === 0) {
-        crumb.textContent = "";
-        chartSubtitle.textContent = "";
-        statRow.innerHTML = '<div class="stat-card"><div class="label">No data</div>' +
-          '<div class="value">—</div><div class="sublabel">No data for this month.</div></div>';
-        monthChart.innerHTML = "";
-        tableBody.innerHTML = "";
-        return;
-      }
-      var monthOpt = MONTH_OPTIONS.filter(function (o) { return o.value === monthKey; })[0];
-      crumb.textContent = site.name + " · " + monthOpt.label;
-      chartSubtitle.textContent = month.times.length + " intervals · Europe/Amsterdam";
+    // From/To drive everything. A reversed range is treated as empty rather
+    // than silently swapped, so the inputs always reflect what's rendered.
+    var from = fromDate.value;
+    var to = toDate.value;
+    var range = concatRangeData(from, to);
 
-      var monthStats = ConsumptionCalc.computeDayStats(month.times, month.prices, month.consumption, month.production, month.dates, hedgeBlocks);
-      var monthSeries = ConsumptionCalc.computeIntervalSeries(month.times, month.prices, month.consumption, month.production, month.dates, hedgeBlocks);
-      lastMonthContext = { dates: month.dates, times: month.times, prices: month.prices, series: monthSeries };
-      renderStatCards(monthStats);
-
-      var markup = buildMonthChartSvg(month.dates, month.times, monthSeries.actualUsage, monthSeries.hedgeVolume, monthSeries.uncovered);
-      monthChart.setAttribute("viewBox", "0 0 " + lastMonthChartGeom.width + " 260");
-      monthChart.style.width = lastMonthChartGeom.width + "px";
-      monthChart.innerHTML = markup;
-
-      renderTable(month.dates, month.times, month.prices, monthSeries);
-      return;
-    }
-
-    var date = dateInput.value;
-    var dateSeries = DATA.byDate[date];
-    var siteSeries = DATA.bySite[siteId] && DATA.bySite[siteId][date];
-
-    if (!dateSeries || !siteSeries) {
-      crumb.textContent = "";
+    if (range.times.length === 0) {
+      lastRender = null;
+      exportBtn.disabled = true;
+      crumb.textContent = site.name;
       chartSubtitle.textContent = "";
-      statRow.innerHTML = '<div class="stat-card"><div class="label">No data</div>' +
-        '<div class="value">—</div><div class="sublabel">No data for this date.</div></div>';
+      statRow.innerHTML = statusCardHtml("No data", "—",
+        from > to ? "“From” is after “To”." : "No data in this date range.");
       chart.innerHTML = "";
+      monthChart.innerHTML = "";
       tableBody.innerHTML = "";
       return;
     }
 
-    crumb.textContent = site.name + " · " + formatDateLong(date);
-    chartSubtitle.textContent = dateSeries.t.length + " intervals · Europe/Amsterdam";
+    var stats = ConsumptionCalc.computeDayStats(range.times, range.prices, range.consumption, range.production, range.dates, hedgeBlocks);
+    var series = ConsumptionCalc.computeIntervalSeries(range.times, range.prices, range.consumption, range.production, range.dates, hedgeBlocks);
 
-    var dayStats = ConsumptionCalc.computeDayStats(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
-    var daySeries = ConsumptionCalc.computeIntervalSeries(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
-    lastDayContext = { dates: date, times: dateSeries.t, prices: dateSeries.p, series: daySeries };
-    renderStatCards(dayStats);
+    var dayCount = datesInRange(from, to).length;
+    crumb.textContent = site.name + " · " + rangeLabel(from, to);
+    chartSubtitle.textContent = range.times.length + " intervals · " +
+      dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam";
 
-    chart.innerHTML = buildChartSvg(dateSeries.t, daySeries.actualUsage, daySeries.hedgeVolume, daySeries.uncovered);
-    renderTable(date, dateSeries.t, dateSeries.p, daySeries);
+    renderStatCards(stats);
+
+    // A single day gets the fixed-width chart with time-of-day labels; any
+    // multi-day range gets the horizontally-scrollable one labelled per day.
+    var singleDay = dayCount === 1;
+    document.getElementById("day-chart-wrap").style.display = singleDay ? "" : "none";
+    document.getElementById("month-chart-wrap").style.display = singleDay ? "none" : "";
+
+    if (singleDay) {
+      lastDayContext = { dates: range.dates, times: range.times, prices: range.prices, series: series };
+      lastMonthContext = null;
+      chart.innerHTML = buildChartSvg(range.times, series.actualUsage, series.hedgeVolume, series.uncovered);
+    } else {
+      lastMonthContext = { dates: range.dates, times: range.times, prices: range.prices, series: series };
+      lastDayContext = null;
+      var markup = buildMonthChartSvg(range.dates, range.times, series.actualUsage, series.hedgeVolume, series.uncovered);
+      monthChart.setAttribute("viewBox", "0 0 " + lastMonthChartGeom.width + " 260");
+      monthChart.style.width = lastMonthChartGeom.width + "px";
+      monthChart.innerHTML = markup;
+    }
+
+    renderTable(range.dates, range.times, range.prices, series);
+
+    lastRender = { site: site, from: from, to: to, range: range, series: series };
+    exportBtn.disabled = false;
+  }
+
+  // --- CSV export -----------------------------------------------------------
+  // Exports exactly the table's columns and rows for the current range. Values
+  // are written unformatted (dot decimal, full precision) so the file is
+  // spreadsheet-parseable regardless of locale, rather than NL-formatted.
+
+  var CSV_COLUMNS = [
+    { header: "Date", get: function (r, i) { return r.range.dates[i]; } },
+    { header: "Time", get: function (r, i) { return r.range.times[i]; } },
+    { header: "Consumption (kWh)", get: function (r, i) { return r.series.consumptionKwh[i]; } },
+    { header: "Production (kWh)", get: function (r, i) { return r.series.productionKwh[i]; } },
+    { header: "EPEX (EUR/kWh)", get: function (r, i) { return r.range.prices[i]; } },
+    { header: "Usage Cost (EUR)", get: function (r, i) { return r.series.usageCost[i]; } },
+    { header: "Actual Usage (kWh)", get: function (r, i) { return r.series.actualUsage[i]; } },
+    { header: "Base Volume (kWh)", get: function (r, i) { return r.series.baseVolume[i]; } },
+    { header: "Peak Volume (kWh)", get: function (r, i) { return r.series.peakVolume[i]; } },
+    { header: "Hedge Volume (kWh)", get: function (r, i) { return r.series.hedgeVolume[i]; } },
+    { header: "Uncovered (kWh)", get: function (r, i) { return r.series.uncovered[i]; } },
+    { header: "Long (kWh)", get: function (r, i) { return r.series.long[i]; } },
+    { header: "Short (kWh)", get: function (r, i) { return r.series.short[i]; } },
+    { header: "Delta Cost (EUR)", get: function (r, i) { return r.series.deltaCost[i]; } },
+    { header: "Hedge Cost (EUR)", get: function (r, i) { return r.series.hedgeCost[i]; } },
+    { header: "Total Cost (EUR)", get: function (r, i) { return r.series.totalCost[i]; } }
+  ];
+
+  function csvCell(value) {
+    if (typeof value === "number") { return String(Math.round(value * 1e6) / 1e6); }
+    var s = String(value);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function buildCsv(r) {
+    var lines = [CSV_COLUMNS.map(function (c) { return csvCell(c.header); }).join(",")];
+    for (var i = 0; i < r.range.times.length; i++) {
+      var row = [];
+      for (var c = 0; c < CSV_COLUMNS.length; c++) { row.push(csvCell(CSV_COLUMNS[c].get(r, i))); }
+      lines.push(row.join(","));
+    }
+    return lines.join("\r\n");
+  }
+
+  function exportCsv() {
+    if (!lastRender) { return; }
+    var r = lastRender;
+    // BOM so Excel detects UTF-8 (the site names carry accented characters).
+    var blob = new Blob(["﻿" + buildCsv(r)], { type: "text/csv;charset=utf-8;" });
+    var name = "consumption_" + r.site.id + "_" + r.from + (r.from === r.to ? "" : "_to_" + r.to) + ".csv";
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   // Everything below only runs once the raw source files have been fetched
@@ -585,49 +1917,46 @@
     allDates = Object.keys(DATA.byDate).sort();
     MIN_DATE = allDates[0];
     MAX_DATE = allDates[allDates.length - 1];
-    dateInput.min = MIN_DATE;
-    dateInput.max = MAX_DATE;
-
-    var DEFAULT_SITE = "rot";
-    var DEFAULT_DATE = MAX_DATE;
-    siteSelect.value = DEFAULT_SITE;
-    dateInput.value = DEFAULT_DATE;
-
-    MONTH_OPTIONS = buildMonthOptions();
-    MONTH_OPTIONS.forEach(function (o) {
-      var opt = document.createElement("option");
-      opt.value = o.value;
-      opt.textContent = o.label;
-      monthSelect.appendChild(opt);
+    [fromDate, toDate].forEach(function (el) {
+      el.min = MIN_DATE;
+      el.max = MAX_DATE;
+      el.disabled = false;
     });
-    monthSelect.value = MONTH_OPTIONS[MONTH_OPTIONS.length - 1].value;
 
-    var tabButtons = document.querySelectorAll(".chart-tab");
+    siteSelect.value = "rot";
+    // Default to the latest single day, matching the page's previous default.
+    fromDate.value = MAX_DATE;
+    toDate.value = MAX_DATE;
+
+    var tabButtons = document.querySelectorAll(".chart-tab[data-period]");
     for (var t = 0; t < tabButtons.length; t++) {
       tabButtons[t].disabled = false;
       tabButtons[t].addEventListener("click", function (evt) {
-        switchMode(evt.target.getAttribute("data-mode"));
+        applyPeriodPreset(evt.currentTarget.getAttribute("data-period"));
       });
     }
 
     siteSelect.disabled = false;
-    dateInput.disabled = false;
-    monthSelect.disabled = false;
+    exportBtn.addEventListener("click", exportCsv);
     siteSelect.addEventListener("change", render);
-    dateInput.addEventListener("change", render);
-    monthSelect.addEventListener("change", render);
+    fromDate.addEventListener("change", function () { markActivePreset(); render(); });
+    toDate.addEventListener("change", function () { markActivePreset(); render(); });
 
-    statusBadge.textContent = "Live data · fetched at load";
-    render();
+    markActivePreset();
+    renderCurrentPage();
   }
+
+  // Render whichever page is active immediately with whatever's available
+  // (seed-only data for Dashboard/Wallet/Invoices), then refresh again once
+  // the real datasets resolve (see init() above).
+  renderCurrentPage();
 
   ConsumptionDataLoader.loadConsumptionData().then(init).catch(function (err) {
     console.error(err);
-    statusBadge.textContent = "Failed to load data";
-    statRow.innerHTML = '<div class="stat-card"><div class="label">Error</div>' +
-      '<div class="value critical">Could not load data</div>' +
-      '<div class="sublabel">' + (err && err.message ? err.message : String(err)) +
-      ' — this page must be served over http(s) (e.g. `npx http-server`), not opened directly via file://.</div></div>';
+    statRow.innerHTML = statusCardHtml("Error", "Could not load data",
+      (err && err.message ? err.message : String(err)) +
+      " — this page must be served over http(s) (e.g. `npx http-server`), not opened directly via file://.",
+      "critical");
   });
 })();
 </script>

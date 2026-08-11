@@ -2,7 +2,7 @@
  * Per-interval trading calculation, following
  * PeakPowerTrading-CalculationSample.csv column-for-column:
  *
- *   Usage Cost   = Consumption×(EPEX+TUF) − Production×(EPEX+FDF)
+ *   Usage Cost   = (Consumption − Production) × EPEX
  *   Actual Usage = Consumption − Production
  *   Base Volume  = sum of active "base" hedge blocks for the interval (kWh)
  *   Peak Volume  = sum of active "peak" hedge blocks for the interval (kWh)
@@ -18,9 +18,10 @@
  *   Uncovered    = Actual Usage − Hedge Volume
  *   Long         = max(0, −Uncovered)   -- over-hedged; surplus sold at spot
  *   Short        = max(0, Uncovered)    -- under-hedged; shortfall bought at spot
- *   Delta Cost   = Actual Usage < 0
- *                    ? Usage Cost − (Hedge Volume × EPEX)
- *                    : EPEX × (Actual Usage − Hedge Volume)
+ *   Delta Cost   = Uncovered × EPEX
+ *   Hedge Cost   = Base Volume × base block price/kWh
+ *                  + Peak Volume × peak block price/kWh
+ *   Total Cost   = Delta Cost + Hedge Cost
  *
  * consumptionKw/productionKw are instantaneous average power (kW, the
  * source data's unit) — converted to kWh internally (× 0.25 h) to match
@@ -28,12 +29,6 @@
  */
 (function (root) {
   "use strict";
-
-  // €/kWh — small fixed grid fees layered on top of the EPEX spot price.
-  // Not present in any source data file; held constant across all sites for
-  // this POC (see CLAUDE.md).
-  var DEFAULT_TUF = 0.01;   // added when buying (consumption) extra retail volume
-  var DEFAULT_FDF = 0.005;  // added when feeding (production) into the grid
 
   function resolveDate(dates, i) {
     return typeof dates === "string" ? dates : dates[i];
@@ -52,49 +47,56 @@
     return timeStr > "08:00" && timeStr <= "20:00";
   }
 
-  /** Splits a date+time's active hedge blocks into Base Volume vs Peak Volume (kWh). */
+  /**
+   * Splits a date+time's active hedge blocks into Base Volume vs Peak Volume
+   * (kWh), and prices each block's own volume at its own contract price to
+   * give the interval's Hedge Cost (€).
+   */
   function computeIntervalHedgeVolumes(dateStr, timeStr, hedgeBlocks) {
     var baseVolumeKwh = 0;
     var peakVolumeKwh = 0;
+    var hedgeCost = 0;
     if (hedgeBlocks) {
       var peakActive = isWeekday(dateStr) && isPeakWindow(timeStr);
       for (var i = 0; i < hedgeBlocks.length; i++) {
         var b = hedgeBlocks[i];
         if (dateStr < b.periodStart || dateStr > b.periodEnd) { continue; }
+        var blockKwh = b.powerKw * 0.25;
         if (b.shape === "base") {
-          baseVolumeKwh += b.powerKw * 0.25;
+          baseVolumeKwh += blockKwh;
+          hedgeCost += blockKwh * (b.priceKwh || 0);
         } else if (b.shape === "peak" && peakActive) {
-          peakVolumeKwh += b.powerKw * 0.25;
+          peakVolumeKwh += blockKwh;
+          hedgeCost += blockKwh * (b.priceKwh || 0);
         }
       }
     }
-    return { baseVolumeKwh: baseVolumeKwh, peakVolumeKwh: peakVolumeKwh, hedgeVolumeKwh: baseVolumeKwh + peakVolumeKwh };
+    return {
+      baseVolumeKwh: baseVolumeKwh,
+      peakVolumeKwh: peakVolumeKwh,
+      hedgeVolumeKwh: baseVolumeKwh + peakVolumeKwh,
+      hedgeCost: hedgeCost
+    };
   }
 
   /** Full per-interval row — every column of the reference calculation sample. */
-  function computeIntervalRow(timeStr, consumptionKw, productionKw, epex, dateStr, hedgeBlocks, tuf, fdf) {
-    tuf = tuf === undefined ? DEFAULT_TUF : tuf;
-    fdf = fdf === undefined ? DEFAULT_FDF : fdf;
-
+  function computeIntervalRow(timeStr, consumptionKw, productionKw, epex, dateStr, hedgeBlocks) {
     var consumptionKwh = consumptionKw * 0.25;
     var productionKwh = productionKw * 0.25;
-    var usageCost = consumptionKwh * (epex + tuf) - productionKwh * (epex + fdf);
     var actualUsage = consumptionKwh - productionKwh;
+    var usageCost = actualUsage * epex;
 
     var hedge = hedgeBlocks
       ? computeIntervalHedgeVolumes(dateStr, timeStr, hedgeBlocks)
-      : { baseVolumeKwh: 0, peakVolumeKwh: 0, hedgeVolumeKwh: 0 };
+      : { baseVolumeKwh: 0, peakVolumeKwh: 0, hedgeVolumeKwh: 0, hedgeCost: 0 };
 
     var uncovered = actualUsage - hedge.hedgeVolumeKwh;
     var long = Math.max(0, -uncovered);
     var short = Math.max(0, uncovered);
-    var deltaCost = actualUsage < 0
-      ? usageCost - hedge.hedgeVolumeKwh * epex
-      : epex * (actualUsage - hedge.hedgeVolumeKwh);
+    var deltaCost = uncovered * epex;
+    var totalCost = deltaCost + hedge.hedgeCost;
 
     return {
-      tuf: tuf,
-      fdf: fdf,
       epex: epex,
       consumptionKwh: consumptionKwh,
       productionKwh: productionKwh,
@@ -106,21 +108,23 @@
       uncovered: uncovered,
       long: long,
       short: short,
-      deltaCost: deltaCost
+      deltaCost: deltaCost,
+      hedgeCost: hedge.hedgeCost,
+      totalCost: totalCost
     };
   }
 
   /** Per-interval arrays across a Day (single dateStr) or Month (dates[] per index). */
-  function computeIntervalSeries(times, prices, consumption, production, dates, hedgeBlocks, tuf, fdf) {
+  function computeIntervalSeries(times, prices, consumption, production, dates, hedgeBlocks) {
     var n = times.length;
     var out = {
       consumptionKwh: [], productionKwh: [], usageCost: [], actualUsage: [],
       baseVolume: [], peakVolume: [], hedgeVolume: [],
-      uncovered: [], long: [], short: [], deltaCost: []
+      uncovered: [], long: [], short: [], deltaCost: [], hedgeCost: [], totalCost: []
     };
     for (var i = 0; i < n; i++) {
       var dateStr = dates ? resolveDate(dates, i) : null;
-      var row = computeIntervalRow(times[i], consumption[i], production[i], prices[i], dateStr, hedgeBlocks, tuf, fdf);
+      var row = computeIntervalRow(times[i], consumption[i], production[i], prices[i], dateStr, hedgeBlocks);
       out.consumptionKwh.push(row.consumptionKwh);
       out.productionKwh.push(row.productionKwh);
       out.usageCost.push(row.usageCost);
@@ -132,21 +136,24 @@
       out.long.push(row.long);
       out.short.push(row.short);
       out.deltaCost.push(row.deltaCost);
+      out.hedgeCost.push(row.hedgeCost);
+      out.totalCost.push(row.totalCost);
     }
     return out;
   }
 
   /** Day/Month aggregate totals, plus peak demand. */
-  function computeDayStats(times, prices, consumption, production, dates, hedgeBlocks, tuf, fdf) {
+  function computeDayStats(times, prices, consumption, production, dates, hedgeBlocks) {
     var n = times.length;
     var consumptionKwh = 0, productionKwh = 0, usageCostEur = 0;
     var baseVolumeKwh = 0, peakVolumeKwh = 0, hedgeVolumeKwh = 0;
     var uncoveredKwh = 0, longKwh = 0, shortKwh = 0, deltaCostEur = 0;
+    var hedgeCostEur = 0, totalCostEur = 0;
     var peakKw = -Infinity, peakTime = null;
 
     for (var i = 0; i < n; i++) {
       var dateStr = dates ? resolveDate(dates, i) : null;
-      var row = computeIntervalRow(times[i], consumption[i], production[i], prices[i], dateStr, hedgeBlocks, tuf, fdf);
+      var row = computeIntervalRow(times[i], consumption[i], production[i], prices[i], dateStr, hedgeBlocks);
       consumptionKwh += row.consumptionKwh;
       productionKwh += row.productionKwh;
       usageCostEur += row.usageCost;
@@ -157,6 +164,8 @@
       longKwh += row.long;
       shortKwh += row.short;
       deltaCostEur += row.deltaCost;
+      hedgeCostEur += row.hedgeCost;
+      totalCostEur += row.totalCost;
       if (consumption[i] > peakKw) {
         peakKw = consumption[i];
         peakTime = times[i];
@@ -176,7 +185,9 @@
       uncoveredKwh: uncoveredKwh,
       longKwh: longKwh,
       shortKwh: shortKwh,
-      deltaCostEur: deltaCostEur
+      deltaCostEur: deltaCostEur,
+      hedgeCostEur: hedgeCostEur,
+      totalCostEur: totalCostEur
     };
   }
 
@@ -191,8 +202,6 @@
   }
 
   var api = {
-    DEFAULT_TUF: DEFAULT_TUF,
-    DEFAULT_FDF: DEFAULT_FDF,
     computeIntervalHedgeVolumes: computeIntervalHedgeVolumes,
     computeIntervalRow: computeIntervalRow,
     computeIntervalSeries: computeIntervalSeries,

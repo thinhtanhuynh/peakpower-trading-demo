@@ -13,20 +13,28 @@ trading platform. The folder currently holds three things:
 2. **EPEX day-ahead tariff data plus generated large-consumer energy
    usage/production test data**, at 15-minute resolution, meant to back the
    *Prices* and *Consumption* screens of the Customer Portal mockup.
-3. **A live, browser-calculated data-driven page** — `Customer Portal -
-   Consumption (Live Data).html` — plus two pure JS modules,
-   `consumption-calc.js` (stats/formatting) and `consumption-data-loader.js`
-   (fetches and groups the raw source files), and their Node test suites
-   (`consumption-calc.test.js`, `consumption-data-loader.test.js`). There is
-   **no build step and no Python anywhere in this pipeline**: the page
-   `fetch()`es `epex_tariffs_usage_combined_15_min_interval.json` and
+3. **A live, browser-calculated, multi-page customer portal** — `Customer
+   Portal - Consumption (Live Data).html` — plus three pure JS modules,
+   `consumption-calc.js` (stats/formatting), `consumption-data-loader.js`
+   (fetches and groups the raw source files), and `portal-seed-data.js`
+   (static seed/mock data for the screens that have no live backend), and
+   Node test suites for the first two (`consumption-calc.test.js`,
+   `consumption-data-loader.test.js`). Despite the filename (kept from when
+   it only covered Consumption), this page is now the **functional stand-in
+   for the whole `Customer Portal - Preview.html` mockup**: a working
+   sidebar switches between native Dashboard/Connections/Consumption/
+   Prices/Trading/Wallet/Invoices sections in one page (no iframe, no
+   separate HTML files) — see "Customer Portal (Live Data) page" below for
+   how each section sources its data. There is **no build step and no
+   Python anywhere in this pipeline**: the page `fetch()`es
+   `epex_tariffs_usage_combined_15_min_interval.json` and
    `hedge_blocks_2026.json` directly and does all grouping and calculation
    client-side, every time it loads — editing either source JSON file (e.g.
    adding a new hedge period) is picked up on the next page load with
    nothing to regenerate. Running the test suites only needs Node.js.
 
 This folder is **Python-free by design** — there is no package.json either,
-just two JS modules loaded straight into the browser via `<script src>`.
+just three JS modules loaded straight into the browser via `<script src>`.
 Because the page uses `fetch()`, it must be served over http(s) rather than
 opened directly via `file://` (browsers block `fetch()` of local files) —
 e.g. `npx http-server .` or `npx serve .` from this folder, then open the
@@ -43,10 +51,11 @@ page through that server's URL.
 | `epex_usage_15_min_interval.json` | ~66 MB | Generated consumption/production test data, 6 sites × 20,828 intervals = 124,968 rows |
 | `epex_tariffs_usage_combined_15_min_interval.json` | ~75 MB | Tariff + usage merged into one record per site per interval, 124,968 rows. Fetched directly by the Consumption (Live Data) page at load time. |
 | `hedge_blocks_2026.json` | ~16 KB | Test hedge/trade block data (Base & Peak shapes) per EAN — backs the hedge cost/coverage figures on the Consumption (Live Data) page (see below) and a future *Trading* screen — see "Hedge block test data" below. Hand-edited (no generator script); fetched directly by the Live Data page at load time. |
-| `consumption-calc.js` | ~4 KB | Pure JS stat/formatting module used by the Consumption (Live Data) page (dual Node/browser module). Unit tested via `consumption-calc.test.js`. |
+| `consumption-calc.js` | ~8 KB | Pure JS stat/formatting module used by the Consumption (Live Data) page (dual Node/browser module). Unit tested via `consumption-calc.test.js`. |
 | `consumption-data-loader.js` | ~6 KB | Pure JS module that groups the two source JSON files above into the page's `{sites, byDate, bySite, hedge}` shape, plus a `fetch()`-based loader that runs the whole thing client-side on page load (dual Node/browser module). Unit tested via `consumption-data-loader.test.js`. |
-| `Customer Portal - Consumption (Live Data).html` | ~31 KB | Standalone, hand-written page (loads `consumption-calc.js` and `consumption-data-loader.js` via `<script src>`) showing real 15-minute interval data for a selectable connection and date. Must be served over http(s), not opened via `file://`. |
-| `PeakPowerTrading-CalculationSample.csv` | ~5 KB | Reference calculation sample (one day, 96 rows) the `consumption-calc.js` formulas (Usage Cost, Actual Usage, Base/Peak/Hedge Volume, Uncovered, Long, Short, Delta Cost) are validated against — see "Calculations" below. Not consumed by the page itself. |
+| `portal-seed-data.js` | ~28 KB | Pure JS module (dual Node/browser) holding static seed/mock data ported from `Customer Portal - Preview.html` for the screens that have no live data source in this POC — Connections' descriptive metadata, Dashboard tiles/activity, Wallet ledger/top-ups (plus a `simulateTopup()` pure function), and Invoices. Not unit tested (no calculation logic, just data + one small formatter/simulator). |
+| `Customer Portal - Consumption (Live Data).html` | ~108 KB | Standalone, hand-written multi-page portal (loads `consumption-calc.js`, `consumption-data-loader.js`, and `portal-seed-data.js` via `<script src>`) with a working Dashboard/Connections/Consumption/Prices/Trading/Wallet/Invoices sidebar — see "Customer Portal (Live Data) page" below. Must be served over http(s), not opened via `file://`. |
+| `PeakPowerTrading-CalculationSample.csv` | ~8 KB | Reference calculation sample (one day, 96 rows) the `consumption-calc.js` formulas (Usage Cost, Actual Usage, Base/Peak/Hedge Volume, Uncovered, Long, Short, Delta Cost, Hedge Cost, Total Cost) are validated against — see "Calculations" below. Negative numbers are written in accounting parentheses, e.g. `(70)`, and `-` means zero/absent. Its hedge blocks are unpriced, so its Hedge Cost column is 0 throughout and Total Cost equals Delta Cost. Not consumed by the page itself. |
 
 The two large usage/combined JSON files are over the 30 MB chat-upload
 limit — when regenerating and sending them through Claude, gzip first
@@ -229,20 +238,128 @@ field shape and the volume conversion rules above. The gas connection
 (`tilburg-gas`, EAN `871687100000000092`) is intentionally excluded —
 "Not tradeable" in the portal mockup.
 
-## Consumption (Live Data) page
+## Customer Portal (Live Data) page
 
-`Customer Portal - Consumption (Live Data).html` is a standalone companion
-to the Customer Portal mockup's *Consumption* screen — instead of the
-mockup's seeded placeholder data, it reads real 15-minute
-consumption/production/EPEX data straight from
-`epex_tariffs_usage_combined_15_min_interval.json` for a connection and
-date picked from dropdowns (all 6 electricity sites; any date 2026-01-01
-through 2026-08-05), plus a **Day / Month** chart toggle (below). It
-doesn't modify or depend on `Customer Portal - Preview.html` — that file
-stays a pure design mockup.
+`Customer Portal - Consumption (Live Data).html` started as a standalone
+companion to just the Customer Portal mockup's *Consumption* screen, but is
+now a full **native, functional rebuild of the whole Customer Portal
+mockup's navigation** — Dashboard, Connections, Consumption, Prices,
+Trading, Wallet, and Invoices are all real sections of this one page, with
+a working sidebar (`goTo(page)` toggles `.page` containers and the active
+nav link, no iframe, no separate HTML files per screen). It doesn't modify
+or depend on `Customer Portal - Preview.html` — that file stays a pure
+design mockup, read only for markup/data/CSS-token reference when this
+page was built.
 
-**Scope:** Day and Month views (no Quarter view). `tilburg-gas` is
-excluded — it has no usage rows and no hedge rows.
+### Multi-page shell & per-screen data sources
+
+Consumption is the only screen backed by real, calculated data (see
+below, unchanged). The other six screens are a **faithful, verbatim port
+of `Customer Portal - Preview.html`'s own CSS design tokens, layout, and
+state machine** — that mockup is itself a static seeded demo (every one of
+these six screens renders from hardcoded JS arrays/objects, not live
+data), so matching it means matching its copy, numbers, and interaction
+model exactly rather than deriving them from `hedge_blocks_2026.json` or
+the real consumption dataset (an earlier design of this page did that;
+it's superseded per explicit product direction to prioritize visual/
+functional fidelity to the mockup for these six screens):
+
+| Screen | Data source | Sub-views |
+|---|---|---|
+| **Dashboard** | `portal-seed-data.js` (`DASHBOARD_PRICE_TILES`, `DASHBOARD_RECENT_ACTIVITY`) + live wallet balance + a live mini chart | Single view. Balance/coverage/uncovered-volume/open-trades stat cards, an amber "offer received" banner for the one pending trade (`TRD-1078`) linking to its Trading detail, indicative price tiles, and a "latest day" mini chart that reuses real Rotterdam DC data via a dedicated `buildMiniChartSvg()` (kept separate from the Day chart's `buildChartSvg()` so the two `<svg>`s don't collide on the `#chart-crosshair` id or clobber each other's hover geometry). |
+| **Connections** | `portal-seed-data.js` (`CONNECTIONS`) | **list** / **detail** (`state.connId`). List is a CSS-grid table with status badges and a coverage bar; detail shows editable-looking name/description fields, connection facts, a 14-day data-quality grid, and any block positions (each linking to its Trading detail). |
+| **Consumption** | Fully real, unchanged from before — see below | Single view, filtered by an arbitrary From/To date range with Day/Month/Quarter presets and CSV export (see "Scope" and "Date-range filter" below). |
+| **Prices** | `portal-seed-data.js` (`PRICES`) | Single view. Six indicative Base/Peak price cards (month/quarter/calendar-year) each with a "Request a price →" link that jumps straight into the Trading wizard (`startWizardFromPrice`), plus a synthetic 90-day trend chart. |
+| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`, `WIZARD_YEAR`) + in-memory `state.trades` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView`. Detail shows a dark firm-offer banner with a live mm:ss countdown for the one pending trade, a timeline of `events`, and `facts`/`linked` records. The 3-step wizard (product & period → volume per connection → review & submit) mirrors the mockup's flow, including its bar-chart period picker, a wallet-balance-sufficiency check gating step 2, and `submitWizard()` prepending a new `TRD-1079`-style row to the list — a real, working feature (not a stub), though it still hardcodes "Q1 2027" / "1,000 MW" for the submitted trade exactly like the mockup does. |
+| **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `TOPUPS`, `BANK_DETAILS`) + in-memory `state.walletAvailable/Settled/Reserved` | **ledger** / **topup**, via `state.walletView`. Ledger is a stat-card row + full CSS-grid ledger table (trade/invoice references are clickable links into those screens' detail views). Top-up view has a working iDEAL amount input + preset chips + bank-transfer details; `performTopup()` mutates the in-memory balances and prepends a ledger + top-up-history row, matching the mockup's `performTopup()` transition — genuinely interactive, just not persisted across a page reload. |
+| **Invoices** | `portal-seed-data.js` (`INVOICES`) | **list** / **detail** (`state.invoiceId`). Detail shows stat cards, a provisional-data banner where applicable, and a full line-item CSS-grid table with a volume-check/reconciliation footer. Static, ported line-for-line from the mockup; no live invoice generation exists in this POC. |
+
+All six screens' "tables" are `display:grid` divs (`.grid-table`/`.gt-head`/
+`.gt-row`, explicit per-screen `grid-template-columns`) rather than
+`<table>` elements, matching the mockup's own markup — Consumption's own
+real `<table>` is unchanged.
+
+The mockup uses **two table densities**, and the rebuild mirrors that with a
+`.dense` modifier on `.grid-table`:
+
+| | head | row | gap | used by |
+|---|---|---|---|---|
+| default | `10px 16px` @10.5px | `13px 16px` @12.5px | 14px | top-level list tables: Connections, Trading, Invoices |
+| `.dense` | `9px 12px` @10px | `11px 12px` @12px | 10px | tables nested inside a card: Wallet ledger & top-ups, invoice line items, connection block positions, wizard volumes |
+
+Per-screen `grid-template-columns` are copied from the mockup verbatim (e.g.
+Wallet ledger `0.9fr 1fr 1.8fr 1fr 1fr 0.8fr 0.8fr 1fr`, invoice line items
+`0.3fr 2.6fr 1fr 1fr 1fr 1fr`) — don't "tidy" these into round numbers.
+
+### Vertical spacing between sections — a footgun
+
+`.page` is a flex column with `gap:16px`, but **only Consumption puts its
+sections directly in `.page`**. The other six render everything into a single
+`#<name>-body` wrapper, so `.page` has exactly one child and its gap applies
+to nothing. Those wrappers therefore carry the gap themselves:
+
+```css
+#dashboard-body, #connections-body, #prices-body,
+#trading-body, #wallet-body, #invoices-body { display:flex; flex-direction:column; gap:16px; }
+#dashboard-body { gap:20px; }   /* the one screen the mockup spaces at 20px */
+```
+
+If a new screen renders into its own `-body` wrapper, add it to that list or
+its sections will stack flush against each other. Setting the gap on `.page`
+alone silently does nothing for these six. Detail sub-views (connection,
+trade, invoice, wallet top-up) render into the same wrapper, so they inherit
+it automatically.
+
+### Design-system fidelity
+
+`Customer Portal - Preview.html`'s `:root` defines **only color tokens** (36
+of them) — no spacing/radius/typography scale. The rebuild's `--space-*`,
+`--radius-*`, `--text-*` tokens are its own addition; all 36 shared **color**
+tokens match the mockup exactly, so don't "fix" a color by hand.
+
+The mockup's real component styles live in a gzip+base64 blob inside the
+preview file (`PeakPowerDesignSystem_7164da`), not in its markup, so inline
+`style=` attributes alone don't tell you what a `Card` or `Badge` looks like.
+The rebuild's shared primitives are matched to that bundle:
+
+- **Card** — `padding:18px 20px`, title `13.5px/700`, subtitle `11.5px` with
+  `margin-bottom:14px` and no `margin-top`.
+- **StatCard** — `padding:14px 16px`, `min-width:160px`, label `11px/600`
+  `letter-spacing:.04em`, value `23px/700` `margin-top:8px`, sublabel `11px`
+  faint `margin-top:6px`.
+- **Badge** — `11px/600`, `padding:4px 12px`, pill radius, `line-height:1.2`,
+  **no letter-spacing**, and every tone carries a real 1px border.
+- **Button** — `13px/600`, `padding:10px 20px` (`.btn-sm` → `7px 14px`/12px),
+  `border:1px solid` on *every* variant so primary and secondary are the same
+  height. Primary is teal-600 on teal-600 with white text.
+
+Two deliberate divergences, both to protect Consumption (which shares these
+classes):
+
+1. The design system's StatCard `critical` tone is **orange** (Dashboard's
+   "Uncovered volume"). Consumption's Delta/Total cost cards need red, so
+   they use a rebuild-only `.negative` tone and `.critical` stays DS-faithful.
+2. `.stat-row` keeps a 16px gap; the mockup is internally inconsistent here
+   (16/14/12px across screens), so there's no single correct value to match.
+
+Note the design system already defines `.btn-ghost` (a transparent underlined
+link for the dark firm-offer banner) — don't redefine that name for a
+light-background button. The state machine (`state` object plus
+`goTo`/`openConnection`/`openTrade`/`startWizard`/`topUpWallet`/
+`performTopup`/`openInvoice`/etc. transition functions, all exposed via a
+`window.PP` object so generated HTML can wire up `onclick`/`onchange`
+handlers directly) and the CSS design tokens (`--pp-*`/`--text-*`/
+`--space-*`/`--radius-*` custom properties) are ported verbatim from
+`Customer Portal - Preview.html`'s bundled source. A `setInterval` ticks
+the one pending trade's countdown once a second; the ring itself is
+simplified to plain mm:ss text rather than an SVG ring, given this is a
+POC.
+
+**Scope:** the Consumption screen filters by an arbitrary **From/To date
+range** (see "Date-range filter" below); the old fixed Day / Month mode
+toggle is gone. `tilburg-gas` is excluded everywhere real usage data is
+used — it has no usage rows (the seeded `CONNECTIONS` list still includes
+it, marked `notTradeable`, matching the mockup).
 
 **Loading (fully client-side, no build step):** the page loads
 `consumption-calc.js` and `consumption-data-loader.js` via `<script src>`,
@@ -282,14 +399,12 @@ of a local http(s) server (see "What this is" above).
 values are converted from the source's kW to kWh (`× 0.25 h`) internally,
 then everything below follows the sample column-for-column:
 
-- **TUF** / **FDF** — small fixed grid fees layered on top of EPEX, not
-  present in any source data file. Held constant across all sites for this
-  POC: `ConsumptionCalc.DEFAULT_TUF = 0.01 €/kWh` (added when buying),
-  `DEFAULT_FDF = 0.005 €/kWh` (added when feeding production into the
-  grid). Both `computeIntervalRow`/`computeIntervalSeries`/`computeDayStats`
-  accept optional `tuf`/`fdf` overrides for future per-site values.
-- **Usage Cost** = `Consumption×(EPEX+TUF) − Production×(EPEX+FDF)` — the
-  retail cost of the site's own metered flow, independent of the hedge.
+- **Usage Cost** = `(Consumption − Production) × EPEX` — i.e. Actual Usage
+  valued at spot; the cost of the site's own metered flow, independent of
+  the hedge. There are **no grid fees in this model**: an earlier version
+  layered fixed TUF/FDF fees on top of EPEX, but those were removed (along
+  with the `DEFAULT_TUF`/`DEFAULT_FDF` constants and the optional
+  `tuf`/`fdf` params) — every cost figure is now pure EPEX-based.
 - **Actual Usage** = `Consumption − Production` — can go negative on a
   solar/CHP-heavy interval where production exceeds consumption (a real,
   common case — e.g. `tilburg`'s midday solar output, not just a
@@ -302,37 +417,55 @@ then everything below follows the sample column-for-column:
   covers 07:45–08:00), so "08:00" itself is still before the block starts
   and is excluded; "08:15" (covering 08:00–08:15, the first window actually
   inside the block) is the first peak interval, and "20:00" (covering
-  19:45–20:00) is still peak while "20:15" is not. This intentionally
-  diverges from a literal reading of `PeakPowerTrading-CalculationSample.csv`,
-  which assumed a start-of-interval timestamp convention.
+  19:45–20:00) is still peak while "20:15" is not.
+  `PeakPowerTrading-CalculationSample.csv` follows this same convention (its
+  "8:00" row has no peak volume; "8:15" is the first peak interval) — an
+  earlier revision of that file assumed a start-of-interval convention, and
+  the code intentionally diverged from it until the sample was corrected.
 - **Hedge Volume** = Base Volume + Peak Volume.
 - **Uncovered** = Actual Usage − Hedge Volume.
 - **Long** = `max(0, −Uncovered)` — over-hedged; the unused hedge volume is
   effectively sold at spot. **Short** = `max(0, Uncovered)` — under-hedged;
   the shortfall must be bought at spot.
-- **Delta Cost** (the key P&L figure — negative means revenue/savings,
-  positive means additional cost):
-  ```
-  Delta Cost = Actual Usage < 0
-    ? Usage Cost − (Hedge Volume × EPEX)      // net export: hedge unneeded, fully sold at spot
-    : EPEX × (Actual Usage − Hedge Volume)    // covers both over- and under-hedged cases
-  ```
-  Delta Cost is computed from full-precision intermediate values (not the
-  rounded, displayed Usage Cost), matching the reference sample exactly.
+- **Delta Cost** = `Uncovered × EPEX` — the spot P&L of the unhedged gap
+  (negative means revenue/savings, positive means additional cost). This
+  single expression covers over-hedged, under-hedged, **and** net-export
+  intervals; an earlier version special-cased `Actual Usage < 0` with a
+  separate `Usage Cost − Hedge Volume × EPEX` branch, which no longer
+  exists. Computed from full-precision intermediates (not the rounded,
+  displayed values), matching the reference sample exactly.
+- **Hedge Cost** = `Base Volume × base block price/kWh + Peak Volume ×
+  peak block price/kWh` — what the hedge itself costs at its locked-in
+  contract price. Each active block is priced at its **own** `priceKwh`
+  (from `hedge_blocks_2026.json`) and summed, so stacked blocks of the
+  same shape at different prices are handled correctly.
+- **Total Cost** = Delta Cost + Hedge Cost — the all-in figure.
 
-Note the fixed hedge contract price (`priceKwh` in `hedge_blocks_2026.json`)
-does **not** appear in any of these formulas — Delta Cost measures the P&L
-of the position against EPEX spot, not the hedge's own locked-in price.
+`priceKwh` therefore feeds **only** Hedge Cost (and through it Total
+Cost); Delta Cost still measures the position against EPEX spot alone.
 Numbers display NL-style (comma decimal, period thousands separator).
 
 **Stat cards:** deliberately trimmed to the trading-desk figures rather than
-every column — Actual Usage, Long, Short, Base Volume, Peak Volume, Hedge
-Volume, and total Delta Cost (day/month total, tone-colored: red when it's
-an additional cost, green when it's savings/revenue). Consumption,
-Production, Peak demand, Usage Cost, and Uncovered remain visible in the
-table but are no longer surfaced as their own cards.
+every column, and split across **two rows** — four volume figures (Actual
+Usage, Long, Short, Hedge Volume) on the first, the three cost figures
+(Delta Cost, Hedge Cost, Total Cost) grouped together on their own line
+below. All are totals over the selected date range.
 
-**Chart (Day and Month):** two lines — actual usage (solid teal) and hedge
+Card tones deliberately mirror the chart's own colors so the two read as
+one system: **Long** uses the `.export` tone (`--pp-cyan`) and **Short**
+the `.short` tone (`--pp-orange`), matching the cyan "sold at day-ahead"
+and orange "bought at day-ahead" bar segments. Delta and Total Cost are
+red when it's an additional cost, green when it's savings/revenue.
+
+The `#stat-row` element is a `.stat-stack` flex column wrapping two
+`.stat-row` divs — loading/no-data/error placeholders go through
+`statusCardHtml()` so they keep the same wrapper. Base Volume and Peak
+Volume no longer have their own cards (Hedge Volume already totals them),
+and Consumption, Production, Peak demand, Usage Cost, and Uncovered are
+likewise table-only — all six remain columns in the table and in the CSV
+export.
+
+**Chart (both single-day and multi-day):** two lines — actual usage (solid teal) and hedge
 volume (dashed indigo) — with each interval rendered as a stacked bar from
 the zero baseline: a light-yellow segment (20% opacity, deliberately muted
 so it doesn't compete with the Short/Long segment above it) from zero up
@@ -346,27 +479,57 @@ the y-axis is bipolar (a proper zero baseline, not always at the bottom) to
 correctly show intervals where Actual Usage goes negative.
 
 **Hover vs. click:** hovering the chart shows a tooltip with just Actual
-Usage, Long, Short, and Delta Cost for that interval (the rest of the
-columns are available in the table below) plus a crosshair — it no longer
-scrolls the table. Clicking the chart highlights and scrolls to that
+Usage, Long, Short, Delta Cost, Hedge Cost, and Total Cost for that
+interval (the rest of the columns are available in the table below) plus a
+crosshair — it no longer scrolls the table. Long and Short rows are
+**omitted when their value is 0**: they're mutually exclusive per interval,
+so at most one of the two ever appears. Clicking the chart highlights and scrolls to that
 interval's row instead; the selection persists until the next click or
-until the view changes (switching site/date/month clears it). One shared
-interaction function drives both
-Day and Month charts, using a cursor-position → nearest-interval-index
-calculation (not per-mark listeners), so it scales to the Month view's
-~2,976 points.
+until the view changes (switching site or either date clears it). One
+shared interaction function drives both charts, using a cursor-position →
+nearest-interval-index calculation (not per-mark listeners), so it scales
+to a wide range's interval count (a full quarter is ~8,700 points).
 
 **Table:** a Date column (short format, e.g. "5 Aug 2026") is the first
-column in both Day and Month modes — in Day mode every row repeats the
-same date; in Month mode it's what actually disambiguates the repeating
-`HH:MM` values across days.
+column — on a single-day range every row repeats the same date; on a
+multi-day range it's what disambiguates the repeating `HH:MM` values
+across days.
 
-**Month view:** a second chart type (line + bars, not bars alone) plotting
-every interval of a selected month in one horizontally-scrollable chart;
-the month dropdown is derived from the data's actual coverage, so the
-trailing partial month (August 2026, only 5 days) renders correctly with
-no special-casing. The table below follows whichever mode (Day/Month) is
-active.
+**Date-range filter:** the controls row holds the site dropdown, a
+**From** and a **To** `<input type="date">`, three **Day / Month /
+Quarter** preset buttons, and an **Export CSV** button. From/To are the
+single source of truth for everything rendered (stat cards, chart, table,
+export); the presets are one-shot actions, not modes — each snaps the
+range to the day, month, or quarter **containing the current To date**
+(the anchor), clamped to the dataset's coverage, after which either date
+can be edited freely to widen or narrow the range. A preset button
+highlights only while the range happens to match it exactly, so a custom
+range leaves all three unhighlighted. Both inputs' `min`/`max` come from
+the data's actual coverage. A reversed range (From after To) is treated
+as empty and says so, rather than being silently swapped — the inputs
+always reflect what's on screen.
+
+Chart selection follows the range's **day count**, not a mode flag: a
+single day renders the fixed-width chart with time-of-day labels; any
+multi-day range renders the horizontally-scrollable chart (line + bars)
+with per-day gridlines and day-of-month labels. Because the range is
+derived from the dataset's own dates, a partial trailing month (August
+2026, only 5 days) needs no special-casing.
+
+**CSV export:** the `Export CSV` button uses the ported design system's
+`.btn-primary` class (green teal-600 fill, white text — the same primary
+button the rest of the portal uses) rather than a bespoke style. It writes
+exactly the table's 16
+columns, in the table's own order, and every row of the current range —
+the full filtered dataset, not just what's on screen — named
+`consumption_<siteId>_<from>[_to_<to>].csv`. Values are written
+**unformatted** — dot decimal, no thousands separators, rounded to 6
+decimals — rather than in the NL display format, so the file parses in a
+spreadsheet regardless of locale; a UTF-8 BOM is prepended so Excel
+detects the encoding. `CSV_COLUMNS` in the page is the single list
+driving the export, so a new table column means adding one entry there
+(the `<thead>` markup is still separate — keep the two in sync). The
+button is disabled whenever the range is empty.
 
 **Running / testing:** there's nothing to regenerate. Serve this folder
 over http(s) (e.g. `npx http-server .` or `npx serve .`) and open the page
@@ -376,7 +539,14 @@ way. `node consumption-calc.test.js` and `node consumption-data-loader.test.js`
 unit-test the two JS modules against fixture rows (grouping-by-site,
 sorting-by-isp, rounding, hedge-block filtering/blending, multi-period
 hedge stacking, etc.) without needing to fetch the real multi-MB source
-files.
+files. `portal-seed-data.js` has no dedicated test suite (no calculation
+logic to validate — it's ported static data plus one pure `simulateTopup()`
+helper); the whole page's navigation (all 7 tabs, plus row-click detail
+panels on Connections/Trading/Invoices and the Wallet top-up flow) has been
+verified with a one-off jsdom + `http.server` smoke test rather than a
+checked-in suite — re-run a similar script after changing the page shell
+if in doubt, since there's no automated regression coverage for the
+sidebar/page-switching logic itself.
 
 ## Conventions
 

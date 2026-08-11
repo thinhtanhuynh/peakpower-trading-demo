@@ -10,9 +10,11 @@ function assertClose(actual, expected, message) {
 // Fixture hedge blocks matching PeakPowerTrading-CalculationSample.csv:
 // a single 1 MW base block (all year) + a single 1 MW peak block (Mon-Fri
 // 08:15-20:00 inclusive), i.e. 250 kWh base / 250 kWh peak per interval.
+// Prices match hedge_blocks_2026.json's YEAR row (€70/MWh base, €95/MWh peak),
+// so hedge cost per interval is 250*0.07 = 17.50 base, 250*0.095 = 23.75 peak.
 var SAMPLE_HEDGE = [
-  { shape: "base", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000 },
-  { shape: "peak", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000 }
+  { shape: "base", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000, priceKwh: 0.07 },
+  { shape: "peak", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000, priceKwh: 0.095 }
 ];
 // 2026-01-05 is a Monday.
 var MONDAY = "2026-01-05";
@@ -24,7 +26,7 @@ var MONDAY = "2026-01-05";
 // 00:00 — Case A (0 <= Actual Usage <= Hedge Volume): surplus hedge sold at EPEX.
 (function () {
   var row = ConsumptionCalc.computeIntervalRow("00:00", 180 * 4, 0, 0.17965, MONDAY, SAMPLE_HEDGE);
-  assertClose(row.usageCost, 34.137, "00:00 usageCost");
+  assertClose(row.usageCost, 32.337, "00:00 usageCost");
   assertClose(row.actualUsage, 180, "00:00 actualUsage");
   assertClose(row.baseVolumeKwh, 250, "00:00 baseVolume");
   assertClose(row.peakVolumeKwh, 0, "00:00 peakVolume (outside 08:00-20:00)");
@@ -33,6 +35,8 @@ var MONDAY = "2026-01-05";
   assertClose(row.long, 70, "00:00 long");
   assertClose(row.short, 0, "00:00 short");
   assertClose(row.deltaCost, -12.5755, "00:00 deltaCost");
+  assertClose(row.hedgeCost, 17.5, "00:00 hedgeCost (base block only)");
+  assertClose(row.totalCost, -12.5755 + 17.5, "00:00 totalCost = delta + hedge");
 })();
 
 // 07:00 — Case B (Actual Usage > Hedge Volume), still before the peak window.
@@ -76,15 +80,18 @@ var MONDAY = "2026-01-05";
   assertClose(row.uncovered, -158, "08:15 uncovered");
   assertClose(row.long, 158, "08:15 long");
   assertClose(row.deltaCost, -29.97892, "08:15 deltaCost");
+  assertClose(row.hedgeCost, 17.5 + 23.75, "08:15 hedgeCost (base + peak, each at its own price)");
+  assertClose(row.totalCost, -29.97892 + 41.25, "08:15 totalCost = delta + hedge");
 })();
 
-// 13:00 — Case C (Actual Usage < 0, net export): Delta Cost = Usage Cost - Hedge Volume*EPEX.
+// 13:00 — net export (Actual Usage < 0). Delta Cost is still simply
+// Uncovered x EPEX; there is no longer a separate net-export branch.
 (function () {
   var row = ConsumptionCalc.computeIntervalRow("13:00", 384 * 4, 540 * 4, 0.11394, MONDAY, SAMPLE_HEDGE);
-  assertClose(row.usageCost, -16.63464, "13:00 usageCost");
+  assertClose(row.usageCost, -17.77464, "13:00 usageCost");
   assertClose(row.actualUsage, -156, "13:00 actualUsage");
   assertClose(row.hedgeVolumeKwh, 500, "13:00 hedgeVolume");
-  assertClose(row.deltaCost, -73.60464, "13:00 deltaCost (net-export case)");
+  assertClose(row.deltaCost, -74.74464, "13:00 deltaCost (net-export case)");
 })();
 
 // 20:00 — peak window's closing boundary is inclusive (still peak).
@@ -171,7 +178,7 @@ var MONDAY = "2026-01-05";
     ["10:00", "10:15"], [0.10, 0.20], [600, 600], [0, 0], "2026-01-05", SAMPLE_HEDGE
   );
   assertClose(series.actualUsage[0], 150, "actualUsage[0] = 600kW * 0.25h");
-  assertClose(series.usageCost[0], 150 * 0.11, "usageCost[0] = 150kWh * (0.10+0.01)");
+  assertClose(series.usageCost[0], 150 * 0.10, "usageCost[0] = 150kWh * EPEX 0.10");
   assertClose(series.hedgeVolume[0], 500, "hedgeVolume[0] (weekday, peak window)");
 })();
 
@@ -191,6 +198,8 @@ var MONDAY = "2026-01-05";
   assertClose(stats.longKwh, 70 + 0, "computeDayStats longKwh sums both intervals");
   assertClose(stats.shortKwh, 0 + 77, "computeDayStats shortKwh (08:00 interval is now under-hedged)");
   assertClose(stats.deltaCostEur, -12.5755 + 15.03964, "computeDayStats deltaCostEur sums both intervals");
+  assertClose(stats.hedgeCostEur, 17.5 + 17.5, "computeDayStats hedgeCostEur (base block on both intervals)");
+  assertClose(stats.totalCostEur, stats.deltaCostEur + stats.hedgeCostEur, "computeDayStats totalCostEur = delta + hedge");
 })();
 
 // computeDayStats: works with no hedgeBlocks (4/5-arg call), new fields default to 0.
