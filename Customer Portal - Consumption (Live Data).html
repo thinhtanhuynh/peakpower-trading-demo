@@ -379,6 +379,26 @@
           </div>
         </div>
         <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="card-title">Cost — 15-minute intervals</div>
+              <div class="card-subtitle" id="cost-chart-subtitle"></div>
+            </div>
+          </div>
+          <div id="cost-day-chart-wrap">
+            <svg id="cost-chart" viewBox="0 0 960 260" style="width:100%;height:260px;display:block"></svg>
+          </div>
+          <div id="cost-month-chart-wrap" class="chart-scroll" style="display:none">
+            <svg id="cost-month-chart" viewBox="0 0 960 260" height="260" style="display:block"></svg>
+          </div>
+          <div class="legend">
+            <div><span class="swatch" style="background:var(--pp-indigo);opacity:.35"></span>Hedge cost — locked-in block price</div>
+            <div><span class="swatch" style="background:var(--pp-orange);opacity:.55"></span>Buy — uncovered volume at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-cyan);opacity:.3"></span>Sell — surplus hedge at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Total cost</div>
+          </div>
+        </div>
+        <div class="card">
           <div class="card-title">15-minute interval detail</div>
           <div class="table-wrap">
             <table>
@@ -427,6 +447,7 @@
   var crumb = document.getElementById("crumb");
   var pageTitle = document.getElementById("page-title");
   var chartSubtitle = document.getElementById("chart-subtitle");
+  var costChartSubtitle = document.getElementById("cost-chart-subtitle");
   var statRow = document.getElementById("stat-row");
   var chart = document.getElementById("chart");
   var tableBody = document.getElementById("table-body");
@@ -1657,24 +1678,30 @@
   function buildTooltipHtml(context, i) {
     var dateStr = resolveDate(context.dates, i);
     var s = context.series;
-    // Volumes first (what was hedged vs. what was actually used, then the gap
-    // between them), then the money that follows from them.
-    var rows = [
-      ["Hedge", ConsumptionCalc.formatNL(s.hedgeVolume[i], 1) + " kWh"],
-      ["Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"]
-    ];
-    // Long and Short are mutually exclusive per interval — only ever one of
-    // the two is non-zero, so hide whichever is 0 rather than showing a
-    // permanently-empty row.
-    if (s.short[i] !== 0) { rows.push(["Short", ConsumptionCalc.formatNL(s.short[i], 1) + " kWh"]); }
-    if (s.long[i] !== 0) { rows.push(["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"]); }
-    rows.push(["Hedge Cost", ConsumptionCalc.formatNL(s.hedgeCost[i], 2) + " €"]);
-    // Delta Cost is what the uncovered gap costs at spot: a positive figure is
-    // volume bought, a negative one is surplus hedge sold.
-    var delta = s.deltaCost[i];
-    var deltaLabel = delta > 0 ? "Buy" : (delta < 0 ? "Sell" : "Buy / Sell");
-    rows.push([deltaLabel, ConsumptionCalc.formatNL(delta, 2) + " €"]);
-    rows.push(["Total", ConsumptionCalc.formatNL(s.totalCost[i], 2) + " €"]);
+    // Each chart's tooltip covers only what that chart plots: the usage chart
+    // shows volumes, the cost chart shows money.
+    var rows;
+    if (context.kind === "cost") {
+      // Delta Cost is what the uncovered gap costs at spot: a positive figure
+      // is volume bought, a negative one is surplus hedge sold.
+      var delta = s.deltaCost[i];
+      var deltaLabel = delta > 0 ? "Buy" : (delta < 0 ? "Sell" : "Buy / Sell");
+      rows = [
+        ["Hedge", ConsumptionCalc.formatNL(s.hedgeCost[i], 2) + " €"],
+        [deltaLabel, ConsumptionCalc.formatNL(delta, 2) + " €"],
+        ["Total", ConsumptionCalc.formatNL(s.totalCost[i], 2) + " €"]
+      ];
+    } else {
+      rows = [
+        ["Hedge", ConsumptionCalc.formatNL(s.hedgeVolume[i], 1) + " kWh"],
+        ["Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"]
+      ];
+      // Long and Short are mutually exclusive per interval — only ever one of
+      // the two is non-zero, so hide whichever is 0 rather than showing a
+      // permanently-empty row.
+      if (s.short[i] !== 0) { rows.push(["Short", ConsumptionCalc.formatNL(s.short[i], 1) + " kWh"]); }
+      if (s.long[i] !== 0) { rows.push(["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"]); }
+    }
     var html = '<div class="tt-head">' + formatDateShort(dateStr) + " · " + context.times[i] + "</div>";
     for (var r = 0; r < rows.length; r++) {
       html += '<div class="tt-row"><span>' + rows[r][0] + '</span><span>' + rows[r][1] + '</span></div>';
@@ -1868,6 +1895,110 @@
   var lastMonthContext = null;
   attachChartInteraction(monthChart, "month-chart-crosshair", function () { return lastMonthChartGeom; }, function () { return lastMonthContext; }, highlightTableRow);
 
+  // --- Cost chart -----------------------------------------------------------
+  // A second chart over the same intervals, showing money rather than volume:
+  // a stacked bar of Hedge Cost (from zero) plus Delta Cost (from the top of
+  // the hedge segment), so the top of the stack *is* Total Cost — which the
+  // teal line then traces. Delta Cost can be negative (surplus hedge sold), so
+  // the y-axis is bipolar, like the volume chart's.
+
+  var COST_HEDGE_FILL = "#4f46e5";   // indigo, matching the hedge-volume line
+  var COST_BUY_FILL = "#ea580c";     // orange, matching Short
+  var COST_SELL_FILL = "#0891b2";    // cyan, matching Long
+
+  /** Shared bar/line geometry for both cost charts. */
+  function costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, centred) {
+    var minVal = 0, maxVal = 0, i;
+    for (i = 0; i < n; i++) {
+      minVal = Math.min(minVal, hedgeCost[i], totalCost[i]);
+      maxVal = Math.max(maxVal, hedgeCost[i], totalCost[i]);
+    }
+    if (minVal === maxVal) { maxVal = minVal + 1; }
+    var range = maxVal - minVal;
+    function yFor(v) { return padTop + (maxVal - v) / range * plotH; }
+    var zeroY = yFor(0);
+
+    var hedgeBars = "", deltaBars = "", totalPoints = "";
+    var w = Math.max(barW - (centred ? 1 : 0.5), centred ? 1 : 0.5);
+    for (i = 0; i < n; i++) {
+      var x = padLeft + i * stepX;
+      // Hedge cost: zero baseline up to hedgeCost.
+      var yH = yFor(hedgeCost[i]);
+      hedgeBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(zeroY, yH).toFixed(1) +
+        '" width="' + w.toFixed(1) + '" height="' + Math.abs(zeroY - yH).toFixed(1) +
+        '" fill="' + COST_HEDGE_FILL + '" opacity="0.35"></rect>';
+      // Delta cost: continues from the hedge segment to the total.
+      var yT = yFor(totalCost[i]);
+      var buy = deltaCost[i] >= 0;
+      deltaBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yH, yT).toFixed(1) +
+        '" width="' + w.toFixed(1) + '" height="' + Math.abs(yH - yT).toFixed(1) +
+        '" fill="' + (buy ? COST_BUY_FILL : COST_SELL_FILL) + '" opacity="' + (buy ? "0.55" : "0.3") + '"></rect>';
+      totalPoints += (x + (centred ? barW / 2 : 0)).toFixed(1) + "," + yT.toFixed(1) + " ";
+    }
+    return {
+      zeroY: zeroY,
+      markup: '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
+        '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
+        hedgeBars + deltaBars +
+        '<polyline points="' + totalPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="' +
+        (centred ? 2 : 1.5) + '"></polyline>'
+    };
+  }
+
+  var lastCostChartGeom = null;
+  var costChart = document.getElementById("cost-chart");
+
+  function buildCostChartSvg(times, hedgeCost, deltaCost, totalCost) {
+    var n = times.length;
+    var width = 960, height = 260, padLeft = 40, padBottom = 24, padTop = 10;
+    var plotW = width - padLeft - 10, plotH = height - padTop - padBottom;
+    var barW = plotW / n;
+    var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, barW, barW, true);
+
+    var axisLabels = "";
+    for (var i = 0; i < n; i++) {
+      if (times[i].slice(3) === "00" && parseInt(times[i].slice(0, 2), 10) % 4 === 0) {
+        axisLabels += '<text x="' + (padLeft + i * barW).toFixed(1) + '" y="' + (height - 6) +
+          '" font-size="10" fill="#64748b">' + times[i] + "</text>";
+      }
+    }
+    lastCostChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
+    return body.markup + axisLabels +
+      '<line id="cost-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
+      '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
+  }
+
+  var lastMonthCostChartGeom = null;
+  var costMonthChart = document.getElementById("cost-month-chart");
+
+  function buildMonthCostChartSvg(dates, times, hedgeCost, deltaCost, totalCost) {
+    var n = times.length;
+    var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
+    var stepX = 3;
+    var plotW = Math.max(n * stepX, 900);
+    var width = padLeft + plotW + 10;
+    var plotH = height - padTop - padBottom;
+    var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, stepX, false);
+
+    var dayGridlines = "", dayLabels = "", prevDate = null;
+    for (var i = 0; i < n; i++) {
+      if (dates[i] !== prevDate) {
+        var lx = (padLeft + i * stepX).toFixed(1);
+        dayGridlines += '<line x1="' + lx + '" y1="' + padTop + '" x2="' + lx + '" y2="' + (padTop + plotH) + '" stroke="#eef2f6"></line>';
+        dayLabels += '<text x="' + lx + '" y="' + (height - 6) + '" font-size="9" fill="#64748b">' + dates[i].slice(8, 10) + "</text>";
+        prevDate = dates[i];
+      }
+    }
+    lastMonthCostChartGeom = { padLeft: padLeft, spacing: stepX, offset: 0, n: n, width: width };
+    return dayGridlines + body.markup + dayLabels +
+      '<line id="cost-month-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
+      '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
+  }
+
+  var lastCostDayContext = null, lastCostMonthContext = null;
+  attachChartInteraction(costChart, "cost-chart-crosshair", function () { return lastCostChartGeom; }, function () { return lastCostDayContext; }, highlightTableRow);
+  attachChartInteraction(costMonthChart, "cost-month-chart-crosshair", function () { return lastMonthCostChartGeom; }, function () { return lastCostMonthContext; }, highlightTableRow);
+
   /**
    * Snaps From/To to the day, month, or quarter containing the current To
    * date, then re-renders. The preset is a one-shot action, not a mode:
@@ -1907,6 +2038,8 @@
       chartSubtitle.textContent = "";
       statRow.innerHTML = statusCardHtml("Loading", "…", "Fetching source data and calculating in the browser");
       chart.innerHTML = "";
+      costChart.innerHTML = "";
+      costChartSubtitle.textContent = "";
       tableBody.innerHTML = "";
       return;
     }
@@ -1930,6 +2063,9 @@
         from > to ? "“From” is after “To”." : "No data in this date range.");
       chart.innerHTML = "";
       monthChart.innerHTML = "";
+      costChart.innerHTML = "";
+      costMonthChart.innerHTML = "";
+      costChartSubtitle.textContent = "";
       tableBody.innerHTML = "";
       return;
     }
@@ -1949,18 +2085,32 @@
     var singleDay = dayCount === 1;
     document.getElementById("day-chart-wrap").style.display = singleDay ? "" : "none";
     document.getElementById("month-chart-wrap").style.display = singleDay ? "none" : "";
+    document.getElementById("cost-day-chart-wrap").style.display = singleDay ? "" : "none";
+    document.getElementById("cost-month-chart-wrap").style.display = singleDay ? "none" : "";
+    costChartSubtitle.textContent = chartSubtitle.textContent;
 
+    var ctx = { dates: range.dates, times: range.times, prices: range.prices, series: series };
     if (singleDay) {
-      lastDayContext = { dates: range.dates, times: range.times, prices: range.prices, series: series };
+      lastDayContext = ctx;
+      lastCostDayContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost" };
       lastMonthContext = null;
+      lastCostMonthContext = null;
       chart.innerHTML = buildChartSvg(range.times, series.actualUsage, series.hedgeVolume, series.uncovered);
+      costChart.innerHTML = buildCostChartSvg(range.times, series.hedgeCost, series.deltaCost, series.totalCost);
     } else {
-      lastMonthContext = { dates: range.dates, times: range.times, prices: range.prices, series: series };
+      lastMonthContext = ctx;
+      lastCostMonthContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost" };
       lastDayContext = null;
+      lastCostDayContext = null;
       var markup = buildMonthChartSvg(range.dates, range.times, series.actualUsage, series.hedgeVolume, series.uncovered);
       monthChart.setAttribute("viewBox", "0 0 " + lastMonthChartGeom.width + " 260");
       monthChart.style.width = lastMonthChartGeom.width + "px";
       monthChart.innerHTML = markup;
+
+      var costMarkup = buildMonthCostChartSvg(range.dates, range.times, series.hedgeCost, series.deltaCost, series.totalCost);
+      costMonthChart.setAttribute("viewBox", "0 0 " + lastMonthCostChartGeom.width + " 260");
+      costMonthChart.style.width = lastMonthCostChartGeom.width + "px";
+      costMonthChart.innerHTML = costMarkup;
     }
 
     renderTable(range.dates, range.times, range.prices, series);

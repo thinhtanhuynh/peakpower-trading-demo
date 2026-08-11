@@ -468,7 +468,7 @@ and Consumption, Production, Peak demand, Usage Cost, and Uncovered are
 likewise table-only — all six remain columns in the table and in the CSV
 export.
 
-**Chart (both single-day and multi-day):** two lines — actual usage (solid teal) and hedge
+**Usage chart (both single-day and multi-day):** two lines — actual usage (solid teal) and hedge
 volume (dashed indigo) — with each interval rendered as a stacked bar from
 the zero baseline: a light-yellow segment (20% opacity, deliberately muted
 so it doesn't compete with the Short/Long segment above it) from zero up
@@ -481,28 +481,50 @@ mockup's Day-tab legend. Consumption and production are no longer plotted;
 the y-axis is bipolar (a proper zero baseline, not always at the bottom) to
 correctly show intervals where Actual Usage goes negative.
 
-**Hover vs. click:** hovering the chart shows a tooltip plus a crosshair — it
-no longer scrolls the table. The tooltip is deliberately ordered **volumes
-first, then the money that follows from them** (the rest of the columns are
-available in the table below):
+**Cost chart (second chart):** a second chart over the *same* intervals
+plotting money rather than volume, in its own card below the usage chart. Each
+interval is a stacked bar: **Hedge Cost** from the zero baseline (indigo, 35%),
+then **Delta Cost** continuing from the top of that segment to the total —
+orange (55%) when it's positive (volume **bought** at day-ahead), cyan (30%)
+when negative (surplus hedge **sold**). Because the segments stack, the top of
+the bar *is* Total Cost, which the solid teal line then traces. Delta Cost can
+be negative, so the y-axis is bipolar like the usage chart's.
 
-| Row | Source | Notes |
+It mirrors the usage chart's structure exactly: a fixed-width single-day
+version (`#cost-chart`, time-of-day labels) and a scrollable multi-day one
+(`#cost-month-chart`, per-day gridlines), switched by the same day-count test,
+with its own crosshair ids and geometry. `costChartBody()` holds the shared
+bar/line maths so the two only differ in sizing and axis labels.
+
+**Hover vs. click:** hovering either chart shows a tooltip plus a crosshair —
+it no longer scrolls the table. **Each tooltip covers only what its own chart
+plots**, selected by `context.kind` (`"cost"` vs. anything else); the full set
+of columns stays available in the table below.
+
+| Usage chart | Source | Notes |
 |---|---|---|
 | Hedge | `hedgeVolume` | what was locked in for this interval |
 | Usage | `actualUsage` | labelled "Usage", not "Actual Usage" |
 | Short *or* Long | `short`/`long` | **omitted when 0** — mutually exclusive, so at most one appears |
-| Hedge Cost | `hedgeCost` | |
-| Buy *or* Sell | `deltaCost` | label follows the sign: positive = volume **bought** at spot, negative = surplus hedge **sold**. Reads "Buy / Sell" in the rare exactly-zero case |
+
+| Cost chart | Source | Notes |
+|---|---|---|
+| Hedge | `hedgeCost` | the hedge's own cost, not its volume |
+| Buy *or* Sell | `deltaCost` | label follows the sign: positive = **bought** at spot, negative = surplus hedge **sold**. Reads "Buy / Sell" in the rare exactly-zero case |
 | Total | `totalCost` | |
 
-The Short/Long and Buy/Sell pairs intentionally mirror each other: whichever
-side of the hedge the interval landed on names both its volume row and its
-cost row. Clicking the chart highlights and scrolls to that
-interval's row instead; the selection persists until the next click or
-until the view changes (switching site or either date clears it). One
-shared interaction function drives both charts, using a cursor-position →
-nearest-interval-index calculation (not per-mark listeners), so it scales
-to a wide range's interval count (a full quarter is ~8,700 points).
+The Short/Long and Buy/Sell pairs intentionally mirror each other across the
+two charts: whichever side of the hedge an interval landed on names both its
+volume row and its cost row.
+
+Clicking either chart highlights and scrolls to that interval's row in the
+table; the selection persists until the next click or until the view changes
+(switching site or either date clears it). One shared interaction function
+drives **all four** chart variants (usage and cost × single-day and
+multi-day), using a cursor-position → nearest-interval-index calculation (not
+per-mark listeners), so it scales to a wide range's interval count (a full
+quarter is ~8,700 points). Clicking any of them highlights the same table row,
+so the two charts stay linked to each other through the table.
 
 **Table:** a Date column (short format, e.g. "5 Aug 2026") is the first
 column — on a single-day range every row repeats the same date; on a
