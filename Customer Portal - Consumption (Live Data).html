@@ -594,15 +594,21 @@
       facts: [["Reference", id], ["Requested by", "J. de Vries"], ["State", "Awaiting price"], ["Direction", req.direction],
         ["Shape", req.shape], ["Delivery period", req.period], ["Total power", power], ["Total volume", volume]]
     };
-    state.trades.unshift(trade);
-    state.nextSeq++;
-
-    // Hand off to the Back Office. Storage may be unavailable (private mode,
-    // quota) — the portal's own flow must not depend on the link succeeding.
+    // Hand off to the Back Office desk, then rebuild the list from the link so
+    // this trade has exactly one source of truth. Storage may be unavailable
+    // (private mode, quota) — the portal's own flow must not depend on the
+    // link, so fall back to the in-memory row we just built.
+    var published = false;
     try {
-      PortalTradeLink.publish(window.localStorage, req);
+      published = !!PortalTradeLink.publish(window.localStorage, req);
     } catch (e) {
       console.warn("Trade request not published to the Back Office desk:", e);
+    }
+    if (published) {
+      syncLinkedTrades();
+    } else {
+      state.trades.unshift(trade);
+      state.nextSeq++;
     }
 
     state.page = "Trading"; state.tradingView = "list"; state.tradeId = null;
@@ -665,19 +671,72 @@
     noop: function () {}
   };
 
-  // Ticks the one pending trade's countdown once a second (fidelity to the
-  // mockup's live countdown; the ring itself is simplified to mm:ss text —
-  // see CLAUDE.md).
+  // --- Back Office link -----------------------------------------------------
+
+  /**
+   * Rebuilds the trade list from the seed plus everything on the link.
+   *
+   * Linked trades are the source of truth for their own ids, so a request the
+   * desk has since priced comes back as a pending firm offer and renders
+   * through exactly the same banner/detail code as the seeded pending trade.
+   * Doing this on load (not just on submit) also means a submitted trade — and
+   * any offer against it — survives a page reload, which in-memory state alone
+   * would lose.
+   */
+  function syncLinkedTrades() {
+    var linked = [];
+    try {
+      linked = PortalTradeLink.read(window.localStorage);
+    } catch (e) {
+      return; // an unavailable link must never break the Trading screen
+    }
+    var linkedIds = {};
+    linked.forEach(function (r) { linkedIds[r.id] = true; });
+
+    var seeded = PortalSeedData.TRADES_SEED.filter(function (t) { return !linkedIds[t.id]; });
+    // Newest request first, above the seeded history.
+    var fromLink = linked.slice().reverse().map(function (r) {
+      return PortalTradeLink.toCustomerTrade(r);
+    });
+    state.trades = fromLink.concat(seeded);
+
+    // Keep issuing ids after anything already on the link.
+    linked.forEach(function (r) {
+      var n = parseInt(String(r.id).replace(/^TRD-/, ""), 10);
+      if (isFinite(n) && n >= state.nextSeq) { state.nextSeq = n + 1; }
+    });
+  }
+
+  // Ticks pending countdowns once a second (fidelity to the mockup's live
+  // countdown; the ring itself is simplified to mm:ss text — see CLAUDE.md).
+  // Linked trades recompute from the offer's absolute expiry rather than
+  // decrementing, so the two portals can't drift apart or lose time while the
+  // tab is backgrounded.
   setInterval(function () {
     var changed = false;
+    var expired = false;
     state.trades.forEach(function (t) {
-      if (t.pending && typeof t.secondsRemaining === "number" && t.secondsRemaining > 0) {
+      if (!t.pending) { return; }
+      if (t.linked && t.expiresAt) {
+        var left = Math.max(0, Math.floor((new Date(t.expiresAt).getTime() - Date.now()) / 1000));
+        if (left !== t.secondsRemaining) { t.secondsRemaining = left; changed = true; }
+        if (left === 0) { expired = true; }
+      } else if (typeof t.secondsRemaining === "number" && t.secondsRemaining > 0) {
         t.secondsRemaining -= 1;
         changed = true;
       }
     });
-    if (changed && (state.page === "Trading" || state.page === "Dashboard")) { renderApp(); }
+    // Re-read the link once at expiry so the trade flips to "Offer expired".
+    if (expired) { syncLinkedTrades(); }
+    if ((changed || expired) && (state.page === "Trading" || state.page === "Dashboard")) { renderApp(); }
   }, 1000);
+
+  // Initial load, plus live updates when the Back Office prices something in
+  // another tab. `storage` only fires in OTHER tabs, which is the cross-portal
+  // case; `focus` covers coming back to this one.
+  syncLinkedTrades();
+  PortalTradeLink.subscribe(window, function () { syncLinkedTrades(); renderApp(); });
+  window.addEventListener("focus", function () { syncLinkedTrades(); renderApp(); });
 
   (function attachSidebarNav() {
     var links = document.querySelectorAll("#sidebar-nav a");

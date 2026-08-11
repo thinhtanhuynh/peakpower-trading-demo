@@ -164,6 +164,12 @@ function opts(extra) {
   Link.clear(s);
   assert.deepStrictEqual(Link.read(s), []);
 
+  // publish reports write failure, so callers can fall back.
+  assert.strictEqual(Link.publish({ getItem: function () { return null; },
+    setItem: function () { throw new Error("quota"); } }, { id: "x" }), false,
+    "publish returns false when the write fails");
+  assert.ok(Link.publish(fakeStorage(), { id: "x" }), "publish returns the list on success");
+
   // Corrupt / non-array payloads degrade to empty instead of throwing.
   assert.deepStrictEqual(Link.read(fakeStorage({ "peakpower.tradeRequests.v1": "{not json" })), []);
   assert.deepStrictEqual(Link.read(fakeStorage({ "peakpower.tradeRequests.v1": '{"a":1}' })), []);
@@ -199,6 +205,176 @@ function opts(extra) {
   off();
   assert.strictEqual(handlers.storage, undefined, "unsubscribe detaches the listener");
   assert.doesNotThrow(function () { Link.subscribe(null, function () {})(); }, "no window is survivable");
+})();
+
+// --- pricing: the Back Office -> Customer leg -------------------------------
+var WIZ = { direction: "Buy", shape: "Peak", periodType: "quarter", quarterIdx: 1,
+            volumes: { rot: 0.200, venlo: 0.300, tilburg: 0.400, almere: 0.100 }, note: "" };
+var T0 = "2026-08-11T10:00:00.000Z";
+function pricedFixture(extra) {
+  var req = Link.buildRequest(WIZ, opts({ submittedAt: T0 }));
+  var o = { priceMwh: 94.75, now: T0 };
+  for (var k in (extra || {})) { o[k] = extra[k]; }
+  return Link.priceRequest(req, o);
+}
+
+(function () {
+  var req = Link.buildRequest(WIZ, opts({ submittedAt: T0 }));
+  assert.strictEqual(Link.isPriced(req), false, "a fresh request is unpriced");
+  assert.strictEqual(Link.effectiveStatus(req), "Awaiting price");
+
+  var priced = Link.priceRequest(req, { priceMwh: 94.75, now: T0 });
+  assert.strictEqual(req.offer, undefined, "priceRequest does not mutate its input");
+  assert.strictEqual(Link.isPriced(priced), true);
+  assert.strictEqual(priced.status, "Offer received");
+  assertClose(priced.offer.priceMwh, 94.75);
+  // Value is derived from the request's own computed volume (768 MWh).
+  assertClose(priced.offer.valueEur, 94.75 * 768, "value = price x volume");
+  assert.strictEqual(priced.offer.reactionMinutes, 30, "default reaction window");
+  assert.strictEqual(priced.offer.pricedBy, "PeakPower Trading");
+  assert.strictEqual(priced.offer.expiresAt, "2026-08-11T10:30:00.000Z", "expiry = priced + window");
+
+  // A custom window and desk operator carry through.
+  var custom = Link.priceRequest(req, { priceMwh: 80, reactionMinutes: 5, pricedBy: "M. Bakker", now: T0 });
+  assert.strictEqual(custom.offer.expiresAt, "2026-08-11T10:05:00.000Z");
+  assert.strictEqual(custom.offer.pricedBy, "M. Bakker");
+
+  // Invalid prices are rejected rather than producing a broken offer.
+  [0, -5, NaN, "abc", null, undefined].forEach(function (bad) {
+    assert.strictEqual(Link.priceRequest(req, { priceMwh: bad }), null, "rejects price " + bad);
+  });
+})();
+
+// --- countdown --------------------------------------------------------------
+(function () {
+  var priced = pricedFixture();
+  assert.strictEqual(Link.secondsRemaining(priced, T0), 1800, "full window at t=0");
+  assert.strictEqual(Link.secondsRemaining(priced, "2026-08-11T10:29:00.000Z"), 60);
+  assert.strictEqual(Link.secondsRemaining(priced, "2026-08-11T10:30:00.000Z"), 0, "exactly at expiry");
+  assert.strictEqual(Link.secondsRemaining(priced, "2026-08-11T11:00:00.000Z"), 0, "never negative");
+  assert.strictEqual(Link.secondsRemaining({ id: "x" }), 0, "unpriced has no countdown");
+
+  assert.strictEqual(Link.isExpired(priced, T0), false);
+  assert.strictEqual(Link.isExpired(priced, "2026-08-11T10:30:01.000Z"), true);
+  assert.strictEqual(Link.effectiveStatus(priced, "2026-08-11T10:31:00.000Z"), "Offer expired");
+
+  assert.strictEqual(Link.mmss(0), "00:00");
+  assert.strictEqual(Link.mmss(59), "00:59");
+  assert.strictEqual(Link.mmss(60), "01:00");
+  assert.strictEqual(Link.mmss(1800), "30:00");
+  assert.strictEqual(Link.mmss(3661), "1:01:01", "past an hour");
+  assert.strictEqual(Link.mmss(-5), "00:00", "floors at zero");
+
+  // These are natural map() callbacks, so a bare `list.map(toDeskCard)` would
+  // pass the array index as `now`. Small numbers must fall back to the real
+  // clock rather than being read as epoch-1970, which would show a countdown
+  // of hundreds of thousands of hours.
+  var mapped = [priced].map(Link.toDeskCard);
+  assert.ok(/^\d{1,2}:\d{2}(:\d{2})?$/.test(mapped[0].tag) || mapped[0].tag === "expired",
+    "index-as-now must not produce a 1970 countdown, got " + mapped[0].tag);
+  // (The fixture's expiry is a fixed timestamp, so against the real clock the
+  // remainder is some sane bounded value — the point is that it is not the
+  // ~500,000 hours an epoch-1970 baseline would give.)
+  var mappedTrade = [priced].map(Link.toCustomerTrade);
+  assert.ok(mappedTrade[0].secondsRemaining < 24 * 3600,
+    "index-as-now must not inflate secondsRemaining, got " + mappedTrade[0].secondsRemaining);
+  assert.strictEqual(Link.secondsRemaining(priced, "not a date") >= 0, true, "garbage now falls back safely");
+
+  assert.strictEqual(Link.countdownTone(4 * 60), "critical");
+  assert.strictEqual(Link.countdownTone(10 * 60), "warning");
+  assert.strictEqual(Link.countdownTone(20 * 60), "neutral");
+})();
+
+// --- priced request -> desk card --------------------------------------------
+(function () {
+  var priced = pricedFixture();
+  var card = Link.toDeskCard(priced, T0);
+  assert.strictEqual(card.column, "awaiting", "a priced request leaves the To price queue");
+  assert.strictEqual(card.tag, "30:00", "tag is the live countdown");
+  assert.strictEqual(card.tagTone, "neutral", "30 min out is not yet urgent");
+  assert.strictEqual(card.valueLabel, "€ " + Link.formatNL(94.75 * 768, 0), "desk shows the offer value");
+  assert.strictEqual(card.actionLabel, "view offer →");
+  assert.strictEqual(card.urgent, false);
+
+  var soon = Link.toDeskCard(priced, "2026-08-11T10:26:00.000Z");
+  assert.strictEqual(soon.tag, "04:00");
+  assert.strictEqual(soon.tagTone, "critical");
+  assert.strictEqual(soon.urgent, true, "under 5 minutes is urgent");
+
+  var gone = Link.toDeskCard(priced, "2026-08-11T10:31:00.000Z");
+  assert.strictEqual(gone.tag, "expired");
+  assert.strictEqual(gone.actionLabel, "offer expired");
+  assert.strictEqual(gone.column, "awaiting", "an expired offer stays in its column");
+})();
+
+// --- request -> customer trade ----------------------------------------------
+(function () {
+  // Unpriced: shows as awaiting price, not pending, no price/value.
+  var req = Link.buildRequest(WIZ, opts({ submittedAt: T0 }));
+  var t = Link.toCustomerTrade(req, T0);
+  assert.strictEqual(t.id, "TRD-1079");
+  assert.strictEqual(t.status, "Awaiting price");
+  assert.strictEqual(t.pending, false);
+  assert.strictEqual(t.price, null);
+  assert.strictEqual(t.value, null);
+  assert.strictEqual(t.power, "1,000 MW");
+  assert.strictEqual(t.volume, "768,00 MWh");
+  assert.strictEqual(t.events.length, 1, "only the submission event");
+  assert.strictEqual(t.linked, true, "linked trades are distinguishable from seeded ones");
+
+  // Priced and live: pending, with a countdown the portal's banner can render.
+  var priced = pricedFixture();
+  var pt = Link.toCustomerTrade(priced, T0);
+  assert.strictEqual(pt.status, "Offer received");
+  assert.strictEqual(pt.pending, true, "a live offer is pending, driving the firm-offer banner");
+  assert.strictEqual(pt.statusTone, "warning");
+  assert.strictEqual(pt.secondsRemaining, 1800);
+  assert.strictEqual(pt.secondsTotal, 1800);
+  assert.strictEqual(pt.price, "€ 94,7500");
+  assert.strictEqual(pt.value, "€ " + Link.formatNL(94.75 * 768, 2));
+  assert.strictEqual(pt.events.length, 2, "submission + offer published");
+  assert.strictEqual(pt.events[1].title, "Offer published");
+  assert.ok(pt.facts.some(function (f) { return f[0] === "Offered price"; }), "facts carry the offered price");
+
+  // Priced but expired: no longer pending, and says so on the timeline.
+  var ex = Link.toCustomerTrade(priced, "2026-08-11T10:31:00.000Z");
+  assert.strictEqual(ex.status, "Offer expired");
+  assert.strictEqual(ex.pending, false, "an expired offer must not keep counting down");
+  assert.strictEqual(ex.statusTone, "critical");
+  assert.strictEqual(ex.secondsRemaining, 0);
+  assert.strictEqual(ex.events.length, 3, "submission + offer + expiry");
+  assert.strictEqual(ex.events[2].title, "Offer expired");
+
+  // A note becomes the submission event's body.
+  var noted = Link.buildRequest({ ...WIZ, note: "Hedging Q1 growth." }, opts({ submittedAt: T0 }));
+  assert.ok(/Hedging Q1 growth\./.test(Link.toCustomerTrade(noted, T0).events[0].body));
+})();
+
+// --- formatStamp ------------------------------------------------------------
+(function () {
+  // Local-time formatting, so assert against a locally-constructed date rather
+  // than a fixed string (the suite must pass in any timezone).
+  var d = new Date(2026, 7, 11, 9, 5, 3);
+  assert.strictEqual(Link.formatStamp(d.toISOString()), "11 Aug 2026, 09:05:03");
+  assert.strictEqual(Link.formatStamp("not a date"), "not a date", "garbage passes through");
+})();
+
+// --- round trip through storage ---------------------------------------------
+(function () {
+  var s = fakeStorage();
+  var req = Link.buildRequest(WIZ, opts({ submittedAt: T0 }));
+  Link.publish(s, req);
+  assert.strictEqual(Link.read(s)[0].status, "Awaiting price");
+
+  // The desk prices it and re-publishes under the same id.
+  Link.publish(s, Link.priceRequest(Link.read(s)[0], { priceMwh: 94.75, now: T0 }));
+  var list = Link.read(s);
+  assert.strictEqual(list.length, 1, "pricing replaces rather than appending");
+  assert.strictEqual(list[0].status, "Offer received");
+  assertClose(list[0].offer.priceMwh, 94.75);
+  // ...and survives JSON serialisation intact.
+  assert.strictEqual(Link.toDeskCard(list[0], T0).column, "awaiting");
+  assert.strictEqual(Link.toCustomerTrade(list[0], T0).pending, true);
 })();
 
 console.log("portal-trade-link.test.js: all assertions passed");

@@ -1,12 +1,22 @@
 /*
- * Cross-portal trade-request link.
+ * Cross-portal trade link.
  *
- * Carries a trade request from the Customer Portal's trade wizard to the Back
- * Office Trade desk's "To price" queue. There is no backend in this POC, so
- * the transport is localStorage under a single versioned key, plus the
- * browser's own `storage` event for live cross-tab updates: submit a request
- * in one tab and it appears in a Back Office tab already open, with no reload
- * and no polling.
+ * Carries a trade both ways between the two portals:
+ *
+ *   Customer wizard  --request-->  Back Office "To price"
+ *   Back Office desk --offer---->  Customer Portal firm offer (with countdown)
+ *
+ * One record per trade holds the whole state, so there is a single source of
+ * truth rather than a request list and a separate offer list to reconcile:
+ *
+ *   status "Awaiting price"   -- submitted, not yet priced (To price queue)
+ *   status "Offer received"   -- priced, live countdown  (Awaiting customer)
+ *   status "Offer expired"    -- the reaction window elapsed
+ *
+ * There is no backend in this POC, so the transport is localStorage under a
+ * single versioned key, plus the browser's own `storage` event for live
+ * cross-tab updates: act in one tab and the other updates with no reload and
+ * no polling.
  *
  * Everything except read/write/subscribe is a pure function, so the request
  * shape and the volume/period maths are unit-testable in Node.
@@ -135,29 +145,199 @@
     return { type: type, period: row.period, start: row.start, end: row.end, base: row.base, peak: row.peak };
   }
 
+  // --- pricing (the Back Office -> Customer leg) -----------------------------
+
+  var STATUS_AWAITING_PRICE = "Awaiting price";
+  var STATUS_OFFER_RECEIVED = "Offer received";
+  var STATUS_OFFER_EXPIRED = "Offer expired";
+  var DEFAULT_REACTION_MINUTES = 30;
+
+  // Anything before this is not a plausible "now" for this app.
+  var MIN_PLAUSIBLE_MS = Date.UTC(2000, 0, 1);
+
+  /**
+   * Resolves an optional `now` to epoch ms, defaulting to the real clock.
+   *
+   * Small numbers are rejected rather than read as epoch-1970 timestamps:
+   * these functions are natural `map()` callbacks, and `list.map(toDeskCard)`
+   * would otherwise pass the array index as `now` and silently pin every
+   * countdown to 1970. Guarding here makes that mistake harmless everywhere
+   * instead of relying on each call site to wrap correctly.
+   */
+  function nowMs(now) {
+    if (now == null) { return Date.now(); }
+    var ms = now instanceof Date ? now.getTime() : new Date(now).getTime();
+    if (!isFinite(ms) || ms < MIN_PLAUSIBLE_MS) { return Date.now(); }
+    return ms;
+  }
+
+  /**
+   * Attaches a firm offer to a request. Pure: returns a new record, leaving
+   * the input untouched. Total value is derived from the request's own
+   * computed volume, so the two portals can never disagree about it.
+   */
+  function priceRequest(req, offer) {
+    offer = offer || {};
+    var priceMwh = Number(offer.priceMwh);
+    if (!isFinite(priceMwh) || priceMwh <= 0) { return null; }
+    var minutes = offer.reactionMinutes > 0 ? offer.reactionMinutes : DEFAULT_REACTION_MINUTES;
+    var pricedAtMs = nowMs(offer.now);
+    var out = {};
+    for (var k in req) { out[k] = req[k]; }
+    out.status = STATUS_OFFER_RECEIVED;
+    out.offer = {
+      priceMwh: priceMwh,
+      valueEur: priceMwh * req.volumeMwh,
+      reactionMinutes: minutes,
+      pricedBy: offer.pricedBy || "PeakPower Trading",
+      pricedAt: new Date(pricedAtMs).toISOString(),
+      expiresAt: new Date(pricedAtMs + minutes * 60000).toISOString()
+    };
+    return out;
+  }
+
+  /** Whole seconds left on an offer, floored at 0. */
+  function secondsRemaining(req, now) {
+    if (!req || !req.offer || !req.offer.expiresAt) { return 0; }
+    var left = Math.floor((new Date(req.offer.expiresAt).getTime() - nowMs(now)) / 1000);
+    return left > 0 ? left : 0;
+  }
+
+  function isPriced(req) { return !!(req && req.offer); }
+  function isExpired(req, now) { return isPriced(req) && secondsRemaining(req, now) <= 0; }
+
+  /** "mm:ss", or "hh:mm:ss" past an hour. */
+  function mmss(totalSeconds) {
+    var s = Math.max(0, Math.floor(totalSeconds));
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    var pad = function (n) { return n < 10 ? "0" + n : "" + n; };
+    return (h > 0 ? h + ":" + pad(m) : "" + pad(m)) + ":" + pad(sec);
+  }
+
+  /** The status a record should read as right now (offers expire on a clock). */
+  function effectiveStatus(req, now) {
+    if (!isPriced(req)) { return req && req.status ? req.status : STATUS_AWAITING_PRICE; }
+    return isExpired(req, now) ? STATUS_OFFER_EXPIRED : STATUS_OFFER_RECEIVED;
+  }
+
+  /** Desk countdown tone, matching the mockup's own thresholds. */
+  function countdownTone(seconds) {
+    if (seconds <= 5 * 60) { return "critical"; }
+    if (seconds <= 15 * 60) { return "warning"; }
+    return "neutral";
+  }
+
   /**
    * Request -> Back Office Trade desk card. The desk renders every queue from
    * this shape, so a live request is indistinguishable from a seeded one.
+   * An unpriced record sits in "To price"; a priced one moves to "Awaiting
+   * customer" with a live countdown, exactly like the seeded rows.
    */
-  function toDeskCard(req) {
+  function toDeskCard(req, now) {
     var deskPeriod = toDeskPeriod(req.period);
     var power = formatMw(req.powerMw);
-    return {
+    var base = {
       id: req.id,
-      column: "toPrice",
-      urgent: false,
-      tag: "new",
-      tagTone: "warning",
       customer: req.customer,
       shape: req.shape,
       period: deskPeriod,
       power: power,
-      valueLabel: formatMwh(req.volumeMwh),
       meta: req.shape + " · " + deskPeriod + " · " + power,
-      actionLabel: "open to price →",
       live: true,
       request: req
     };
+
+    if (!isPriced(req)) {
+      base.column = "toPrice";
+      base.urgent = false;
+      base.tag = "new";
+      base.tagTone = "warning";
+      base.valueLabel = formatMwh(req.volumeMwh);
+      base.actionLabel = "open to price →";
+      return base;
+    }
+
+    var left = secondsRemaining(req, now);
+    base.column = "awaiting";
+    base.urgent = left <= 5 * 60;
+    base.tag = left > 0 ? mmss(left) : "expired";
+    base.tagTone = left > 0 ? countdownTone(left) : "critical";
+    base.valueLabel = "€ " + formatNL(req.offer.valueEur, 0);
+    base.actionLabel = left > 0 ? "view offer →" : "offer expired";
+    return base;
+  }
+
+  /**
+   * Request -> the Customer Portal's own trade shape, so a linked trade renders
+   * through exactly the same list/detail/banner code as the seeded ones.
+   */
+  function toCustomerTrade(req, now) {
+    var power = formatMw(req.powerMw);
+    var volume = formatMwh(req.volumeMwh);
+    var status = effectiveStatus(req, now);
+    var priced = isPriced(req);
+    var left = priced ? secondsRemaining(req, now) : 0;
+    var pending = priced && left > 0;
+
+    var events = [{
+      title: "Request submitted",
+      actor: "J. de Vries · Energy Manager (you)",
+      ts: req.submittedAt ? formatStamp(req.submittedAt) : "just now",
+      body: req.note ? 'Comment: "' + req.note + '"'
+        : req.direction + " " + req.shape + " " + req.period + " · " + power +
+          " across " + req.connections.length + " connection" + (req.connections.length === 1 ? "" : "s") + ".",
+      tone: "submit"
+    }];
+    var facts = [["Reference", req.id], ["Requested by", "J. de Vries"], ["State", status],
+      ["Direction", req.direction], ["Shape", req.shape], ["Delivery period", req.period],
+      ["Total power", power], ["Total volume", volume]];
+
+    if (priced) {
+      var o = req.offer;
+      events.push({
+        title: "Offer published",
+        actor: o.pricedBy,
+        ts: formatStamp(o.pricedAt),
+        body: "Price € " + formatNL(o.priceMwh, 4) + "/MWh · total € " + formatNL(o.valueEur, 2) +
+          " · reaction window " + o.reactionMinutes + " minutes.",
+        tone: "indigo"
+      });
+      facts.push(["Offered price", "€ " + formatNL(o.priceMwh, 4) + " / MWh"]);
+      if (!pending) {
+        events.push({
+          title: "Offer expired",
+          actor: "PeakPower Trading",
+          ts: formatStamp(o.expiresAt),
+          body: "The reaction window closed before the offer was accepted.",
+          tone: "red"
+        });
+      }
+    }
+
+    return {
+      id: req.id, shape: req.shape, period: req.period, direction: req.direction,
+      power: power, volume: volume,
+      price: priced ? "€ " + formatNL(req.offer.priceMwh, 4) : null,
+      value: priced ? "€ " + formatNL(req.offer.valueEur, 2) : null,
+      status: status,
+      statusTone: pending ? "warning" : (priced ? "critical" : "info"),
+      pending: pending,
+      expiresAt: priced ? req.offer.expiresAt : null,
+      secondsRemaining: left,
+      secondsTotal: priced ? req.offer.reactionMinutes * 60 : 0,
+      events: events,
+      facts: facts,
+      linked: true
+    };
+  }
+
+  /** "12 Aug 2026, 09:14:00" — the portals' own timeline stamp format. */
+  function formatStamp(iso) {
+    var d = new Date(iso);
+    if (isNaN(d)) { return String(iso); }
+    var pad = function (n) { return n < 10 ? "0" + n : "" + n; };
+    return d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear() + ", " +
+      pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
   }
 
   // --- persistence ----------------------------------------------------------
@@ -185,12 +365,16 @@
     }
   }
 
-  /** Appends a request. Re-publishing the same id replaces the earlier copy. */
+  /**
+   * Appends a record. Re-publishing the same id replaces the earlier copy, so
+   * pricing an existing request updates it in place rather than duplicating.
+   * Returns the new list, or `false` if the write failed — callers rely on
+   * that to fall back when storage is unavailable.
+   */
   function publish(storage, req) {
     var list = read(storage).filter(function (r) { return r.id !== req.id; });
     list.push(req);
-    write(storage, list);
-    return list;
+    return write(storage, list) ? list : false;
   }
 
   function clear(storage) { return write(storage, []); }
@@ -220,7 +404,20 @@
     volumeMwh: volumeMwh,
     resolvePeriod: resolvePeriod,
     buildRequest: buildRequest,
+    STATUS_AWAITING_PRICE: STATUS_AWAITING_PRICE,
+    STATUS_OFFER_RECEIVED: STATUS_OFFER_RECEIVED,
+    STATUS_OFFER_EXPIRED: STATUS_OFFER_EXPIRED,
+    DEFAULT_REACTION_MINUTES: DEFAULT_REACTION_MINUTES,
+    priceRequest: priceRequest,
+    secondsRemaining: secondsRemaining,
+    isPriced: isPriced,
+    isExpired: isExpired,
+    effectiveStatus: effectiveStatus,
+    countdownTone: countdownTone,
+    mmss: mmss,
+    formatStamp: formatStamp,
     toDeskCard: toDeskCard,
+    toCustomerTrade: toCustomerTrade,
     read: read,
     write: write,
     publish: publish,

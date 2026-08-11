@@ -114,6 +114,17 @@
   .gt-head + .gt-row { border-top:none; }
   .gt-num { text-align:right; }
   .gt-sub { font-size:10px; color:var(--pp-text-faint); font-family:var(--font-mono); }
+  /* --- Pricing form ------------------------------------------------------ */
+  .price-form { display:flex; flex-direction:column; gap:14px; }
+  .price-form .pf-row { display:flex; flex-direction:column; gap:6px; }
+  .price-form .pf-label { font-size:10.5px; font-weight:600; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
+  .price-form .pf-input { border:1.5px solid var(--pp-teal-600); border-radius:var(--radius-md); padding:9px 12px; font-size:13px; font-weight:600; font-family:var(--font-mono); color:var(--pp-teal-700); background:#fff; width:100%; }
+  .price-form .pf-input:focus { outline:none; box-shadow:0 0 0 3px rgba(20,184,166,0.15); }
+  .price-form .pf-total { font-size:12px; color:var(--pp-text-body); background:var(--pp-surface-alt); border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:10px 12px; }
+  .price-form .pf-total strong { color:var(--pp-text-heading); font-size:13.5px; }
+  .price-form .pf-error { font-size:11.5px; color:var(--pp-red); min-height:14px; }
+  .price-form .pf-actions { display:flex; gap:10px; }
+
   .crumb-back { cursor:pointer; color:var(--pp-teal-600); font-weight:600; }
   .crumb-back:hover { text-decoration:underline; }
   .empty-note { font-size:12.5px; color:var(--pp-text-body); }
@@ -155,7 +166,8 @@
     view: "list",          // "list" | "detail"
     tradeId: null,
     requests: [],          // live requests published by the Customer Portal
-    flashIds: {}           // ids to pulse once, so a new arrival is noticeable
+    flashIds: {},          // ids to pulse once, so a new arrival is noticeable
+    expiredShown: {}       // ids already re-rendered at the moment of expiry
   };
 
   var deskBody = document.getElementById("desk-body");
@@ -179,8 +191,15 @@
       "</div>" + (action || "") + "</div>" + body + "</div>";
   }
 
-  /** All live requests as desk cards, newest-first handled by buildQueues. */
-  function liveCards() { return state.requests.map(Link.toDeskCard); }
+  /**
+   * All live requests as desk cards, newest-first handled by buildQueues.
+   * Note the explicit wrapper: passing `Link.toDeskCard` straight to map()
+   * would hand it the array index as its `now` argument, pinning every
+   * countdown to the epoch.
+   */
+  function liveCards() {
+    return state.requests.map(function (r) { return Link.toDeskCard(r); });
+  }
 
   function findCard(id) {
     var all = D.buildQueues(liveCards());
@@ -256,14 +275,22 @@
       return;
     }
 
+    var priced = Link.isPriced(req);
+    var left = Link.secondsRemaining(req);
     var facts = [
-      ["Reference", req.id], ["Customer", req.customer], ["State", req.status],
+      ["Reference", req.id], ["Customer", req.customer], ["State", Link.effectiveStatus(req)],
       ["Direction", req.direction], ["Shape", req.shape], ["Delivery period", req.period],
       ["Period start", req.periodStart], ["Period end", req.periodEnd],
       ["Total power", Link.formatMw(req.powerMw)], ["Total volume", Link.formatMwh(req.volumeMwh)],
       ["Indicative price", req.indicativePrice != null ? "€ " + Link.formatNL(req.indicativePrice, 2) + " / MWh" : "—"],
       ["Submitted", req.submittedAt ? new Date(req.submittedAt).toLocaleString("nl-NL") : "—"]
     ];
+    if (priced) {
+      facts.push(["Offered price", "€ " + Link.formatNL(req.offer.priceMwh, 4) + " / MWh"]);
+      facts.push(["Total value", "€ " + Link.formatNL(req.offer.valueEur, 2)]);
+      facts.push(["Priced by", req.offer.pricedBy]);
+      facts.push(["Expires", new Date(req.offer.expiresAt).toLocaleTimeString("nl-NL")]);
+    }
     var factsHtml = facts.map(function (f) {
       return '<div class="kv-row"><span class="k">' + esc(f[0]) + '</span><span class="v">' + esc(f[1]) + "</span></div>";
     }).join("");
@@ -281,15 +308,113 @@
         "<div>CONNECTION</div><div class=\"gt-num\">POWER</div><div class=\"gt-num\">VOLUME</div>" +
       "</div>" + rows + "</div>";
 
+    // The pricing form (unpriced) or the sent-offer summary (priced).
+    var pricePanel;
+    if (!priced) {
+      var indicative = req.indicativePrice != null ? Link.formatNL(req.indicativePrice, 2) : "";
+      pricePanel = cardHtml("Send a price", "The customer sees a firm offer with a countdown",
+        '<div class="price-form">' +
+          '<div class="pf-row">' +
+            '<label class="pf-label" for="price-input">Offer price (€ / MWh)</label>' +
+            '<input type="text" id="price-input" class="pf-input" value="' + esc(indicative) + '" inputmode="decimal" oninput="BO.onPriceInput()">' +
+          "</div>" +
+          '<div class="pf-row">' +
+            '<label class="pf-label" for="window-input">Reaction window (minutes)</label>' +
+            '<input type="number" id="window-input" class="pf-input" value="30" min="1" max="240" oninput="BO.onPriceInput()">' +
+          "</div>" +
+          '<div class="pf-total" id="price-total"></div>' +
+          '<div class="pf-error" id="price-error"></div>' +
+          '<div class="pf-actions"><button type="button" class="btn-primary" id="send-offer" onclick="BO.sendOffer()">Send offer</button></div>' +
+        "</div>");
+    } else {
+      pricePanel = cardHtml("Offer sent", req.offer.pricedBy + " · " + Link.formatStamp(req.offer.pricedAt),
+        '<div class="kv-row"><span class="k">Price</span><span class="v">€ ' + Link.formatNL(req.offer.priceMwh, 4) + " / MWh</span></div>" +
+        '<div class="kv-row"><span class="k">Total value</span><span class="v">€ ' + Link.formatNL(req.offer.valueEur, 2) + "</span></div>" +
+        '<div class="kv-row"><span class="k">Reaction window</span><span class="v">' + req.offer.reactionMinutes + " min</span></div>" +
+        '<div class="kv-row"><span class="k">' + (left > 0 ? "Expires in" : "Expired") + '</span>' +
+          '<span class="v mono" id="detail-countdown">' + (left > 0 ? Link.mmss(left) : "—") + "</span></div>");
+    }
+
+    var banner = !priced
+      ? '<div class="banner banner-teal">Live request received from the Customer Portal — awaiting a price from the desk.</div>'
+      : (left > 0
+          ? '<div class="banner banner-teal">Offer sent — the customer has <strong id="banner-countdown">' + Link.mmss(left) + "</strong> to respond.</div>"
+          : '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">The reaction window closed before the customer responded.</div></div>');
+
     deskBody.innerHTML =
-      '<div class="banner banner-teal">Live request received from the Customer Portal — awaiting a price from the desk.</div>' +
+      banner +
       '<div class="detail-grid">' +
         '<div class="detail-main">' +
           cardHtml("The request", req.direction + " " + req.shape + " · " + req.period, connTable) +
           (req.note ? cardHtml("Customer note", "", '<div class="empty-note">' + esc(req.note) + "</div>") : "") +
         "</div>" +
-        '<div class="detail-side">' + cardHtml("Request details", "", factsHtml) + "</div>" +
+        '<div class="detail-side">' + pricePanel + cardHtml("Request details", "", factsHtml) + "</div>" +
       "</div>";
+
+    if (!priced) { updatePriceTotal(); }
+  }
+
+  // --- pricing --------------------------------------------------------------
+
+  /** Parses an NL-or-plain decimal ("94,75" or "94.75") into a number. */
+  function parsePrice(raw) {
+    var s = String(raw == null ? "" : raw).trim().replace(/\s/g, "");
+    if (!s) { return NaN; }
+    // "1.234,56" -> "1234.56";  "94.75" -> "94.75"
+    if (s.indexOf(",") > -1) { s = s.replace(/\./g, "").replace(",", "."); }
+    return parseFloat(s);
+  }
+
+  function priceFormValues() {
+    var priceEl = document.getElementById("price-input");
+    var winEl = document.getElementById("window-input");
+    return {
+      price: parsePrice(priceEl && priceEl.value),
+      minutes: winEl ? parseInt(winEl.value, 10) : Link.DEFAULT_REACTION_MINUTES
+    };
+  }
+
+  /** Live total + validation as the desk types. */
+  function updatePriceTotal() {
+    var req = (findCard(state.tradeId) || {}).request;
+    if (!req) { return; }
+    var v = priceFormValues();
+    var totalEl = document.getElementById("price-total");
+    var errEl = document.getElementById("price-error");
+    var btn = document.getElementById("send-offer");
+    if (!totalEl || !btn) { return; }
+
+    var priceOk = isFinite(v.price) && v.price > 0;
+    var winOk = isFinite(v.minutes) && v.minutes >= 1 && v.minutes <= 240;
+    totalEl.innerHTML = priceOk
+      ? "Total value <strong>€ " + Link.formatNL(v.price * req.volumeMwh, 2) + "</strong> for " +
+        Link.formatMwh(req.volumeMwh)
+      : "Enter a price to see the total value.";
+    errEl.textContent = !priceOk && document.getElementById("price-input").value.trim()
+      ? "Enter a price greater than zero."
+      : (!winOk ? "Reaction window must be between 1 and 240 minutes." : "");
+    btn.disabled = !(priceOk && winOk);
+  }
+
+  function onPriceInput() { updatePriceTotal(); }
+
+  function sendOffer() {
+    var card = findCard(state.tradeId);
+    if (!card || !card.request) { return; }
+    var v = priceFormValues();
+    var priced = Link.priceRequest(card.request, {
+      priceMwh: v.price,
+      reactionMinutes: v.minutes,
+      pricedBy: BackOfficeDeskData.USER_LINE
+    });
+    if (!priced) { return updatePriceTotal(); }
+    try {
+      Link.publish(window.localStorage, priced);
+    } catch (e) {
+      console.warn("Offer not published to the Customer Portal:", e);
+    }
+    state.requests = Link.read(window.localStorage);
+    render();
   }
 
   function render() { return state.view === "detail" ? renderDetail() : renderList(); }
@@ -316,8 +441,43 @@
 
   window.BO = {
     openTrade: openTrade, backToList: backToList, clearRequests: clearRequests,
-    refresh: refresh, _state: state
+    refresh: refresh, sendOffer: sendOffer, onPriceInput: onPriceInput,
+    parsePrice: parsePrice, _state: state
   };
+
+  /**
+   * Ticks every live countdown once a second. Queue tags are re-rendered in
+   * place rather than re-rendering the list, so the desk doesn't flicker or
+   * lose a partly-typed price.
+   */
+  setInterval(function () {
+    if (!state.requests.some(Link.isPriced)) { return; }
+    if (state.view === "list") {
+      var cards = D.buildQueues(liveCards());
+      cards.forEach(function (q) {
+        q.trades.forEach(function (t) {
+          if (!t.live || !t.request || !Link.isPriced(t.request)) { return; }
+          var el = document.querySelector('[data-trade="' + t.id + '"] .dc-tag');
+          if (!el) { return; }
+          var tone = D.TAG_STYLE[t.tagTone] || D.TAG_STYLE.neutral;
+          el.textContent = t.tag;
+          el.style.background = tone.bg;
+          el.style.borderColor = tone.border;
+          el.style.color = tone.color;
+        });
+      });
+      return;
+    }
+    var req = (findCard(state.tradeId) || {}).request;
+    if (!req || !Link.isPriced(req)) { return; }
+    var left = Link.secondsRemaining(req);
+    var a = document.getElementById("detail-countdown");
+    var b = document.getElementById("banner-countdown");
+    if (a) { a.textContent = left > 0 ? Link.mmss(left) : "—"; }
+    if (b) { b.textContent = Link.mmss(left); }
+    // Re-render once at the moment of expiry so the banner/state flip over.
+    if (left === 0 && !state.expiredShown[req.id]) { state.expiredShown[req.id] = true; render(); }
+  }, 1000);
 
   // --- init -----------------------------------------------------------------
 

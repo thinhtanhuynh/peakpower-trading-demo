@@ -50,10 +50,12 @@
   /**
    * Merges live Customer Portal requests into the seeded desk columns.
    *
-   * `liveCards` are PortalTradeLink.toDeskCard() results. They go at the TOP of
-   * "To price" (newest request first) so a just-submitted trade is the first
-   * thing the desk sees. A live card whose id already exists in the seed data
-   * replaces it, so re-publishing can never double up a row.
+   * `liveCards` are PortalTradeLink.toDeskCard() results. Each one lands in
+   * whichever column it declares — "To price" while unpriced, "Awaiting
+   * customer" once the desk has priced it — and sits at the TOP of that
+   * column (newest first) so recent activity is the first thing the desk sees.
+   * A live card whose id already exists in the seed data replaces it, so
+   * re-publishing can never double up a row.
    */
   function buildQueues(liveCards, seed) {
     var live = (liveCards || []).slice().reverse(); // newest first
@@ -64,9 +66,7 @@
 
     return QUEUE_ORDER.map(function (key) {
       var seeded = base.filter(function (t) { return t.column === key; });
-      var trades = key === "toPrice"
-        ? live.filter(function (c) { return c.column === "toPrice"; }).concat(seeded)
-        : seeded;
+      var trades = live.filter(function (c) { return c.column === key; }).concat(seeded);
       return {
         key: key,
         title: QUEUE_META[key].title,

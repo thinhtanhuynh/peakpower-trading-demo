@@ -54,10 +54,10 @@ page through that server's URL.
 | `consumption-calc.js` | ~8 KB | Pure JS stat/formatting module used by the Consumption (Live Data) page (dual Node/browser module). Unit tested via `consumption-calc.test.js`. |
 | `consumption-data-loader.js` | ~6 KB | Pure JS module that groups the two source JSON files above into the page's `{sites, byDate, bySite, hedge}` shape, plus a `fetch()`-based loader that runs the whole thing client-side on page load (dual Node/browser module). Unit tested via `consumption-data-loader.test.js`. |
 | `portal-seed-data.js` | ~28 KB | Pure JS module (dual Node/browser) holding static seed/mock data ported from `Customer Portal - Preview.html` for the screens that have no live data source in this POC — Connections' descriptive metadata, Dashboard tiles/activity, Wallet ledger/top-ups (plus a `simulateTopup()` pure function), and Invoices. Not unit tested (no calculation logic, just data + one small formatter/simulator). |
-| `portal-trade-link.js` | ~7 KB | Pure JS module (dual Node/browser) carrying a submitted trade request from the Customer Portal to the Back Office Trade desk over `localStorage` — see "Cross-portal trade requests" below. Unit tested via `portal-trade-link.test.js`. |
+| `portal-trade-link.js` | ~16 KB | Pure JS module (dual Node/browser) carrying trades both ways between the Customer Portal and the Back Office Trade desk over `localStorage` — request out, priced offer back — see "Cross-portal trade requests" below. Unit tested via `portal-trade-link.test.js`. |
 | `back-office-desk-data.js` | ~6 KB | Pure JS module (dual Node/browser): the Back Office mockup's own seeded `TRADES`/`QUEUE_META` ported verbatim, plus `buildQueues()`, which merges live Customer Portal requests into the seeded columns. |
 | `Customer Portal - Consumption (Live Data).html` | ~108 KB | Standalone, hand-written multi-page portal (loads `consumption-calc.js`, `consumption-data-loader.js`, `portal-seed-data.js` and `portal-trade-link.js` via `<script src>`) with a working Dashboard/Connections/Consumption/Prices/Trading/Wallet/Invoices sidebar — see "Customer Portal (Live Data) page" below. Must be served over http(s), not opened via `file://`. |
-| `Back Office Portal - Trade Desk (Live Data).html` | ~19 KB | Functional stand-in for the Back Office mockup's **Trade desk** screen only (loads `portal-trade-link.js` and `back-office-desk-data.js`). Three-column To price / Awaiting customer / To confirm queues, with live Customer Portal requests merged into "To price" — see "Cross-portal trade requests" below. Also needs http(s). |
+| `Back Office Portal - Trade Desk (Live Data).html` | ~27 KB | Functional stand-in for the Back Office mockup's **Trade desk** screen only (loads `portal-trade-link.js` and `back-office-desk-data.js`). Three-column To price / Awaiting customer / To confirm queues, with live Customer Portal requests merged in and a pricing form that sends a firm offer back — see "Cross-portal trade requests" below. Also needs http(s). |
 | `PeakPowerTrading-CalculationSample.csv` | ~8 KB | Reference calculation sample (one day, 96 rows) the `consumption-calc.js` formulas (Usage Cost, Actual Usage, Base/Peak/Hedge Volume, Uncovered, Long, Short, Delta Cost, Hedge Cost, Total Cost) are validated against — see "Calculations" below. Negative numbers are written in accounting parentheses, e.g. `(70)`, and `-` means zero/absent. Its hedge blocks are unpriced, so its Hedge Cost column is 0 throughout and Total Cost equals Delta Cost. Not consumed by the page itself. |
 
 The two large usage/combined JSON files are over the 30 MB chat-upload
@@ -557,11 +557,26 @@ checked-in suite — re-run a similar script after changing the page shell
 if in doubt, since there's no automated regression coverage for the
 sidebar/page-switching logic itself.
 
-## Cross-portal trade requests
+## Cross-portal trade flow
 
-Submitting a trade in the Customer Portal's wizard makes it appear in the
-Back Office Trade desk's **To price** queue. This is the one flow that spans
-both portals.
+The one flow spanning both portals, in both directions:
+
+```
+Customer wizard  --request-->  Back Office "To price"
+Back Office desk --offer---->  Customer Portal firm offer (live countdown)
+```
+
+**One record per trade** holds the whole state, so there's a single source of
+truth rather than a request list and a separate offer list to reconcile:
+
+| `status` | meaning | desk queue | customer |
+|---|---|---|---|
+| `Awaiting price` | submitted, unpriced | To price | "Awaiting price" |
+| `Offer received` | priced, window open | Awaiting customer (mm:ss tag) | pending firm offer + countdown |
+| `Offer expired` | window elapsed | Awaiting customer ("expired") | "Offer expired" |
+
+`status` is stored, but **`effectiveStatus(req, now)` is what to render** — an
+offer expires on a clock, so the stored string goes stale on its own.
 
 **Transport.** There is no backend, so `portal-trade-link.js` writes requests
 to `localStorage` under `peakpower.tradeRequests.v1` (a JSON array, oldest
@@ -579,8 +594,40 @@ on anything unparseable and `write()` returns `false` rather than throwing,
 and the Customer Portal wraps its `publish()` in a try/catch. **A broken link
 must never break either portal's own flow.**
 
-**Direction.** One-way only: request → "To price". The desk does not price
-anything back yet, so the return legs (offer → accept → confirm) don't exist.
+**Direction.** Both legs are implemented. Not implemented: the customer
+*accepting* an offer (→ "To confirm" → executed) and any wallet reservation.
+
+**The return leg.** The desk's request detail has a price form (price €/MWh +
+reaction window, defaulting to the request's own indicative price and 30
+minutes) with a live total and validation; `sendOffer()` calls
+`priceRequest()` and re-publishes under the **same id**, so the record is
+updated in place. Total value is always derived from the request's own
+computed volume, so the two portals can't disagree about it.
+
+The Customer Portal calls `syncLinkedTrades()` on load, on `storage`, and on
+`focus`. It rebuilds `state.trades` from the seed plus everything on the
+link, with linked records winning on their own ids. `toCustomerTrade()`
+converts a record into the portal's *existing* trade shape (`pending`,
+`secondsRemaining`, events, facts), so a linked offer renders through the
+same firm-offer banner, countdown and timeline code as the seeded
+`TRD-1078` — no parallel rendering path. Rebuilding from the link on load
+also means a submitted trade and its offer **survive a page reload**, which
+the old in-memory-only `state.trades` could not.
+
+**Countdowns.** Linked trades recompute from the offer's absolute `expiresAt`
+each tick rather than decrementing a counter, so the two portals can't drift
+apart and a backgrounded tab doesn't lose time. The desk updates queue tags
+in place (not a full re-render) so it doesn't flicker or clobber a
+half-typed price. Tone thresholds match the mockup: ≤5 min critical,
+≤15 min warning, else neutral.
+
+**A footgun worth knowing:** `toDeskCard`/`toCustomerTrade`/`secondsRemaining`
+take an optional `now`, which makes them tempting `map()` callbacks — but
+`list.map(toDeskCard)` passes the **array index** as `now`. That shipped once
+and pinned every countdown to 1970 (tags read `496231:54:45`). `nowMs()` now
+rejects any value before 2000 and falls back to the real clock, so the
+mistake is harmless, and there's a regression test for it. Still prefer an
+explicit wrapper.
 
 **What flows.** `submitWizard()` previously hardcoded `"Q1 2027"` /
 `"1,000 MW"` (copying the mockup); it now publishes the wizard's *real*
@@ -596,12 +643,13 @@ formula independently reproduces the mockup's own hardcoded
 Ids continue the Customer Portal's `TRD-1079+` sequence, which cannot collide
 with the Back Office mockup's seeded `TRD-1049…1058`.
 
-**Desk rendering.** `PortalTradeLink.toDeskCard()` converts a request into
+**Desk rendering.** `PortalTradeLink.toDeskCard()` converts a record into
 exactly the card shape the mockup's queues use (including the short desk
 period label — `Q1 2027` → `Q1-27`), so a live request is structurally
-indistinguishable from a seeded one. `buildQueues()` puts live cards at the
-**top** of To price (newest first) and drops any seeded row whose id a live
-card reuses, so re-publishing can't double up. Live cards get a teal tint and
+indistinguishable from a seeded one. `buildQueues()` places each live card in
+**whichever column it declares** (To price while unpriced, Awaiting customer
+once priced), at the top of that column, and drops any seeded row whose id a
+live card reuses so re-publishing can't double up. Live cards get a teal tint and
 a one-shot pulse; seeded rows have no underlying payload, so opening one
 shows an explanatory note instead of a detail view.
 
