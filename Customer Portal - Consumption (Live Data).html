@@ -430,7 +430,9 @@
     </div>
   </div>
 </div>
+<!-- One tooltip per chart, so hovering either can show both at once. -->
 <div id="chart-tooltip" class="chart-tooltip"></div>
+<div id="cost-chart-tooltip" class="chart-tooltip"></div>
 
 <script src="consumption-calc.js"></script>
 <script src="consumption-data-loader.js"></script>
@@ -1674,6 +1676,7 @@
   }
 
   var tooltip = document.getElementById("chart-tooltip");
+  var costTooltip = document.getElementById("cost-chart-tooltip");
 
   function buildTooltipHtml(context, i) {
     var dateStr = resolveDate(context.dates, i);
@@ -1709,7 +1712,63 @@
     return html;
   }
 
+  // Every chart variant registers here (usage/cost × single-day/multi-day).
+  // Only two are ever live at once — render() nulls the geometry/context of
+  // the hidden variant, which is exactly the test for "is this chart active".
+  var CHARTS = [];
+
+  function chartTooltipFor(context) {
+    return context && context.kind === "cost" ? costTooltip : tooltip;
+  }
+
+  /** The charts currently on screen: both have a geometry and a context. */
+  function activeCharts() {
+    return CHARTS.filter(function (c) { return c.getGeom() && c.getContext(); });
+  }
+
+  /**
+   * Points every active chart at the same interval and shows both tooltips.
+   *
+   * The hovered chart's tooltip follows the cursor; the other is pinned to the
+   * same x but to its own chart's vertical position, so the two never overlap
+   * and each sits beside the data it describes.
+   */
+  function syncHover(sourceSvg, evt, index) {
+    activeCharts().forEach(function (c) {
+      var geom = c.getGeom(), context = c.getContext();
+      var i = Math.min(Math.max(index, 0), geom.n - 1);
+
+      var crosshair = c.svg.querySelector("#" + c.crosshairId);
+      if (crosshair) {
+        var cx = geom.padLeft + i * geom.spacing + geom.offset;
+        crosshair.setAttribute("x1", cx.toFixed(1));
+        crosshair.setAttribute("x2", cx.toFixed(1));
+        crosshair.setAttribute("visibility", "visible");
+      }
+
+      var tip = chartTooltipFor(context);
+      tip.innerHTML = buildTooltipHtml(context, i);
+      tip.style.left = (evt.clientX + 14) + "px";
+      tip.style.top = c.svg === sourceSvg
+        ? (evt.clientY - 14) + "px"
+        : (c.svg.getBoundingClientRect().top + 14) + "px";
+      tip.style.display = "block";
+      c.svg.setAttribute("data-hover-idx", String(i));
+    });
+  }
+
+  function clearHover() {
+    CHARTS.forEach(function (c) {
+      var crosshair = c.svg.querySelector("#" + c.crosshairId);
+      if (crosshair) { crosshair.setAttribute("visibility", "hidden"); }
+    });
+    tooltip.style.display = "none";
+    costTooltip.style.display = "none";
+  }
+
   function attachChartInteraction(svgEl, crosshairId, getGeom, getContext, onClickIndex) {
+    CHARTS.push({ svg: svgEl, crosshairId: crosshairId, getGeom: getGeom, getContext: getContext });
+
     svgEl.addEventListener("mousemove", function (evt) {
       var geom = getGeom();
       var context = getContext();
@@ -1718,28 +1777,14 @@
       pt.x = evt.clientX;
       pt.y = evt.clientY;
       var userPt = pt.matrixTransform(svgEl.getScreenCTM().inverse());
-      var mouseX = userPt.x;
-      var i = Math.round((mouseX - geom.padLeft - geom.offset) / geom.spacing);
+      var i = Math.round((userPt.x - geom.padLeft - geom.offset) / geom.spacing);
       if (i < 0) { i = 0; }
       if (i > geom.n - 1) { i = geom.n - 1; }
-      var crosshair = svgEl.querySelector("#" + crosshairId);
-      if (crosshair) {
-        var cx = geom.padLeft + i * geom.spacing + geom.offset;
-        crosshair.setAttribute("x1", cx.toFixed(1));
-        crosshair.setAttribute("x2", cx.toFixed(1));
-        crosshair.setAttribute("visibility", "visible");
-      }
-      tooltip.innerHTML = buildTooltipHtml(context, i);
-      tooltip.style.left = (evt.clientX + 14) + "px";
-      tooltip.style.top = (evt.clientY - 14) + "px";
-      tooltip.style.display = "block";
-      svgEl.setAttribute("data-hover-idx", String(i));
+      syncHover(svgEl, evt, i);
     });
-    svgEl.addEventListener("mouseleave", function () {
-      var crosshair = svgEl.querySelector("#" + crosshairId);
-      if (crosshair) { crosshair.setAttribute("visibility", "hidden"); }
-      tooltip.style.display = "none";
-    });
+    // Moving between the two charts re-enters immediately, so hiding on leave
+    // is safe: the next chart's mousemove restores both tooltips.
+    svgEl.addEventListener("mouseleave", clearHover);
     svgEl.addEventListener("click", function () {
       var i = parseInt(svgEl.getAttribute("data-hover-idx"), 10);
       if (!isNaN(i)) { onClickIndex(i); }
@@ -1906,8 +1951,15 @@
   var COST_BUY_FILL = "#ea580c";     // orange, matching Short
   var COST_SELL_FILL = "#0891b2";    // cyan, matching Long
 
-  /** Shared bar/line geometry for both cost charts. */
-  function costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, centred) {
+  /**
+   * Shared bar/line geometry for both cost charts.
+   *
+   * `anchorOffset` is where interval i's line point (and crosshair) sits
+   * relative to `padLeft + i*stepX`, and bars are centred on that anchor —
+   * which reproduces the two usage charts' differing conventions from one
+   * body: the day chart anchors at barW/2, the range chart at 0.
+   */
+  function costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, anchorOffset, lineWidth) {
     var minVal = 0, maxVal = 0, i;
     for (i = 0; i < n; i++) {
       minVal = Math.min(minVal, hedgeCost[i], totalCost[i]);
@@ -1919,29 +1971,30 @@
     var zeroY = yFor(0);
 
     var hedgeBars = "", deltaBars = "", totalPoints = "";
-    var w = Math.max(barW - (centred ? 1 : 0.5), centred ? 1 : 0.5);
+    var w = Math.max(barW - 1, 1);
     for (i = 0; i < n; i++) {
-      var x = padLeft + i * stepX;
+      var anchor = padLeft + i * stepX + anchorOffset;
+      var x = anchor - barW / 2;
       // Hedge cost: zero baseline up to hedgeCost.
       var yH = yFor(hedgeCost[i]);
       hedgeBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(zeroY, yH).toFixed(1) +
         '" width="' + w.toFixed(1) + '" height="' + Math.abs(zeroY - yH).toFixed(1) +
         '" fill="' + COST_HEDGE_FILL + '" opacity="0.35"></rect>';
-      // Delta cost: continues from the hedge segment to the total.
+      // Delta cost: continues from the hedge segment to the total, so the top
+      // of the stack is Total Cost.
       var yT = yFor(totalCost[i]);
       var buy = deltaCost[i] >= 0;
       deltaBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yH, yT).toFixed(1) +
         '" width="' + w.toFixed(1) + '" height="' + Math.abs(yH - yT).toFixed(1) +
         '" fill="' + (buy ? COST_BUY_FILL : COST_SELL_FILL) + '" opacity="' + (buy ? "0.55" : "0.3") + '"></rect>';
-      totalPoints += (x + (centred ? barW / 2 : 0)).toFixed(1) + "," + yT.toFixed(1) + " ";
+      totalPoints += anchor.toFixed(1) + "," + yT.toFixed(1) + " ";
     }
     return {
       zeroY: zeroY,
       markup: '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
         '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
         hedgeBars + deltaBars +
-        '<polyline points="' + totalPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="' +
-        (centred ? 2 : 1.5) + '"></polyline>'
+        '<polyline points="' + totalPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="' + lineWidth + '"></polyline>'
     };
   }
 
@@ -1953,7 +2006,7 @@
     var width = 960, height = 260, padLeft = 40, padBottom = 24, padTop = 10;
     var plotW = width - padLeft - 10, plotH = height - padTop - padBottom;
     var barW = plotW / n;
-    var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, barW, barW, true);
+    var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, barW, barW, barW / 2, 2);
 
     var axisLabels = "";
     for (var i = 0; i < n; i++) {
@@ -1972,13 +2025,18 @@
   var costMonthChart = document.getElementById("cost-month-chart");
 
   function buildMonthCostChartSvg(dates, times, hedgeCost, deltaCost, totalCost) {
+    // Geometry MUST match buildMonthChartSvg exactly: the two range charts sit
+    // one above the other and share a synced crosshair, so any difference in
+    // width or per-interval spacing would visibly misalign them.
     var n = times.length;
+    var pxPerInterval = 4;
+    var width = Math.max(960, n * pxPerInterval);
     var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
-    var stepX = 3;
-    var plotW = Math.max(n * stepX, 900);
-    var width = padLeft + plotW + 10;
+    var plotW = width - padLeft - 10;
     var plotH = height - padTop - padBottom;
-    var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, stepX, false);
+    var stepX = n > 1 ? plotW / (n - 1) : 0;
+    var barW = n > 1 ? stepX : plotW;
+    var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, 0, 1.5);
 
     var dayGridlines = "", dayLabels = "", prevDate = null;
     for (var i = 0; i < n; i++) {
@@ -2044,6 +2102,9 @@
       return;
     }
     clearHighlightedRow();
+    // Drop any hover state from the previous view: the hidden chart variant
+    // keeps its old markup, so a stale crosshair would otherwise linger.
+    clearHover();
     var siteId = siteSelect.value;
     var site = DATA.sites.filter(function (s) { return s.id === siteId; })[0];
     var hedgeBlocks = DATA.hedge && DATA.hedge[siteId];

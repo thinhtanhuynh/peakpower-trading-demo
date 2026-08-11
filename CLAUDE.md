@@ -496,10 +496,32 @@ version (`#cost-chart`, time-of-day labels) and a scrollable multi-day one
 with its own crosshair ids and geometry. `costChartBody()` holds the shared
 bar/line maths so the two only differ in sizing and axis labels.
 
-**Hover vs. click:** hovering either chart shows a tooltip plus a crosshair —
-it no longer scrolls the table. **Each tooltip covers only what its own chart
-plots**, selected by `context.kind` (`"cost"` vs. anything else); the full set
-of columns stays available in the table below.
+**Hover vs. click:** hovering **either** chart points **both** at the same
+interval — both crosshairs move together and **both tooltips show at once**,
+so one hover answers "what happened here, and what did it cost". Every chart
+variant registers itself in `CHARTS`; `syncHover()` computes the index from
+the hovered chart's geometry and then applies it to every *active* chart.
+"Active" is simply having a non-null geometry **and** context — `render()`
+nulls those on the hidden variant, so no separate visibility test is needed.
+`clearHover()` runs on mouseleave and at the top of `render()`, since the
+hidden variant keeps its old markup and would otherwise strand a crosshair.
+
+There are two tooltip elements (`#chart-tooltip`, `#cost-chart-tooltip`) so
+both can be visible simultaneously. The hovered chart's tooltip follows the
+cursor; the other is pinned to the same x but to its own chart's vertical
+position, so they never overlap.
+
+**The two range charts must keep identical geometry** (`pxPerInterval = 4`,
+same `width`/`plotW`/`stepX`/`barW` derivation) — they sit one above the other
+and share a synced crosshair, so any difference visibly misaligns them. That
+was wrong when the cost chart was first added (it used its own `stepX = 3`)
+and the crosshairs landed at different x. `costChartBody()`'s `anchorOffset`
+parameter is what lets one body serve both the day chart (anchor `barW/2`)
+and the range chart (anchor `0`), matching the usage charts' conventions.
+
+**Each tooltip covers only what its own chart plots**, selected by
+`context.kind` (`"cost"` vs. anything else); the full set of columns stays
+available in the table below.
 
 | Usage chart | Source | Notes |
 |---|---|---|
