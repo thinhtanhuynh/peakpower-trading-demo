@@ -482,13 +482,35 @@ the y-axis is bipolar (a proper zero baseline, not always at the bottom) to
 correctly show intervals where Actual Usage goes negative.
 
 **Cost chart (second chart):** a second chart over the *same* intervals
-plotting money rather than volume, in its own card below the usage chart. Each
-interval is a stacked bar: **Hedge Cost** from the zero baseline (indigo, 35%),
-then **Delta Cost** continuing from the top of that segment to the total —
-orange (55%) when it's positive (volume **bought** at day-ahead), cyan (30%)
-when negative (surplus hedge **sold**). Because the segments stack, the top of
-the bar *is* Total Cost, which the solid teal line then traces. Delta Cost can
-be negative, so the y-axis is bipolar like the usage chart's.
+plotting money rather than volume, in its own card below the usage chart. It
+uses the **same visual grammar** as the usage chart, deliberately:
+
+| | usage chart | cost chart |
+|---|---|---|
+| solid teal line | Actual Usage | **Total Cost** |
+| dashed indigo line | Hedge Volume | **Hedge Cost** |
+| bars spanning the gap | Uncovered (orange short / cyan long) | **Delta Cost** (orange buy / cyan sell) |
+
+That parallel is exact rather than decorative: `Total = Hedge + Delta`, so the
+vertical gap between the two lines **is** Delta Cost, just as the gap between
+actual usage and hedge volume is the uncovered volume. Someone who has learned
+to read one chart can read the other. Delta Cost can be negative, so the
+y-axis is bipolar like the usage chart's.
+
+There is deliberately **no fill down to zero** here. The usage chart's yellow
+"covered" band marks a real quantity (`MIN(usage, hedge)`); the cost analogue
+`MIN(hedgeCost, totalCost)` is not a meaningful figure, so drawing it would
+spend a colour on nothing. Every mark on this chart means something.
+
+Buy/Sell is encoded by **colour *and* by which side of the hedge line the bar
+sits on**, and named in the tooltip — so the orange/cyan pair is never the
+only cue (it's the weakest pair under tritanopia, ΔE 5.9).
+
+`barWidthFor(pitch)` is shared by all four chart builders: a 2px surface gap
+between touching bars, tapering to a quarter of the pitch on dense multi-day
+ranges where a fixed 2px would leave a sliver. Shared so the two charts' bars
+stay aligned under the synced crosshair — **don't** hardcode a width in one
+builder.
 
 It mirrors the usage chart's structure exactly: a fixed-width single-day
 version (`#cost-chart`, time-of-day labels) and a scrollable multi-day one

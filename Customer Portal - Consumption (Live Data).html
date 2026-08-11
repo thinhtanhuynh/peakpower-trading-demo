@@ -392,10 +392,10 @@
             <svg id="cost-month-chart" viewBox="0 0 960 260" height="260" style="display:block"></svg>
           </div>
           <div class="legend">
-            <div><span class="swatch" style="background:var(--pp-indigo);opacity:.35"></span>Hedge cost — locked-in block price</div>
+            <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Total cost</div>
+            <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed var(--pp-indigo)"></span>Hedge cost</div>
             <div><span class="swatch" style="background:var(--pp-orange);opacity:.55"></span>Buy — uncovered volume at day-ahead</div>
             <div><span class="swatch" style="background:var(--pp-cyan);opacity:.3"></span>Sell — surplus hedge at day-ahead</div>
-            <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Total cost</div>
           </div>
         </div>
         <div class="card">
@@ -1604,6 +1604,20 @@
 
   var lastChartGeom = null;
 
+  /**
+   * Drawn bar width for a given slot pitch.
+   *
+   * The design guidance is a 2px gap in the surface colour between touching
+   * bars (never a stroke around them). At a wide pitch that is exactly 2px; on
+   * a dense multi-day range the pitch can be ~4px, where a fixed 2px gap would
+   * leave a 2px sliver, so the gap tapers to a quarter of the pitch. All four
+   * charts share this so their bars stay aligned under the synced crosshair.
+   */
+  function barWidthFor(pitch) {
+    var gap = pitch >= 8 ? 2 : Math.max(pitch * 0.25, 0.5);
+    return Math.max(pitch - gap, 0.5);
+  }
+
   function buildChartSvg(times, actualUsage, hedgeVolume, uncovered) {
     var n = times.length;
     var width = 960, height = 260, padLeft = 40, padBottom = 24, padTop = 10;
@@ -1633,10 +1647,10 @@
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      coveredBars += '<rect x="' + barX.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + Math.max(barW - 1, 1).toFixed(1) +
+      coveredBars += '<rect x="' + barX.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
         '" height="' + covH.toFixed(1) + '" fill="#facc15" opacity="0.2"></rect>';
 
-      bars += '<rect x="' + barX.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + Math.max(barW - 1, 1).toFixed(1) +
+      bars += '<rect x="' + barX.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
         '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
     }
     var netPoints = "", hedgePoints = "";
@@ -1898,10 +1912,10 @@
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      coveredBars += '<rect x="' + barX.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + Math.max(barW - 0.5, 0.5).toFixed(1) +
+      coveredBars += '<rect x="' + barX.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
         '" height="' + covH.toFixed(1) + '" fill="#facc15" opacity="0.2"></rect>';
 
-      bars += '<rect x="' + barX.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + Math.max(barW - 0.5, 0.5).toFixed(1) +
+      bars += '<rect x="' + barX.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
         '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
     }
 
@@ -1941,13 +1955,26 @@
   attachChartInteraction(monthChart, "month-chart-crosshair", function () { return lastMonthChartGeom; }, function () { return lastMonthContext; }, highlightTableRow);
 
   // --- Cost chart -----------------------------------------------------------
-  // A second chart over the same intervals, showing money rather than volume:
-  // a stacked bar of Hedge Cost (from zero) plus Delta Cost (from the top of
-  // the hedge segment), so the top of the stack *is* Total Cost — which the
-  // teal line then traces. Delta Cost can be negative (surplus hedge sold), so
-  // the y-axis is bipolar, like the volume chart's.
+  // A second chart over the same intervals, showing money rather than volume,
+  // and deliberately using the SAME visual grammar as the usage chart above it:
+  //
+  //   usage chart:  solid teal = Actual Usage   dashed indigo = Hedge Volume
+  //                 bars span the gap = Uncovered  (orange short / cyan long)
+  //   cost chart:   solid teal = Total Cost     dashed indigo = Hedge Cost
+  //                 bars span the gap = Delta Cost (orange buy / cyan sell)
+  //
+  // That parallel is exact rather than decorative: Total = Hedge + Delta, so
+  // the vertical gap between the two lines *is* Delta Cost, just as the gap
+  // between actual usage and hedge volume is the uncovered volume. A reader
+  // who has learned one chart can read the other.
+  //
+  // Delta Cost can be negative (surplus hedge sold), so the y-axis is bipolar.
+  // There is deliberately no fill down to zero here: the usage chart's yellow
+  // "covered" band marks a real quantity, whereas MIN(hedge, total) is not a
+  // meaningful figure — every mark on this chart means something.
 
-  var COST_HEDGE_FILL = "#4f46e5";   // indigo, matching the hedge-volume line
+  var COST_HEDGE_LINE = "#4f46e5";   // indigo, matching the hedge-volume line
+  var COST_TOTAL_LINE = "#0f766e";   // teal, matching the actual-usage line
   var COST_BUY_FILL = "#ea580c";     // orange, matching Short
   var COST_SELL_FILL = "#0891b2";    // cyan, matching Long
 
@@ -1970,31 +1997,34 @@
     function yFor(v) { return padTop + (maxVal - v) / range * plotH; }
     var zeroY = yFor(0);
 
-    var hedgeBars = "", deltaBars = "", totalPoints = "";
-    var w = Math.max(barW - 1, 1);
+    var deltaBars = "", totalPoints = "", hedgePoints = "";
+    // Same bar geometry as the usage chart's, so the two align pixel-for-pixel
+    // under the shared crosshair.
+    var w = barWidthFor(barW);
     for (i = 0; i < n; i++) {
       var anchor = padLeft + i * stepX + anchorOffset;
       var x = anchor - barW / 2;
-      // Hedge cost: zero baseline up to hedgeCost.
       var yH = yFor(hedgeCost[i]);
-      hedgeBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(zeroY, yH).toFixed(1) +
-        '" width="' + w.toFixed(1) + '" height="' + Math.abs(zeroY - yH).toFixed(1) +
-        '" fill="' + COST_HEDGE_FILL + '" opacity="0.35"></rect>';
-      // Delta cost: continues from the hedge segment to the total, so the top
-      // of the stack is Total Cost.
       var yT = yFor(totalCost[i]);
+      // Delta cost spans the gap between the two lines; its sign is encoded by
+      // colour AND by which side of the hedge line it sits on, so the
+      // orange/cyan pair is never the only cue.
       var buy = deltaCost[i] >= 0;
       deltaBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yH, yT).toFixed(1) +
         '" width="' + w.toFixed(1) + '" height="' + Math.abs(yH - yT).toFixed(1) +
         '" fill="' + (buy ? COST_BUY_FILL : COST_SELL_FILL) + '" opacity="' + (buy ? "0.55" : "0.3") + '"></rect>';
+      hedgePoints += anchor.toFixed(1) + "," + yH.toFixed(1) + " ";
       totalPoints += anchor.toFixed(1) + "," + yT.toFixed(1) + " ";
     }
     return {
       zeroY: zeroY,
       markup: '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
         '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
-        hedgeBars + deltaBars +
-        '<polyline points="' + totalPoints.trim() + '" fill="none" stroke="#0f766e" stroke-width="' + lineWidth + '"></polyline>'
+        deltaBars +
+        '<polyline points="' + totalPoints.trim() + '" fill="none" stroke="' + COST_TOTAL_LINE +
+        '" stroke-width="' + lineWidth + '" stroke-linejoin="round" stroke-linecap="round"></polyline>' +
+        '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="' + COST_HEDGE_LINE +
+        '" stroke-width="' + lineWidth + '" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"></polyline>'
     };
   }
 
