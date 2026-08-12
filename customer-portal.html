@@ -491,8 +491,21 @@
     return '<div class="card">' + head + bodyHtml + '</div>';
   }
 
+  /**
+   * HTML-escape. This page builds its markup by string concatenation, so
+   * anything that can carry user-entered text MUST go through here before it
+   * reaches innerHTML. The trading wizard's free-text note is the live case:
+   * it is stored raw on the cross-portal link (storage keeps the real value)
+   * and escaped here at render, which is also what the Back Office page does.
+   */
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
   function badge(text, tone) {
-    return '<span class="badge ' + (tone || "neutral") + '">' + text + '</span>';
+    return '<span class="badge ' + (tone || "neutral") + '">' + esc(text) + '</span>';
   }
 
   // ------------------------- State machine (ported from the mockup) -----
@@ -1242,11 +1255,13 @@
     var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>TRADE</div><div>SHAPE</div><div>PERIOD</div>' +
       '<div>DIRECTION</div><div class="gt-cell-num">POWER</div><div class="gt-cell-num">VALUE</div><div>STATUS</div></div>';
     var rows = state.trades.map(function (t) {
-      return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openTrade(\'' + t.id + '\')">' +
-        '<div class="gt-mono" style="color:var(--pp-indigo)">' + t.id + '</div>' +
-        '<div>' + t.shape + '</div><div>' + t.period + '</div><div>' + t.direction + '</div>' +
-        '<div class="gt-cell-num">' + t.power + '</div>' +
-        '<div class="gt-cell-num">' + (t.value || "—") + '</div>' +
+      // Linked trades come off the cross-portal link, so every field is treated
+      // as untrusted here, not just the free-text ones.
+      return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openTrade(\'' + esc(t.id) + '\')">' +
+        '<div class="gt-mono" style="color:var(--pp-indigo)">' + esc(t.id) + '</div>' +
+        '<div>' + esc(t.shape) + '</div><div>' + esc(t.period) + '</div><div>' + esc(t.direction) + '</div>' +
+        '<div class="gt-cell-num">' + esc(t.power) + '</div>' +
+        '<div class="gt-cell-num">' + esc(t.value || "—") + '</div>' +
         '<div>' + badge(t.status, t.statusTone) + '</div></div>';
     }).join("");
     document.getElementById("trading-body").innerHTML = '<div class="grid-table">' + head + '<div class="gt-scroll">' + rows + '</div></div>';
@@ -1259,15 +1274,15 @@
     var offerHtml = "";
     if (t.pending) {
       offerHtml = '<div class="offer-banner">' +
-        '<div class="ob-eyebrow">Firm offer — respond before ' + t.expiresLabel + '</div>' +
-        '<div class="ob-price">' + t.price + ' <span>/ MWh</span></div>' +
-        '<div class="ob-sub">' + t.volume + ' · total ' + t.value + ' · VAT excluded</div>' +
+        '<div class="ob-eyebrow">Firm offer — respond before ' + esc(t.expiresLabel) + '</div>' +
+        '<div class="ob-price">' + esc(t.price) + ' <span>/ MWh</span></div>' +
+        '<div class="ob-sub">' + esc(t.volume) + ' · total ' + esc(t.value) + ' · VAT excluded</div>' +
         '<div class="ob-actions">' +
         // Linked trades carry a real offer on the Back Office link, so Accept
         // and Reject act on it. The seeded demo trade keeps the mockup's stub.
         (t.linked
-          ? '<button type="button" class="btn-accept" onclick="PP.acceptOffer(\'' + t.id + '\')">Accept</button>' +
-            '<button type="button" class="btn-reject" onclick="PP.rejectOffer(\'' + t.id + '\')">Reject</button>'
+          ? '<button type="button" class="btn-accept" onclick="PP.acceptOffer(\'' + esc(t.id) + '\')">Accept</button>' +
+            '<button type="button" class="btn-reject" onclick="PP.rejectOffer(\'' + esc(t.id) + '\')">Reject</button>'
           : '<button type="button" class="btn-accept" onclick="PP.noop()">Accept</button>' +
             '<button type="button" class="btn-reject" onclick="PP.noop()">Reject</button>') +
         '<button type="button" class="btn-ghost" onclick="PP.noop()">Ask a question</button>' +
@@ -1275,25 +1290,27 @@
         '</div></div>';
     }
 
+    // Escaped at the sink rather than where the note is built: a linked trade's
+    // events come off the cross-portal link, so treat every field as untrusted.
     var timelineHtml = t.events.map(function (e) {
       var color = PortalSeedData.TONE_COLOR[e.tone] || "#94a3b8";
       return '<div class="timeline-item"><div class="timeline-dot" style="background:' + color + '"></div>' +
-        '<div style="flex:1"><div class="timeline-title">' + e.title + '</div>' +
-        '<div class="timeline-actor">' + e.actor + '</div>' +
-        '<div class="timeline-ts">' + e.ts + '</div>' +
-        '<div class="timeline-body">' + e.body + '</div></div></div>';
+        '<div style="flex:1"><div class="timeline-title">' + esc(e.title) + '</div>' +
+        '<div class="timeline-actor">' + esc(e.actor) + '</div>' +
+        '<div class="timeline-ts">' + esc(e.ts) + '</div>' +
+        '<div class="timeline-body">' + esc(e.body) + '</div></div></div>';
     }).join("");
     var historyCard = cardHtml("History", "The same timeline PeakPower sees", '<div class="timeline">' + timelineHtml + '</div>');
 
     var factsHtml = t.facts.map(function (f) {
-      return '<div class="kv-row"><span class="k">' + f[0] + '</span><span class="v">' + f[1] + '</span></div>';
-    }).join("") + (t.value ? '<div class="kv-row"><span class="k">Total value</span><span class="v">' + t.value + '</span></div>' : "");
+      return '<div class="kv-row"><span class="k">' + esc(f[0]) + '</span><span class="v">' + esc(f[1]) + '</span></div>';
+    }).join("") + (t.value ? '<div class="kv-row"><span class="k">Total value</span><span class="v">' + esc(t.value) + '</span></div>' : "");
     var tradeCard = cardHtml("Trade", "", factsHtml);
 
     var linkedCard = "";
     if (t.linked && t.linked.length) {
       var linkedHtml = t.linked.map(function (l) {
-        return '<div class="linked-tile"><div class="lt-label">' + l.label + '</div><div class="lt-value">' + l.value + '</div><div class="lt-note">' + l.note + '</div></div>';
+        return '<div class="linked-tile"><div class="lt-label">' + esc(l.label) + '</div><div class="lt-value">' + esc(l.value) + '</div><div class="lt-note">' + esc(l.note) + '</div></div>';
       }).join("");
       linkedCard = cardHtml("Linked records", "", linkedHtml);
     }
@@ -1465,7 +1482,9 @@
     var noteBox = '<div id="wizard-volume-note" class="banner ' + (invalid ? "banner-amber" : "banner-teal") + '" style="margin-top:8px">' +
       (invalid ? VOLUME_HINT : wizardAllocationNote()) + '</div>';
     var noteField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Note (optional)</div>' +
-      '<textarea onchange="PP.onWizardNoteChange(this.value)">' + (state.wizard.note || "") + '</textarea></div>';
+      // Unescaped, a note containing "</textarea>" closes the element early and
+      // everything after it is parsed as markup.
+      '<textarea onchange="PP.onWizardNoteChange(this.value)">' + esc(state.wizard.note || "") + '</textarea></div>';
     var disabled = (invalid || !wizardFundsSufficient()) ? " disabled" : "";
     var actions = '<div class="wizard-actions"><button type="button" id="wizard-continue" class="btn-primary"' + disabled + ' onclick="PP.wizardGoStep2()">Continue to review</button>' +
       '<button type="button" class="btn-secondary" onclick="PP.wizardGoStep0()">Back</button></div>';
@@ -1492,7 +1511,7 @@
   function buildWizardReviewBody(period, totalMW, hours, priceVal, estimatedValue) {
     var rows = wizardSummaryRows(period, totalMW, hours);
     var rowsHtml = rows.map(function (r) { return '<div class="kv-row"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>'; }).join("");
-    var noteHtml = state.wizard.note ? '<div class="banner banner-teal" style="margin-top:10px">Note: "' + state.wizard.note + '"</div>' : "";
+    var noteHtml = state.wizard.note ? '<div class="banner banner-teal" style="margin-top:10px">Note: "' + esc(state.wizard.note) + '"</div>' : "";
     return rowsHtml +
       '<div class="kv-row"><span class="k">Estimated value</span><span class="v">€ ' + ConsumptionCalc.formatNL(estimatedValue, 2) + '</span></div>' +
       noteHtml +

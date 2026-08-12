@@ -26,12 +26,19 @@ trading platform. The folder currently holds three things:
    Prices/Trading/Wallet/Invoices sections in one page (no iframe, no
    separate HTML files) — see "Customer Portal (Live Data) page" below for
    how each section sources its data. There is **no build step and no
-   Python anywhere in this pipeline**: the page `fetch()`es
-   `epex_tariffs_usage_combined_15_min_interval.json` and
-   `hedge_blocks_2026.json` directly and does all grouping and calculation
-   client-side, every time it loads — editing either source JSON file (e.g.
-   adding a new hedge period) is picked up on the next page load with
-   nothing to regenerate. Running the test suites only needs Node.js.
+   Python anywhere in this pipeline**, and all calculation still happens
+   client-side on every load. One thing did change when the site was
+   published: the page used to `fetch()` the 75 MB
+   `epex_tariffs_usage_combined_15_min_interval.json` and group it in the
+   browser, which is fine locally but not over the public internet, so it
+   now fetches **`consumption_compact_2026.json`** — the same grouped
+   structure, pre-computed once (1.6 MB, ~420 KB gzipped). See
+   "Regenerating consumption_compact_2026.json" below: this is the one
+   artifact that must be rebuilt if the usage dataset changes.
+   `hedge_blocks_2026.json` is deliberately **not** pre-computed — it is
+   still fetched and grouped live, so editing a hedge period is still
+   picked up on the next page load with nothing to regenerate. Running the
+   test suites only needs Node.js.
 
 This folder is **Python-free by design** — there is no package.json either,
 just three JS modules loaded straight into the browser via `<script src>`.
@@ -56,9 +63,9 @@ page through that server's URL.
 | `portal-seed-data.js` | ~28 KB | Pure JS module (dual Node/browser) holding static seed/mock data ported from `Customer Portal - Preview.html` for the screens that have no live data source in this POC — Connections' descriptive metadata, Dashboard tiles/activity, Wallet ledger/top-ups (plus a `simulateTopup()` pure function), and Invoices. Not unit tested (no calculation logic, just data + one small formatter/simulator). |
 | `portal-trade-link.js` | ~16 KB | Pure JS module (dual Node/browser) carrying trades both ways between the Customer Portal and the Back Office Trade desk over `localStorage` — request out, priced offer back — see "Cross-portal trade requests" below. Unit tested via `portal-trade-link.test.js`. |
 | `back-office-desk-data.js` | ~6 KB | Pure JS module (dual Node/browser): the Back Office mockup's own seeded `TRADES`/`QUEUE_META` ported verbatim, plus `buildQueues()`, which merges live Customer Portal requests into the seeded columns. |
-| `Customer Portal - Consumption (Live Data).html` | ~108 KB | Standalone, hand-written multi-page portal (loads `consumption-calc.js`, `consumption-data-loader.js`, `portal-seed-data.js` and `portal-trade-link.js` via `<script src>`) with a working Dashboard/Connections/Consumption/Prices/Trading/Wallet/Invoices sidebar — see "Customer Portal (Live Data) page" below. Must be served over http(s), not opened via `file://`. |
+| `customer-portal.html` | ~108 KB | Standalone, hand-written multi-page portal (loads `consumption-calc.js`, `consumption-data-loader.js`, `portal-seed-data.js` and `portal-trade-link.js` via `<script src>`) with a working Dashboard/Connections/Consumption/Prices/Trading/Wallet/Invoices sidebar — see "Customer Portal (Live Data) page" below. Must be served over http(s), not opened via `file://`. |
 | `back-office-screens-data.js` | ~25 KB | Pure JS module (dual Node/browser): the Back Office mockup's own seeded data for **Home, Customers, Wallets, Invoicing and Data & feeds**, ported verbatim, plus the small `build*` helpers its `renderVals()` applies. `TAG_STYLE` is taken from `back-office-desk-data.js` rather than duplicated. |
-| `Back Office Portal - Trade Desk (Live Data).html` | ~82 KB | Functional stand-in for the **whole** Back Office mockup (loads `portal-trade-link.js`, `back-office-desk-data.js` and `back-office-screens-data.js`). Despite the filename, all six of the mockup's real screens are here — Home, Trade desk, Customers, Wallets, Invoicing and Data & feeds — with `Reference data` and `Audit` left as the mockup's own placeholder. Only the **Trade desk** is backed by live data (the cross-portal trade flow); the other five clone the mockup's static seeded screens. Also needs http(s). |
+| `back-office-portal.html` | ~82 KB | Functional stand-in for the **whole** Back Office mockup (loads `portal-trade-link.js`, `back-office-desk-data.js` and `back-office-screens-data.js`). Despite the filename, all six of the mockup's real screens are here — Home, Trade desk, Customers, Wallets, Invoicing and Data & feeds — with `Reference data` and `Audit` left as the mockup's own placeholder. Only the **Trade desk** is backed by live data (the cross-portal trade flow); the other five clone the mockup's static seeded screens. Also needs http(s). |
 | `PeakPowerTrading-CalculationSample.csv` | ~8 KB | Reference calculation sample (one day, 96 rows) the `consumption-calc.js` formulas (Usage Cost, Actual Usage, Base/Peak/Hedge Volume, Uncovered, Long, Short, Delta Cost, Hedge Cost, Total Cost) are validated against — see "Calculations" below. Negative numbers are written in accounting parentheses, e.g. `(70)`, and `-` means zero/absent. Its hedge blocks are unpriced, so its Hedge Cost column is 0 throughout and Total Cost equals Delta Cost. Not consumed by the page itself. |
 
 The two large usage/combined JSON files are over the 30 MB chat-upload
@@ -244,7 +251,7 @@ field shape and the volume conversion rules above. The gas connection
 
 ## Customer Portal (Live Data) page
 
-`Customer Portal - Consumption (Live Data).html` started as a standalone
+`customer-portal.html` started as a standalone
 companion to just the Customer Portal mockup's *Consumption* screen, but is
 now a full **native, functional rebuild of the whole Customer Portal
 mockup's navigation** — Dashboard, Connections, Consumption, Prices,
@@ -436,10 +443,12 @@ length is 96 every day except 2026-03-29 (the spring-forward DST day),
 which has 92. `hedge[id]` is a list of hedge blocks grouped straight from
 `hedge_blocks_2026.json` (kept generic — period start/end per block — so
 any mix of YEAR/QUARTER/MONTH hedge rows is picked up with no code
-change). Because nothing is pre-baked, editing either source JSON file
-(e.g. adding a new hedge period, or regenerating the usage dataset) takes
-effect the next time the page is loaded — there's no regeneration step to
-remember to run. The page shows a "Loading live data…" state (controls
+change). The **hedge** half is still grouped live in the browser, so
+adding a hedge period to `hedge_blocks_2026.json` takes effect on the next
+page load with nothing to regenerate. The **usage/tariff** half is not:
+`consumption_compact_2026.json` holds exactly this `{sites, byDate,
+bySite}` structure pre-computed, and must be rebuilt if the usage dataset
+changes (see below). The page shows a "Loading live data…" state (controls
 disabled) until both fetches resolve, and an inline error card if a fetch
 fails — most commonly because the page was opened via `file://` instead
 of a local http(s) server (see "What this is" above).
@@ -659,11 +668,36 @@ driving the export, so a new table column means adding one entry there
 (the `<thead>` markup is still separate — keep the two in sync). The
 button is disabled whenever the range is empty.
 
-**Running / testing:** there's nothing to regenerate. Serve this folder
+### Regenerating `consumption_compact_2026.json`
+
+This is the **one** pre-computed artifact in the repo, and it exists only
+because a public site cannot ask every visitor to download 75 MB. It is
+not a build step in the usual sense — it is the output of the repo's own
+already-tested `ConsumptionDataLoader.buildCompactDataset()`, run once
+offline instead of in every browser, so what ships is provably what the
+page would have computed itself.
+
+Rebuild it **only** if `epex_tariffs_usage_combined_15_min_interval.json`
+changes, with a one-off Node script that is *not* checked in (same
+ephemeral-script convention as the EAN/usage generation above):
+
+```js
+const fs = require("fs"), L = require("./consumption-data-loader.js");
+const raw = JSON.parse(fs.readFileSync("epex_tariffs_usage_combined_15_min_interval.json", "utf8"));
+fs.writeFileSync("consumption_compact_2026.json", JSON.stringify(L.buildCompactDataset(raw)));
+```
+
+Do not hand-write or hand-edit the artifact, and do not reimplement the
+grouping — calling the module is what keeps it honest. To verify a rebuild,
+assert `JSON.stringify(buildCompactDataset(raw))` equals the file's
+contents. Current figures: 217 days × 6 sites, 1.56 MB raw / ~419 KB
+gzipped, down from 75.2 MB / 1.9 MB gzipped.
+
+**Running / testing:** serve this folder
 over http(s) (e.g. `npx http-server .` or `npx serve .`) and open the page
 through that server's URL — opening the HTML file directly via `file://`
 will fail to load data, since browsers block `fetch()` of local files that
-way. The same applies to `Back Office Portal - Trade Desk (Live Data).html`,
+way. The same applies to `back-office-portal.html`,
 which shares `localStorage` with the Customer Portal and so must be served
 from the **same origin** — open both through one server to see the trade-request
 flow work.

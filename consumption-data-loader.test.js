@@ -147,4 +147,32 @@ function makeHedgeRow(ean, shape, periodStart, periodEnd, powerKw, priceKwh) {
   assert.strictEqual(dataset.hedge.venlo.length, 0);
 })();
 
+// attachHedge: merges a hedge section onto an already-pre-grouped dataset
+// (the shape consumption_compact_2026.json ships as) -- this is the merge
+// step loadConsumptionData() performs after its two fetches resolve, pulled
+// out here so it's covered without needing a fetch/browser environment.
+(function () {
+  var precomputedDataset = {
+    sites: Loader.SITE_META,
+    byDate: { "2026-01-01": { t: ["00:00"], p: [0.1] } },
+    bySite: { rot: { "2026-01-01": { c: [100.0], g: [0.0] } } }
+  };
+  var hedgeRows = [makeHedgeRow(ROT_EAN, "base", "2026-01-01", "2026-12-31", 1000.0, 0.07)];
+  var result = Loader.attachHedge(precomputedDataset, hedgeRows);
+  assert.strictEqual(result, precomputedDataset, "mutates and returns the same dataset object");
+  assert.strictEqual(result.hedge.rot.length, 1);
+  assert.strictEqual(result.hedge.venlo.length, 0);
+  // the pre-grouped parts are untouched
+  assert.deepStrictEqual(result.bySite.rot["2026-01-01"].c, [100.0]);
+})();
+
+// attachHedge: defaults siteMeta to Loader.SITE_META when omitted
+(function () {
+  var result = Loader.attachHedge({ byDate: {}, bySite: {} }, []);
+  assert.deepStrictEqual(
+    Object.keys(result.hedge).sort(),
+    Loader.SITE_META.map(function (m) { return m.id; }).sort()
+  );
+})();
+
 console.log("consumption-data-loader.test.js: all assertions passed");

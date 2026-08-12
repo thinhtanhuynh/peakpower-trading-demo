@@ -1,0 +1,47 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Exclude .git and superseded raw data files from the published artifact
+        # These stay in the git repo (and its history) since the whole repo is
+        # public; this only trims what gets served over HTTP by Pages. Nothing
+        # in customer-portal.html/back-office-portal.html fetches any of these
+        # (payload confirmed via grep) — the live pages fetch only
+        # consumption_compact_2026.json and hedge_blocks_2026.json.
+        run: |
+          rm -rf .git
+          rm -f "EPEX tariffs 15 min interval.csv"
+          rm -f epex_tariffs_15_min_interval.json
+          rm -f epex_usage_15_min_interval.json
+          rm -f epex_tariffs_usage_combined_15_min_interval.json
+          rm -f epex_tariffs_usage_combined_15_min_interval.json.gz
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
