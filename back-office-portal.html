@@ -177,6 +177,10 @@
   .crumb-back { cursor:pointer; color:var(--pp-teal-600); font-weight:600; }
   .crumb-back:hover { text-decoration:underline; }
   .empty-note { font-size:12.5px; color:var(--pp-text-body); }
+  /* Public-demo disclaimer, pinned below the page content. */
+  .demo-footer { margin-top:24px; padding-top:14px; border-top:1px solid var(--pp-border);
+                 font-size:11.5px; line-height:1.55; color:var(--pp-text-faint); }
+  .demo-footer b { color:var(--pp-text-body); font-weight:700; }
 </style>
 </head>
 <body>
@@ -198,6 +202,12 @@
     <div class="content">
       <div class="page active" id="page-desk">
         <div id="desk-body"></div>
+      </div>
+
+      <div class="demo-footer">
+        <b>Demo only.</b> All data on this site — customers, connections, trades,
+        prices, wallets — is synthetic test data generated for this proof of concept.
+        It does not represent real customers, accounts, or transactions.
       </div>
     </div>
   </div>

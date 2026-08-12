@@ -58,7 +58,10 @@
     font-size:12.5px; color:var(--pp-amber-text); line-height:1.55;
   }
   .note b { font-weight:700; }
-  .foot { margin-top:24px; font-size:11.5px; color:var(--pp-text-faint); line-height:1.6; }
+  .demo-note { margin-bottom:20px; background:var(--pp-amber-bg); border:1px solid var(--pp-amber-border);
+             color:var(--pp-amber-text); border-radius:10px; padding:14px 18px; font-size:12.5px; line-height:1.55; }
+.demo-note b { font-weight:700; }
+.foot { margin-top:24px; font-size:11.5px; color:var(--pp-text-faint); line-height:1.6; }
   .foot a { color:var(--pp-text-body); }
 </style>
 </head>
@@ -72,6 +75,12 @@
     trade desk. Everything runs client-side against static test data —
     there is no backend and no real customer or market data behind this demo.
   </p>
+
+  <div class="demo-note">
+    <b>Demo only.</b> All data on this site — customers, connections, trades, prices,
+    wallets — is synthetic test data generated for this proof of concept. It does not
+    represent real customers, accounts, or transactions.
+  </div>
 
   <div class="cards">
     <div class="card">
@@ -104,7 +113,7 @@
   <div class="foot">
     Demo / proof-of-concept only — synthetic test data throughout, no authentication,
     no real trades or funds. Data resets whenever this browser's local storage is cleared.
-    Source: <a href="https://github.com/htthinh1999/peakpower-trading-demo">github.com/htthinh1999/peakpower-trading-demo</a>
+    Source: <a href="https://github.com/thinhtanhuynh/peakpower-trading-demo">github.com/thinhtanhuynh/peakpower-trading-demo</a>
   </div>
 </div>
 </body>
