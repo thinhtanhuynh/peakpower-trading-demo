@@ -312,6 +312,24 @@ plus a single volume field:
   radio, and `setWizardConnection()` refuses them — the guard is in the handler,
   not only in the markup.
 
+**Entry points into the wizard.** Three, all landing on step 1:
+
+| From | Function | Preselects |
+|---|---|---|
+| Trading list "Request a trade" | `startWizard()` | Peak / next quarter, first eligible connection |
+| Prices card "Request a price →" | `startWizardFromPrice(shape, periodType)` | that card's shape & period type |
+| **Connection detail "Request a trade"** | `startWizardFromConnection(id)` | **that connection, locked** |
+
+The connection-detail button sits in the "Block positions on this connection"
+card's `actionHtml` slot, next to the active-block count. Since a block is
+traded against one connection and that connection is already decided by the
+time you're on its detail page, the wizard sets `state.wizard.lockedConn` and
+step 2 then renders **only that row** rather than offering a choice that was
+already made. Non-tradeable (`tilburg-gas`) and ineligible (`breda`) connections
+show a short reason instead of a button, and `startWizardFromConnection()`
+re-checks eligibility itself via `tradableConnection()` — the guard is in the
+handler, not only in the markup.
+
 **Why the volume field does not `renderApp()`:** it used to, and that was the
 bug where the field could not be typed into — a full re-render rebuilds the
 `<input>` mid-keystroke and steals focus. `setWizardVolume()` now patches only

@@ -99,7 +99,10 @@
   .card .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
   .card .card-title { font-size:13.5px; font-weight:700; color:var(--pp-text-heading); }
   .card .card-subtitle { font-size:11.5px; color:var(--pp-text-body); margin-bottom:14px; }
-  .card .card-action { font-size:11px; font-weight:600; color:var(--pp-teal-700); white-space:nowrap; cursor:pointer; }
+  .card .card-action { font-size:11px; font-weight:600; color:var(--pp-teal-700); white-space:nowrap; cursor:pointer;
+                       display:flex; align-items:center; gap:10px; }
+  /* A button in the action slot keeps its own cursor/typography, not the slot's. */
+  .card .card-action button { cursor:pointer; }
   .legend { display:flex; gap:22px; margin-top:10px; font-size:11px; color:var(--pp-text-body); flex-wrap:wrap; }
   .legend .swatch { width:12px; height:10px; display:inline-block; border-radius:2px; margin-right:6px; vertical-align:middle; }
   .table-wrap { max-height:420px; overflow:auto; border:1px solid var(--pp-border); border-radius:8px; }
@@ -592,6 +595,26 @@
     state.wizard = defaultWizard(shape, periodType, 0, 0);
     renderApp();
   }
+
+  /**
+   * "Request a trade" from a connection's detail page. Since a block is traded
+   * against exactly one connection, the connection is already decided here —
+   * so the wizard opens with it preselected and step 2's picker locked to it.
+   * Ineligible / non-tradeable connections are refused in the handler, not just
+   * hidden in the markup.
+   */
+  function tradableConnection(id) {
+    return PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return c.id === id && !c.notEligible; })[0] || null;
+  }
+  function startWizardFromConnection(id) {
+    if (!tradableConnection(id)) { return; }
+    state.page = "Trading"; activatePageDom("trading");
+    state.tradingView = "wizard"; state.wizardStep = 0;
+    state.wizard = defaultWizard("Base", "quarter", 0, 0);
+    state.wizard.connId = id;
+    state.wizard.lockedConn = true;
+    renderApp();
+  }
   function cancelWizard() { state.tradingView = "list"; state.wizardStep = 0; renderApp(); }
   function wizardGoStep0() { state.wizardStep = 0; renderApp(); }
   function wizardGoStep1() { state.wizardStep = 1; renderApp(); }
@@ -757,7 +780,8 @@
     goTo: goTo, goToConsumption: goToConsumption,
     openConnection: openConnection, closeConnection: closeConnection,
     openTrade: openTrade, backToTrades: backToTrades,
-    startWizard: startWizard, startWizardFromPrice: startWizardFromPrice, cancelWizard: cancelWizard,
+    startWizard: startWizard, startWizardFromPrice: startWizardFromPrice,
+    startWizardFromConnection: startWizardFromConnection, cancelWizard: cancelWizard,
     wizardGoStep0: wizardGoStep0, wizardGoStep1: wizardGoStep1, wizardGoStep2: wizardGoStep2,
     setDirIdx: setDirIdx, setShapeIdx: setShapeIdx, setPeriodType: setPeriodType,
     selectWizardBar: selectWizardBar, setHoverBar: setHoverBar, clearHoverBar: clearHoverBar,
@@ -1125,7 +1149,18 @@
     } else {
       blocksBodyHtml = '<div class="empty-state">No active block positions on this connection.</div>';
     }
-    var blocksCard = cardHtml("Block positions on this connection", "", blocksBodyHtml, ((c.blocks ? c.blocks.length : 0) + " active"));
+    // A block is traded against one connection, so the request can start right
+    // here with this connection already decided.
+    var tradable = !!tradableConnection(c.id);
+    var blocksAction = '<span>' + ((c.blocks ? c.blocks.length : 0) + " active") + '</span>' +
+      (tradable
+        ? '<button type="button" class="btn-primary btn-sm" onclick="PP.startWizardFromConnection(\'' + c.id + '\')">Request a trade</button>'
+        : '');
+    var blocksNote = tradable ? "" :
+      '<div class="caption" style="margin-top:10px">' +
+      (c.notTradeable ? "This connection is not tradeable." : "This connection is not eligible for new trade requests.") +
+      '</div>';
+    var blocksCard = cardHtml("Block positions on this connection", "", blocksBodyHtml + blocksNote, blocksAction);
 
     document.getElementById("connections-body").innerHTML =
       '<div style="display:grid;grid-template-columns:400px 1fr;gap:16px;align-items:start">' +
@@ -1393,7 +1428,13 @@
     var cols = "32px 2fr 1.3fr 1.2fr";
     var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div></div><div>CONNECTION</div>' +
       '<div class="gt-cell-num">AUG CONSUMPTION</div><div class="gt-cell-num">CURRENT COVER</div></div>';
-    var rows = PortalSeedData.WIZARD_CONNECTIONS.map(function (c) {
+    // Started from a connection's detail page: that connection IS the request,
+    // so show only it rather than offering a choice that was already made.
+    var locked = state.wizard.lockedConn;
+    var list = locked
+      ? PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return c.id === state.wizard.connId; })
+      : PortalSeedData.WIZARD_CONNECTIONS;
+    var rows = list.map(function (c) {
       var sel = c.id === state.wizard.connId;
       var pick = c.notEligible
         ? '<span class="gt-mono" style="color:var(--pp-text-faint)">—</span>'
@@ -1480,7 +1521,9 @@
         '<button type="button" class="btn-secondary" onclick="PP.cancelWizard()">Cancel</button></div>');
     } else if (state.wizardStep === 1) {
       bodyHtml = '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">' +
-        '<div>' + cardHtml("Connection & volume", "Pick the connection this block is traded for", buildWizardVolumeTable(totalMW)) + '</div>' +
+        '<div>' + cardHtml("Connection & volume",
+          state.wizard.lockedConn ? "Requested from this connection" : "Pick the connection this block is traded for",
+          buildWizardVolumeTable(totalMW)) + '</div>' +
         '<div>' + cardHtml("Summary", "", buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
         '</div>';
     } else {
