@@ -320,8 +320,11 @@ plus a single volume field:
 | Prices card "Request a price →" | `startWizardFromPrice(shape, periodType)` | that card's shape & period type |
 | **Connection detail "Request a trade"** | `startWizardFromConnection(id)` | **that connection, locked** |
 
-The connection-detail button sits in the "Block positions on this connection"
-card's `actionHtml` slot, next to the active-block count. Since a block is
+The connection-detail button sits **below** the "Block positions on this
+connection" table, in a `.card-foot-action` (16px margin, 14px padding, a
+top rule) — a request is a deliberate next step after reading the positions,
+not a header control, so the card's `actionHtml` slot keeps only the
+active-block count. Since a block is
 traded against one connection and that connection is already decided by the
 time you're on its detail page, the wizard sets `state.wizard.lockedConn` and
 step 2 then renders **only that row** rather than offering a choice that was

@@ -99,10 +99,9 @@
   .card .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
   .card .card-title { font-size:13.5px; font-weight:700; color:var(--pp-text-heading); }
   .card .card-subtitle { font-size:11.5px; color:var(--pp-text-body); margin-bottom:14px; }
-  .card .card-action { font-size:11px; font-weight:600; color:var(--pp-teal-700); white-space:nowrap; cursor:pointer;
-                       display:flex; align-items:center; gap:10px; }
-  /* A button in the action slot keeps its own cursor/typography, not the slot's. */
-  .card .card-action button { cursor:pointer; }
+  .card .card-action { font-size:11px; font-weight:600; color:var(--pp-teal-700); white-space:nowrap; cursor:pointer; }
+  /* A card's primary action, set off below its body rather than in the header. */
+  .card .card-foot-action { margin-top:16px; padding-top:14px; border-top:1px solid var(--pp-border); }
   .legend { display:flex; gap:22px; margin-top:10px; font-size:11px; color:var(--pp-text-body); flex-wrap:wrap; }
   .legend .swatch { width:12px; height:10px; display:inline-block; border-radius:2px; margin-right:6px; vertical-align:middle; }
   .table-wrap { max-height:420px; overflow:auto; border:1px solid var(--pp-border); border-radius:8px; }
@@ -1151,16 +1150,16 @@
     }
     // A block is traded against one connection, so the request can start right
     // here with this connection already decided.
+    // The action sits BELOW the table, on its own line — a request is a
+    // deliberate next step after reading the positions, not a header control.
     var tradable = !!tradableConnection(c.id);
-    var blocksAction = '<span>' + ((c.blocks ? c.blocks.length : 0) + " active") + '</span>' +
-      (tradable
-        ? '<button type="button" class="btn-primary btn-sm" onclick="PP.startWizardFromConnection(\'' + c.id + '\')">Request a trade</button>'
-        : '');
-    var blocksNote = tradable ? "" :
-      '<div class="caption" style="margin-top:10px">' +
-      (c.notTradeable ? "This connection is not tradeable." : "This connection is not eligible for new trade requests.") +
-      '</div>';
-    var blocksCard = cardHtml("Block positions on this connection", "", blocksBodyHtml + blocksNote, blocksAction);
+    var blocksFoot = tradable
+      ? '<div class="card-foot-action"><button type="button" class="btn-primary" onclick="PP.startWizardFromConnection(\'' + c.id + '\')">Request a trade</button></div>'
+      : '<div class="caption" style="margin-top:16px">' +
+        (c.notTradeable ? "This connection is not tradeable." : "This connection is not eligible for new trade requests.") +
+        '</div>';
+    var blocksCard = cardHtml("Block positions on this connection", "", blocksBodyHtml + blocksFoot,
+      ((c.blocks ? c.blocks.length : 0) + " active"));
 
     document.getElementById("connections-body").innerHTML =
       '<div style="display:grid;grid-template-columns:400px 1fr;gap:16px;align-items:start">' +
