@@ -918,7 +918,9 @@
       var conn = PortalSeedData.CONNECTIONS.filter(function (c) { return c.id === state.connId; })[0];
       title = conn ? conn.name : "Connections";
       setCrumb("EAN " + (conn ? conn.ean : ""), "Connections", "closeConnection");
-      actionsHtml = '<button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button>';
+      // No topbar "Request a trade" here: the mockup's version started a blank
+      // wizard, which would silently discard the connection you are looking at.
+      // The one below the block-positions table carries this connection through.
     } else if (page === "Connections") {
       setCrumb("6 electricity connections · 1 gas (not tradeable)");
       actionsHtml = '<button type="button" class="btn-secondary" onclick="PP.noop()">Export CSV</button>';
