@@ -273,7 +273,7 @@ functional fidelity to the mockup for these six screens):
 | **Connections** | `portal-seed-data.js` (`CONNECTIONS`) | **list** / **detail** (`state.connId`). List is a CSS-grid table with status badges and a coverage bar; detail shows editable-looking name/description fields, connection facts, a 14-day data-quality grid, and any block positions (each linking to its Trading detail). |
 | **Consumption** | Fully real, unchanged from before — see below | Single view, filtered by an arbitrary From/To date range with Day/Month/Quarter presets and CSV export (see "Scope" and "Date-range filter" below). |
 | **Prices** | `portal-seed-data.js` (`PRICES`) | Single view. Six indicative Base/Peak price cards (month/quarter/calendar-year) each with a "Request a price →" link that jumps straight into the Trading wizard (`startWizardFromPrice`), plus a synthetic 90-day trend chart. |
-| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`, `WIZARD_YEAR`) + in-memory `state.trades` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView`. Detail shows a dark firm-offer banner with a live mm:ss countdown for the one pending trade, a timeline of `events`, and `facts`/`linked` records. The 3-step wizard (product & period → volume per connection → review & submit) mirrors the mockup's flow, including its bar-chart period picker, a wallet-balance-sufficiency check gating step 2, and `submitWizard()` prepending a new `TRD-1079`-style row to the list — a real, working feature (not a stub), though it still hardcodes "Q1 2027" / "1,000 MW" for the submitted trade exactly like the mockup does. |
+| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`, `WIZARD_YEAR`) + in-memory `state.trades` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView`. Detail shows a dark firm-offer banner with a live mm:ss countdown for the one pending trade, a timeline of `events`, and `facts`/`linked` records. The 3-step wizard (product & period → **connection & volume** → review & submit) mirrors the mockup's flow, including its bar-chart period picker and a wallet-balance-sufficiency check gating step 2; `submitWizard()` publishes the wizard's real selections (see "Cross-portal trade flow") and prepends a new `TRD-1079`-style row. See "One block, one connection" below for how step 2 diverges from the mockup. |
 | **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `TOPUPS`, `BANK_DETAILS`) + in-memory `state.walletAvailable/Settled/Reserved` | **ledger** / **topup**, via `state.walletView`. Ledger is a stat-card row + full CSS-grid ledger table (trade/invoice references are clickable links into those screens' detail views). Top-up view has a working iDEAL amount input + preset chips + bank-transfer details; `performTopup()` mutates the in-memory balances and prepends a ledger + top-up-history row, matching the mockup's `performTopup()` transition — genuinely interactive, just not persisted across a page reload. |
 | **Invoices** | `portal-seed-data.js` (`INVOICES`) | **list** / **detail** (`state.invoiceId`). Detail shows stat cards, a provisional-data banner where applicable, and a full line-item CSS-grid table with a volume-check/reconciliation footer. Static, ported line-for-line from the mockup; no live invoice generation exists in this POC. |
 
@@ -293,6 +293,32 @@ The mockup uses **two table densities**, and the rebuild mirrors that with a
 Per-screen `grid-template-columns` are copied from the mockup verbatim (e.g.
 Wallet ledger `0.9fr 1fr 1.8fr 1fr 1fr 0.8fr 0.8fr 1fr`, invoice line items
 `0.3fr 2.6fr 1fr 1fr 1fr 1fr`) — don't "tidy" these into round numbers.
+
+### One block, one connection (trading wizard, step 2)
+
+A block is traded against **exactly one** EAN/connection, which is a deliberate
+divergence from the mockup (whose step 2 offers a volume field on every row and
+splits one request across connections). Step 2 is therefore a **radio picker**
+plus a single volume field:
+
+- `state.wizard` carries `connId` + `volumeMw` rather than a `volumes` map.
+  `PortalTradeLink.buildRequest()` still takes the map, so `wizardVolumes()`
+  derives a one-entry map at submit time — the link module needed no change,
+  and a published request simply has `connections.length === 1`.
+- Volume is a real `<input type="number">` with `min="0.1" step="0.1"`.
+  **Minimum 0,1 MW, in multiples of 0,1 MW**; `commitWizardVolume()` snaps to
+  that grid on blur, `wizardVolumeValid()` gates the Continue button.
+- Ineligible connections (`notEligible`, e.g. Breda's expiring contract) get no
+  radio, and `setWizardConnection()` refuses them — the guard is in the handler,
+  not only in the markup.
+
+**Why the volume field does not `renderApp()`:** it used to, and that was the
+bug where the field could not be typed into — a full re-render rebuilds the
+`<input>` mid-keystroke and steals focus. `setWizardVolume()` now patches only
+the derived readouts in place (`#wizard-total-line`, `#wizard-volume-note`,
+`#wizard-continue`) via `refreshWizardVolumeUi()` and leaves the input alone.
+Any new live-edit field on this page needs the same treatment; those three ids
+are what makes the targeted update possible, so keep them.
 
 ### Vertical spacing between sections — a footgun
 

@@ -278,7 +278,14 @@
   .balance-box .bb-row.total { font-weight:700; color:var(--pp-text-heading); border-top:1px solid var(--pp-border); margin-top:4px; padding-top:6px; }
   .fund-badge { display:inline-block; margin-top:8px; }
 
-  .wizard-vol-input { width:90px; text-align:right; }
+  .wizard-vol-input { width:130px; text-align:right; }
+  .field-group .fg-hint { font-size:10.5px; color:var(--pp-text-faint); margin-top:5px; }
+  /* Single-connection picker: the whole row is the click target for its radio. */
+  .gt-row.conn-pick { cursor:pointer; }
+  .gt-row.conn-pick:hover:not(.not-eligible) { background:var(--pp-surface-alt); }
+  .gt-row.conn-pick.selected { background:var(--pp-teal-100); box-shadow:inset 2px 0 0 var(--pp-teal-600); }
+  .gt-row.conn-pick.not-eligible { cursor:default; opacity:.55; }
+  .gt-row.conn-pick input[type=radio] { accent-color:var(--pp-teal-600); cursor:pointer; }
   .wizard-actions { display:flex; gap:10px; margin-top:16px; }
 
   /* Wallet */
@@ -488,6 +495,11 @@
 
   // ------------------------- State machine (ported from the mockup) -----
 
+  // A trade block's volume is requested in whole 0,1 MW steps, minimum 0,1 MW.
+  var MIN_VOLUME_MW = 0.1;
+  var VOLUME_STEP_MW = 0.1;
+  var VOLUME_HINT = "Volume must be at least 0,1 MW and a multiple of 0,1 MW.";
+
   var state = {
     page: "Dashboard", connId: null,
     tradingView: "list", tradeId: null, wizardStep: 0,
@@ -495,7 +507,7 @@
     walletAvailable: PortalSeedData.WALLET_AVAILABLE_BALANCE, walletSettled: 29122.00, walletReserved: 9400.00,
     walletLedgerExtra: [], topupsExtra: [], topupAmount: 12400,
     wizard: { direction: "Buy", shape: "Peak", periodType: "quarter", monthIdx: 0, quarterIdx: 1,
-              volumes: { rot: 0.200, venlo: 0.300, tilburg: 0.400, almere: 0.100 }, note: "" },
+              connId: "rot", volumeMw: 0.200, note: "" },
     invoiceId: null,
     trades: PortalSeedData.TRADES_SEED.slice(),
     nextSeq: 1079,
@@ -546,10 +558,26 @@
   }
   function backToTrades() { state.tradingView = "list"; state.tradeId = null; renderApp(); }
 
+  /**
+   * A block is traded against exactly ONE connection, so the wizard carries a
+   * single `connId` + `volumeMw` rather than a volume-per-connection map. The
+   * map shape PortalTradeLink.buildRequest() expects is derived on demand by
+   * wizardVolumes(), so the link module needs no change.
+   */
+  function firstEligibleConnection() {
+    var list = PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return !c.notEligible; });
+    return list.length ? list[0].id : null;
+  }
+  function wizardVolumes() {
+    var m = {};
+    if (state.wizard.connId) { m[state.wizard.connId] = state.wizard.volumeMw || 0; }
+    return m;
+  }
+
   function defaultWizard(shape, periodType, monthIdx, quarterIdx) {
     return {
       direction: "Buy", shape: shape, periodType: periodType, monthIdx: monthIdx, quarterIdx: quarterIdx,
-      volumes: { rot: 0.200, venlo: 0.300, tilburg: 0.400, almere: 0.100 }, note: ""
+      connId: firstEligibleConnection(), volumeMw: 0.200, note: ""
     };
   }
 
@@ -578,10 +606,51 @@
   }
   function setHoverBar(type, i) { state.hoverBar = type + ":" + i; renderApp(); }
   function clearHoverBar() { state.hoverBar = null; renderApp(); }
-  function setWizardVolume(id, raw) {
-    var n = parseFloat(String(raw).replace(",", "."));
-    state.wizard.volumes[id] = isNaN(n) ? 0 : n;
+  function setWizardConnection(id) {
+    var c = PortalSeedData.WIZARD_CONNECTIONS.filter(function (x) { return x.id === id; })[0];
+    if (!c || c.notEligible) { return; }
+    state.wizard.connId = id;
     renderApp();
+  }
+
+  /**
+   * Live volume edit. Deliberately does NOT renderApp() — a full re-render
+   * rebuilds the <input> and steals focus mid-keystroke, which is exactly why
+   * the old field could not be typed into. Only the derived readouts (total
+   * line, banner, Continue button) are patched in place; the input is left
+   * alone until it loses focus.
+   */
+  function setWizardVolume(raw) {
+    var n = parseFloat(String(raw).replace(",", "."));
+    state.wizard.volumeMw = isNaN(n) ? 0 : n;
+    refreshWizardVolumeUi();
+  }
+
+  /** On blur/enter: snap to the 0,1 MW grid and write the clean value back. */
+  function commitWizardVolume(el) {
+    var n = parseFloat(String(el.value).replace(",", "."));
+    if (isNaN(n) || n < MIN_VOLUME_MW) { n = MIN_VOLUME_MW; }
+    n = Math.round(n / VOLUME_STEP_MW) * VOLUME_STEP_MW;
+    state.wizard.volumeMw = Math.round(n * 1000) / 1000;
+    el.value = state.wizard.volumeMw.toFixed(1);
+    refreshWizardVolumeUi();
+  }
+
+  function refreshWizardVolumeUi() {
+    var totalMW = wizardTotalMW();
+    var invalid = !wizardVolumeValid();
+    var line = document.getElementById("wizard-total-line");
+    if (line) {
+      line.textContent = "Requested volume: " + ConsumptionCalc.formatNL(totalMW, 3) + " MW";
+      line.style.color = invalid ? "var(--pp-red)" : "var(--pp-teal-700)";
+    }
+    var note = document.getElementById("wizard-volume-note");
+    if (note) {
+      note.className = "banner " + (invalid ? "banner-amber" : "banner-teal");
+      note.textContent = invalid ? VOLUME_HINT : wizardAllocationNote();
+    }
+    var btn = document.getElementById("wizard-continue");
+    if (btn) { btn.disabled = invalid || !wizardFundsSufficient(); }
   }
   function onWizardNoteChange(val) { state.wizard.note = val; renderApp(); }
 
@@ -592,7 +661,13 @@
    */
   function submitWizard() {
     var id = "TRD-" + state.nextSeq;
-    var req = PortalTradeLink.buildRequest(state.wizard, {
+    // buildRequest() still takes a volume-per-connection map; a single-connection
+    // block is simply a map with one entry.
+    var wizardForRequest = {};
+    Object.keys(state.wizard).forEach(function (k) { wizardForRequest[k] = state.wizard[k]; });
+    wizardForRequest.volumes = wizardVolumes();
+
+    var req = PortalTradeLink.buildRequest(wizardForRequest, {
       id: id,
       customer: PortalSeedData.CUSTOMER_NAME,
       connections: PortalSeedData.WIZARD_CONNECTIONS,
@@ -603,11 +678,10 @@
 
     var power = PortalTradeLink.formatMw(req.powerMw);
     var volume = PortalTradeLink.formatMwh(req.volumeMwh);
-    var siteCount = req.connections.length;
+    var connName = req.connections.length ? req.connections[0].name : "—";
     var bodyText = req.note
       ? 'Comment: "' + req.note + '"'
-      : req.direction + " " + req.shape + " " + req.period + " · " + power +
-        " across " + siteCount + " connection" + (siteCount === 1 ? "" : "s") + ".";
+      : req.direction + " " + req.shape + " " + req.period + " · " + power + " for " + connName + ".";
 
     var trade = {
       id: id, shape: req.shape, period: req.period, direction: req.direction,
@@ -615,7 +689,7 @@
       price: null, value: null, status: "Awaiting price", statusTone: "info",
       events: [{ title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "just now", body: bodyText, tone: "submit" }],
       facts: [["Reference", id], ["Requested by", "J. de Vries"], ["State", "Awaiting price"], ["Direction", req.direction],
-        ["Shape", req.shape], ["Delivery period", req.period], ["Total power", power], ["Total volume", volume]]
+        ["Shape", req.shape], ["Delivery period", req.period], ["Connection", connName], ["Power", power], ["Volume", volume]]
     };
     // Hand off to the Back Office desk, then rebuild the list from the link so
     // this trade has exactly one source of truth. Storage may be unavailable
@@ -687,7 +761,8 @@
     wizardGoStep0: wizardGoStep0, wizardGoStep1: wizardGoStep1, wizardGoStep2: wizardGoStep2,
     setDirIdx: setDirIdx, setShapeIdx: setShapeIdx, setPeriodType: setPeriodType,
     selectWizardBar: selectWizardBar, setHoverBar: setHoverBar, clearHoverBar: clearHoverBar,
-    setWizardVolume: setWizardVolume, onWizardNoteChange: onWizardNoteChange, submitWizard: submitWizard,
+    setWizardConnection: setWizardConnection, setWizardVolume: setWizardVolume,
+    commitWizardVolume: commitWizardVolume, onWizardNoteChange: onWizardNoteChange, submitWizard: submitWizard,
     topUpWallet: topUpWallet, backToWallet: backToWallet,
     setTopupAmount: setTopupAmount, setTopupAmountValue: setTopupAmountValue, performTopup: performTopup,
     openInvoice: openInvoice, closeInvoice: closeInvoice,
@@ -1216,10 +1291,21 @@
     var idx = w.periodType === "month" ? w.monthIdx : w.quarterIdx;
     return list[idx] || list[0];
   }
-  function wizardTotalMW() {
-    var sum = 0;
-    Object.keys(state.wizard.volumes).forEach(function (k) { sum += (state.wizard.volumes[k] || 0); });
-    return sum;
+  function wizardTotalMW() { return state.wizard.volumeMw || 0; }
+
+  /** Valid iff a connection is picked and the volume is a ≥0,1 MW multiple of 0,1. */
+  function wizardVolumeValid() {
+    var v = state.wizard.volumeMw || 0;
+    if (!state.wizard.connId) { return false; }
+    if (v < MIN_VOLUME_MW) { return false; }
+    return Math.abs(v / VOLUME_STEP_MW - Math.round(v / VOLUME_STEP_MW)) < 1e-9;
+  }
+  function wizardConnection() {
+    return PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return c.id === state.wizard.connId; })[0] || null;
+  }
+  function wizardAllocationNote() {
+    var c = wizardConnection();
+    return "This block will be allocated to " + (c ? c.name : "the selected connection") + " once the trade is confirmed.";
   }
   function wizardHours(period) {
     if (state.wizard.shape === "Base") { return countDaysInRange(period.start, period.end) * 24; }
@@ -1227,7 +1313,9 @@
   }
   function wizardSummaryRows(period, totalMW, hours) {
     var w = state.wizard;
-    var rows = [["Direction", w.direction], ["Shape", w.shape], ["Delivery period", period.period]];
+    var conn = wizardConnection();
+    var rows = [["Direction", w.direction], ["Shape", w.shape], ["Delivery period", period.period],
+      ["Connection", conn ? conn.name : "—"]];
     if (w.shape === "Peak") {
       rows.push(["Peak days in period", String(countWeekdaysInRange(period.start, period.end))]);
       rows.push(["Peak hours", "Mon–Fri 08:00–20:00"]);
@@ -1235,8 +1323,8 @@
       rows.push(["Base days in period", String(countDaysInRange(period.start, period.end))]);
       rows.push(["Base hours", "00:00–24:00"]);
     }
-    rows.push(["Total power", ConsumptionCalc.formatNL(totalMW, 3) + " MW"]);
-    rows.push(["Total volume", ConsumptionCalc.formatNL(totalMW * hours, 2) + " MWh"]);
+    rows.push(["Power", ConsumptionCalc.formatNL(totalMW, 3) + " MW"]);
+    rows.push(["Volume", ConsumptionCalc.formatNL(totalMW * hours, 2) + " MWh"]);
     return rows;
   }
   function wizardFundsSufficient() {
@@ -1254,7 +1342,7 @@
   }
 
   function buildStepIndicator(step) {
-    var labels = ["Product & period", "Volume per connection", "Review & submit"];
+    var labels = ["Product & period", "Connection & volume", "Review & submit"];
     // Each step is its own flex:1 group (circle + label + trailing connector),
     // matching the mockup so the connectors distribute evenly.
     var html = '<div class="step-indicator">';
@@ -1296,34 +1384,51 @@
       '<div class="pr-meta">observed ' + period.observed + '</div></div>';
   }
 
+  /**
+   * One block, one connection: the table picks the single connection the block
+   * is traded for (radio), and the volume is entered once below it — rather
+   * than a volume field on every row.
+   */
   function buildWizardVolumeTable(totalMW) {
-    var cols = "2fr 1.3fr 1.2fr 1fr";
-    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>CONNECTION</div><div class="gt-cell-num">AUG CONSUMPTION</div>' +
-      '<div class="gt-cell-num">CURRENT COVER</div><div class="gt-cell-num">VOLUME (MW)</div></div>';
+    var cols = "32px 2fr 1.3fr 1.2fr";
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div></div><div>CONNECTION</div>' +
+      '<div class="gt-cell-num">AUG CONSUMPTION</div><div class="gt-cell-num">CURRENT COVER</div></div>';
     var rows = PortalSeedData.WIZARD_CONNECTIONS.map(function (c) {
-      var volCell = c.notEligible
-        ? '<span class="gt-mono" style="color:var(--pp-text-faint)">not eligible</span>'
-        : '<input type="text" class="wizard-vol-input" value="' + ConsumptionCalc.formatNL(state.wizard.volumes[c.id] || 0, 3) + '" onchange="PP.setWizardVolume(\'' + c.id + '\', this.value)">';
-      return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
-        '<div><div style="font-weight:600">' + c.name + '</div><div class="gt-cell-sub gt-mono">' + c.sub + '</div></div>' +
+      var sel = c.id === state.wizard.connId;
+      var pick = c.notEligible
+        ? '<span class="gt-mono" style="color:var(--pp-text-faint)">—</span>'
+        : '<input type="radio" name="wizard-conn" value="' + c.id + '"' + (sel ? " checked" : "") +
+          ' onchange="PP.setWizardConnection(\'' + c.id + '\')">';
+      var click = c.notEligible ? "" : ' onclick="PP.setWizardConnection(\'' + c.id + '\')"';
+      return '<div class="gt-row conn-pick' + (sel ? " selected" : "") + (c.notEligible ? " not-eligible" : "") +
+        '" style="grid-template-columns:' + cols + '"' + click + '>' +
+        '<div>' + pick + '</div>' +
+        '<div><div style="font-weight:600">' + c.name + '</div><div class="gt-cell-sub gt-mono">' + c.sub +
+          (c.notEligible ? " · not eligible" : "") + '</div></div>' +
         '<div class="gt-cell-num">' + c.consumption + '</div>' +
-        '<div class="gt-cell-num">' + c.cover + '</div>' +
-        '<div class="gt-cell-num">' + volCell + '</div></div>';
+        '<div class="gt-cell-num">' + c.cover + '</div></div>';
     }).join("");
     var table = '<div class="grid-table dense">' + head + rows + '</div>';
 
-    var belowMin = totalMW < 0.1;
-    var totalLine = '<div style="margin-top:10px;font-size:13px;font-weight:700;color:' + (belowMin ? "var(--pp-red)" : "var(--pp-teal-700)") + '">Requested total: ' + ConsumptionCalc.formatNL(totalMW, 3) + ' MW</div>';
-    var noteBox = belowMin
-      ? '<div class="banner banner-amber" style="margin-top:8px">Minimum requestable volume is 0,100 MW — increase one or more connections above.</div>'
-      : '<div class="banner banner-teal" style="margin-top:8px">This volume will be split across the connections above once the trade is confirmed.</div>';
+    var invalid = !wizardVolumeValid();
+    var volField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Volume (MW)</div>' +
+      '<input id="wizard-vol" type="number" class="wizard-vol-input" inputmode="decimal"' +
+      ' min="' + MIN_VOLUME_MW + '" step="' + VOLUME_STEP_MW + '"' +
+      ' value="' + (state.wizard.volumeMw || 0).toFixed(1) + '"' +
+      ' oninput="PP.setWizardVolume(this.value)" onchange="PP.commitWizardVolume(this)">' +
+      '<div class="fg-hint">Minimum 0,1 MW · steps of 0,1 MW</div></div>';
+
+    var totalLine = '<div id="wizard-total-line" style="margin-top:10px;font-size:13px;font-weight:700;color:' +
+      (invalid ? "var(--pp-red)" : "var(--pp-teal-700)") + '">Requested volume: ' + ConsumptionCalc.formatNL(totalMW, 3) + ' MW</div>';
+    var noteBox = '<div id="wizard-volume-note" class="banner ' + (invalid ? "banner-amber" : "banner-teal") + '" style="margin-top:8px">' +
+      (invalid ? VOLUME_HINT : wizardAllocationNote()) + '</div>';
     var noteField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Note (optional)</div>' +
       '<textarea onchange="PP.onWizardNoteChange(this.value)">' + (state.wizard.note || "") + '</textarea></div>';
-    var disabled = (belowMin || !wizardFundsSufficient()) ? " disabled" : "";
-    var actions = '<div class="wizard-actions"><button type="button" class="btn-primary"' + disabled + ' onclick="PP.wizardGoStep2()">Continue to review</button>' +
+    var disabled = (invalid || !wizardFundsSufficient()) ? " disabled" : "";
+    var actions = '<div class="wizard-actions"><button type="button" id="wizard-continue" class="btn-primary"' + disabled + ' onclick="PP.wizardGoStep2()">Continue to review</button>' +
       '<button type="button" class="btn-secondary" onclick="PP.wizardGoStep0()">Back</button></div>';
 
-    return table + totalLine + noteBox + noteField + actions;
+    return table + volField + totalLine + noteBox + noteField + actions;
   }
 
   function buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue) {
@@ -1375,7 +1480,7 @@
         '<button type="button" class="btn-secondary" onclick="PP.cancelWizard()">Cancel</button></div>');
     } else if (state.wizardStep === 1) {
       bodyHtml = '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">' +
-        '<div>' + cardHtml("Volume per connection", "", buildWizardVolumeTable(totalMW)) + '</div>' +
+        '<div>' + cardHtml("Connection & volume", "Pick the connection this block is traded for", buildWizardVolumeTable(totalMW)) + '</div>' +
         '<div>' + cardHtml("Summary", "", buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
         '</div>';
     } else {
