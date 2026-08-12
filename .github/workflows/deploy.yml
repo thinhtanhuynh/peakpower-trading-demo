@@ -38,6 +38,14 @@ jobs:
           rm -f epex_tariffs_usage_combined_15_min_interval.json.gz
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          # Turn Pages on if it is not already, instead of failing. Without
+          # this the action defaults to enablement:false and the very first
+          # run — the one the initial push triggers — dies with "Get Pages
+          # site failed ... Not Found", because Pages does not exist yet at
+          # that moment. That is a race every fresh clone of this repo would
+          # otherwise hit exactly once.
+          enablement: true
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
