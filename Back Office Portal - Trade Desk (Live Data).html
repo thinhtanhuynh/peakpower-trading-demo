@@ -44,7 +44,8 @@
   .topbar .crumb .crumb-back { color:var(--pp-text-heading); font-weight:600; cursor:pointer; }
   .topbar .crumb .crumb-back:hover { color:var(--pp-teal-700); }
   .topbar .title { font-size:var(--text-lg); font-weight:700; color:var(--pp-text-heading); margin-top:2px; }
-  .topbar-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  .topbar .subtitle { font-size:11px; color:var(--pp-text-body); }
+  .topbar-actions { display:flex; align-items:center; gap:10px; flex-shrink:0; }
   /* Badge — matches PeakPowerDesignSystem Badge.jsx exactly (11px/600,
      4px 12px, and every tone carries a real 1px border). */
   .badge { display:inline-block; padding:4px 12px; border-radius:var(--radius-pill); font-size:11px; font-weight:600; line-height:1.2; border:1px solid transparent; white-space:nowrap; }
@@ -58,28 +59,36 @@
      placeholder treatment, verbatim (it has an `isPlaceholder` screen for
      exactly this). The nav itself stays fully navigable, as in the mockup. */
   .placeholder { background:#fff; border:1px solid var(--pp-border); border-radius:10px; padding:48px 24px; text-align:center; color:var(--pp-text-body); font-size:13px; }
-  .placeholder strong { display:block; color:var(--pp-text-heading); font-size:14px; margin-bottom:6px; }
   .content { padding:28px; }
   .page { display:none; flex-direction:column; gap:16px; }
   .page.active { display:flex; animation:pp-fade-in .18s ease; }
   @keyframes pp-fade-in { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
-  /* This page renders everything into one #desk-body wrapper, so the wrapper
-     carries the section gap — .page has a single child (see CLAUDE.md).
-     The mockup spaces the queue list at 16px and the request detail at 20px. */
+  /* Every screen renders into one #desk-body wrapper, so the wrapper carries
+     the section gap — .page has a single child (see CLAUDE.md). Each of the
+     mockup's screens wraps itself in `padding:28px; flex-direction:column;
+     gap:N`; .content supplies the padding, and this supplies the gap. The
+     mockup uses 20px on Home and the trade detail, 16px everywhere else. */
   #desk-body { display:flex; flex-direction:column; gap:16px; }
-  #desk-body.detail { gap:20px; }
-  /* Card — matches PeakPowerDesignSystem Card.jsx (18px 20px, title 13.5,
-     subtitle 11.5 with margin-bottom 14 and no margin-top). */
+  #desk-body.gap-20 { gap:20px; }
+  /* Card — matches PeakPowerDesignSystem Card.jsx. Note the head's own
+     margin-bottom is 14px, dropping to 4px when a subtitle follows it (the
+     subtitle is a SIBLING of the head in the DS, not a child, and carries the
+     remaining 14px itself). */
   .card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:18px 20px; }
-  .card .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .card .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:14px; }
+  .card .card-head.has-subtitle { margin-bottom:4px; }
   .card .card-title { font-size:13.5px; font-weight:700; color:var(--pp-text-heading); }
   .card .card-subtitle { font-size:11.5px; color:var(--pp-text-body); margin-bottom:14px; }
-  /* StatCard — matches StatCard.jsx. */
+  /* StatCard — matches StatCard.jsx, including its amber `highlight` variant. */
   .stat-row { display:flex; gap:16px; flex-wrap:wrap; }
-  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; min-width:160px; flex:1; }
+  /* No flex-grow: StatCard.jsx sets only min-width, so the mockup's stat rows
+     size to content and pack left rather than stretching edge to edge. */
+  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; min-width:160px; }
+  .stat-card.highlight { background:var(--pp-amber-bg); border-color:var(--pp-amber-border); }
   .stat-card .label { font-size:11px; font-weight:600; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
   .stat-card .value { font-size:23px; font-weight:700; margin-top:8px; color:var(--pp-text-heading); }
   .stat-card .value.critical { color:var(--pp-orange); }
+  .stat-card .value.warning { color:var(--pp-amber); }
   .stat-card .value.success { color:var(--pp-green); }
   .stat-card .value.brand { color:var(--pp-teal-600); }
   .stat-card .sublabel { font-size:11px; color:var(--pp-text-faint); margin-top:6px; }
@@ -98,6 +107,19 @@
   .banner-teal { background:var(--pp-teal-100); border:1px solid var(--pp-teal-300); color:var(--pp-teal-900); }
   .banner-icon { width:22px; height:22px; border-radius:50%; background:var(--pp-amber); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
   .banner-body { flex:1; }
+  /* The DS Banner proper (Banner.jsx): 14px/18px padding, 14px gap, a coloured
+     22px dot, a 13/700 title and an 11.5px body. `.banner` above is this page's
+     own lighter one-line variant, kept as-is for the Trade desk. */
+  .ds-banner { display:flex; align-items:center; gap:14px; border-radius:var(--radius-lg); padding:14px 18px; }
+  .ds-banner .db-dot { width:22px; height:22px; min-width:22px; border-radius:50%; color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }
+  .ds-banner .db-title { font-size:13px; font-weight:700; }
+  .ds-banner .db-body { font-size:11.5px; margin-top:3px; }
+  .ds-banner.critical { background:var(--pp-red-bg); border:1px solid var(--pp-red-border); color:var(--pp-red-text); }
+  .ds-banner.critical .db-dot { background:var(--pp-red); }
+  .ds-banner.warning { background:var(--pp-amber-bg); border:1px solid var(--pp-amber-border); color:var(--pp-amber-text); }
+  .ds-banner.warning .db-dot { background:var(--pp-amber); }
+  .ds-banner.info { background:var(--pp-teal-100); border:1px solid var(--pp-teal-300); color:var(--pp-teal-700); }
+  .ds-banner.info .db-dot { background:var(--pp-teal-600); }
 
   /* --- Trade desk ------------------------------------------------------- */
   .desk-columns { display:flex; flex-wrap:wrap; gap:18px; align-items:flex-start; }
@@ -169,6 +191,7 @@
       <div>
         <div class="crumb" id="crumb"></div>
         <div class="title" id="page-title">Trade desk</div>
+        <div class="subtitle" id="page-subtitle"></div>
       </div>
       <div class="topbar-actions" id="topbar-actions"></div>
     </div>
@@ -182,12 +205,15 @@
 
 <script src="portal-trade-link.js"></script>
 <script src="back-office-desk-data.js"></script>
+<script src="back-office-screens-data.js"></script>
 <script>
 (function () {
   "use strict";
 
   var D = BackOfficeDeskData;
   var Link = PortalTradeLink;
+
+  var S = BackOfficeScreensData;
 
   var state = {
     page: "Trade desk",    // which nav entry is showing
@@ -196,12 +222,17 @@
     confirmedSeedIds: {},  // seeded To-confirm rows cleared on this page
     requests: [],          // live requests published by the Customer Portal
     flashIds: {},          // ids to pulse once, so a new arrival is noticeable
-    expiredShown: {}       // ids already re-rendered at the moment of expiry
+    expiredShown: {},      // ids already re-rendered at the moment of expiry
+    customerId: null,      // open customer on the Customers screen
+    commercialEditing: false,
+    commercialFields: S.COMMERCIAL_FIELDS.slice(),
+    commercialSnapshot: null   // pre-edit copy, so Cancel can actually cancel
   };
 
   var deskBody = document.getElementById("desk-body");
   var crumb = document.getElementById("crumb");
   var pageTitle = document.getElementById("page-title");
+  var pageSubtitle = document.getElementById("page-subtitle");
   var topbarActions = document.getElementById("topbar-actions");
 
   // --- helpers --------------------------------------------------------------
@@ -212,12 +243,66 @@
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function badge(text, tone) { return '<span class="badge ' + tone + '">' + esc(text) + "</span>"; }
+  /** The DS Card: head (title + action), then the subtitle as its sibling. */
   function cardHtml(title, subtitle, body, action) {
     return '<div class="card">' +
-      '<div class="card-head"><div>' +
-        '<div class="card-title">' + esc(title) + "</div>" +
-        (subtitle ? '<div class="card-subtitle">' + esc(subtitle) + "</div>" : "") +
-      "</div>" + (action || "") + "</div>" + body + "</div>";
+      '<div class="card-head' + (subtitle ? " has-subtitle" : "") + '">' +
+        '<div><div class="card-title">' + esc(title) + "</div></div>" + (action || "") +
+      "</div>" +
+      (subtitle ? '<div class="card-subtitle">' + esc(subtitle) + "</div>" : "") +
+      body + "</div>";
+  }
+
+  /** The DS StatCard. `tone` colours the value; `highlight` tints the card. */
+  function statCard(label, value, tone, sublabel, highlight) {
+    return '<div class="stat-card' + (highlight ? " highlight" : "") + '">' +
+      '<div class="label">' + esc(label) + "</div>" +
+      '<div class="value' + (tone && tone !== "default" ? " " + tone : "") + '">' + esc(value) + "</div>" +
+      (sublabel ? '<div class="sublabel">' + esc(sublabel) + "</div>" : "") +
+      "</div>";
+  }
+
+  /**
+   * A DS Card `action` slot that is just a label ("41 · showing 5", "last 24 h").
+   * The mockup passes a bare string, which Card.jsx drops into the head with no
+   * styling — so it inherits 16px next to a 13.5px title, plainly unintended.
+   * It gets the card subtitle's type here instead, consistently across screens.
+   */
+  function cardAction(text) {
+    return '<span style="font-size:11.5px;color:var(--pp-text-body)">' + esc(text) + "</span>";
+  }
+
+  /** The DS Banner (Banner.jsx), distinct from this page's lighter `.banner`. */
+  function dsBanner(tone, title, body, actionHtml) {
+    return '<div class="ds-banner ' + tone + '">' +
+      (title ? '<div class="db-dot">!</div>' : "") +
+      '<div style="flex:1">' +
+        (title ? '<div class="db-title">' + esc(title) + "</div>" : "") +
+        (body ? '<div class="db-body">' + esc(body) + "</div>" : "") +
+      "</div>" + (actionHtml || "") + "</div>";
+  }
+
+  function noop() {}
+
+  /**
+   * The topbar, driven by one chrome object per screen — the shape the mockup's
+   * own renderVals() computes (topTitle / topSubtitle / hasCrumb+backLabel+
+   * crumbRest / topActions). Crumb and subtitle are mutually exclusive in the
+   * mockup: a list screen has a subtitle, a detail screen has a crumb.
+   *
+   *   { title, subtitle, crumb: {backLabel, backFn, rest} | null,
+   *     actions: [{ label, variant, onClick }] }
+   */
+  function applyChrome(c) {
+    pageTitle.textContent = c.title || "";
+    pageSubtitle.textContent = c.subtitle || "";
+    crumb.innerHTML = c.crumb
+      ? '<span class="crumb-back" onclick="' + c.crumb.backFn + '">' + esc(c.crumb.backLabel) + "</span> › " + esc(c.crumb.rest)
+      : "";
+    topbarActions.innerHTML = (c.actions || []).map(function (a) {
+      return '<button type="button" class="btn-' + (a.variant === "primary" ? "primary" : "secondary") +
+        '" onclick="' + (a.onClick || "BO.noop()") + '">' + esc(a.label) + "</button>";
+    }).join("");
   }
 
   /**
@@ -251,7 +336,9 @@
     var tone = D.TAG_STYLE[t.tagTone] || D.TAG_STYLE.neutral;
     var cls = "desk-card" + (t.live ? " live" : (t.urgent ? " urgent" : "")) +
       (state.flashIds[t.id] ? " flash" : "");
-    return '<div class="' + cls + '" onclick="BO.openTrade(\'' + esc(t.id) + '\')">' +
+    // data-trade is what the once-a-second ticker finds to update this card's
+    // countdown tag in place; without it the tag freezes until a full re-render.
+    return '<div class="' + cls + '" data-trade="' + esc(t.id) + '" onclick="BO.openTrade(\'' + esc(t.id) + '\')">' +
       '<div class="dc-top">' +
         '<span class="dc-id">' + esc(t.id) + "</span>" +
         '<span class="dc-tag" style="background:' + tone.bg + ';border-color:' + tone.border + ';color:' + tone.color + '">' + esc(t.tag) + "</span>" +
@@ -287,11 +374,15 @@
       '<div class="desk-note">Offers under 5 minutes are highlighted. Expiry is decided server-side — ' +
       "an expired offer cannot be accepted even if a customer's screen still shows a timer.</div>";
 
-    crumb.textContent = "Trading · live queue";
-    pageTitle.textContent = "Trade desk";
-    topbarActions.innerHTML = state.requests.length
-      ? '<button type="button" class="btn-secondary btn-sm" onclick="BO.clearRequests()">Clear live requests</button>'
-      : "";
+    var open = queues.reduce(function (n, q) { return n + q.trades.length; }, 0);
+    applyChrome({
+      title: "Trade desk",
+      subtitle: open + " open item" + (open === 1 ? "" : "s") + " · live queue",
+      crumb: null,
+      actions: state.requests.length
+        ? [{ label: "Clear live requests", variant: "secondary", onClick: "BO.clearRequests()" }]
+        : []
+    });
 
     // Each arrival pulses once.
     state.flashIds = {};
@@ -303,9 +394,11 @@
     var t = findCard(state.tradeId);
     if (!t) { state.view = "list"; return renderList(); }
 
-    crumb.innerHTML = '<span class="crumb-back" onclick="BO.backToList()">← Trade desk</span> · ' + esc(t.id);
-    pageTitle.textContent = t.customer;
-    topbarActions.innerHTML = "";
+    applyChrome({
+      title: t.customer, subtitle: "",
+      crumb: { backLabel: "Trade desk", backFn: "BO.backToList()", rest: t.id },
+      actions: []
+    });
 
     var req = t.request;
     if (!req) {
@@ -480,6 +573,751 @@
     render();
   }
 
+  // ===== BEGIN generated screens (see scratchpad/assemble.js) =====
+
+  // The screens' seed data, aliased to bare names so each ported screen below
+  // reads exactly as it does in the mockup's own script.
+  var INTEGRATIONS = S.INTEGRATIONS;
+  var ATTENTION_ITEMS = S.ATTENTION_ITEMS;
+  var EXPOSURE_TOP = S.EXPOSURE_TOP;
+  var EXPOSURE_BOTTOM = S.EXPOSURE_BOTTOM;
+  var METERING = S.METERING;
+  var ACCOUNTS = S.ACCOUNTS;
+  var COMPANY_FIELDS = S.COMPANY_FIELDS;
+  var CUSTOMER_LIST = S.CUSTOMER_LIST;
+  var COMMERCIAL_FIELDS = S.COMMERCIAL_FIELDS;
+  var WALLETS = S.WALLETS;
+  var WALLET_STATS = S.WALLET_STATS;
+  var SKIPPED = S.SKIPPED;
+  var DRAFTS = S.DRAFTS;
+  var INVOICE_RUN_STATS = S.INVOICE_RUN_STATS;
+  var INVOICE_RUN_BANNER = S.INVOICE_RUN_BANNER;
+  var CELL_TONE = S.CELL_TONE;
+  var CONNECTIONS_RAW = S.CONNECTIONS_RAW;
+  var LEGEND = S.LEGEND;
+  var MESSAGES = S.MESSAGES;
+  var buildAttentionItems = S.buildAttentionItems;
+  var buildIntegrations = S.buildIntegrations;
+  var customersWithBorders = S.customersWithBorders;
+  var buildCustomerDetail = S.buildCustomerDetail;
+  var buildConnections = S.buildConnections;
+
+  /* --- Home (Operations dashboard) — render -------------------------------- *
+   * Every inline style below is copied verbatim from the Back Office mockup's
+   * `isHome` markup slice. The only structural change is the outer wrapper: the
+   * mockup's own `padding:28px` is dropped because this page's `.content`
+   * already supplies it; the `display:flex;flex-direction:column;gap:20px` is
+   * kept, since the Home screen spaces its sections at 20px (the desk uses 16).
+   */
+
+  /* The six StatCards, in the mockup's order. `tone` is the DS StatCard tone
+     (a class on `.value`); `highlight` is the amber-tinted card. */
+  var HOME_STATS = [
+    { label: "TO PRICE", value: "3", tone: "warning", highlight: true, sublabel: "oldest 6 min" },
+    { label: "AWAITING CUSTOMER", value: "5", tone: "brand", highlight: false, sublabel: "next expiry 04:12" },
+    { label: "TO CONFIRM", value: "2", tone: "critical", highlight: false, sublabel: "oldest 22 min" },
+    { label: "WALLETS BELOW MIN", value: "4", tone: "warning", highlight: false, sublabel: "of 47 customers" },
+    { label: "INVOICE DRAFTS", value: "0", tone: "", highlight: false, sublabel: "next run 5 Sep" },
+    { label: "FEED ISSUES", value: "1", tone: "critical", highlight: false, sublabel: "Montel stale 1h42" }
+  ];
+
+  /* Shared by the integration table's head and rows — the mockup repeats the
+     same six-column template on both. */
+  var HOME_INTEGRATION_COLS = "2fr 1.3fr 1.2fr 1.8fr 1fr 0.6fr";
+
+  /* The page's own StatCard primitive does exactly this — don't re-implement it
+     (it also handles the DS's `sublabel &&` omission and the `default` tone). */
+  function homeStatCardHtml(s) {
+    return statCard(s.label, s.value, s.tone, s.sublabel, s.highlight);
+  }
+
+  /**
+   * One "Needs attention now" row. Rows that carry a tradeId open that trade on
+   * the desk (the mockup's `goTo('Trade desk'); selectTrade(id)`); the two rows
+   * without one have no handler. `cursor:pointer` is on the mockup's style
+   * string unconditionally, including for those two — keep it that way rather
+   * than "improving" it, or those rows visibly differ from the mockup on hover.
+   */
+  function homeAttentionRowHtml(a) {
+    var click = a.tradeId
+      ? " onclick=\"BO.goTo('Trade desk'); BO.openTrade('" + esc(a.tradeId) + "')\""
+      : "";
+    return "<div" + click + ' style="display:flex;align-items:center;gap:14px;padding:11px 0;border-top:' +
+        esc(a.borderTop) + ';cursor:pointer">' +
+      '<span style="font-family:var(--font-mono);font-size:11px;font-weight:700;padding:4px 10px;border-radius:5px;background:' +
+        esc(a.tagBg) + ";border:1px solid " + esc(a.tagBorder) + ";color:" + esc(a.tagColor) + '">' + esc(a.tag) + "</span>" +
+      '<div style="flex:1">' +
+        '<div style="font-size:12.5px;font-weight:600;color:var(--pp-text-heading)">' + esc(a.title) + "</div>" +
+        '<div style="font-size:10.5px;color:var(--pp-text-body)">' + esc(a.sub) + "</div>" +
+      "</div>" +
+      '<span style="color:var(--pp-teal-600);font-size:14px">→</span>' +
+    "</div>";
+  }
+
+  function homeExposureRowHtml(e, top) {
+    return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:' +
+        (top ? "7px" : "6px") + ' 0;color:var(--pp-text-body)"><span>' + esc(e.label) + "</span>" +
+      '<span style="font-weight:' + (top ? "700" : "600") + ";color:" + esc(e.color) + '">' + esc(e.value) + "</span></div>";
+  }
+
+  function homeIntegrationRowHtml(i) {
+    return '<div style="display:grid;grid-template-columns:' + HOME_INTEGRATION_COLS +
+        ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center;background:' +
+        esc(i.rowBg) + '">' +
+      '<div style="font-weight:600;color:var(--pp-text-heading)">' + esc(i.name) + "</div>" +
+      '<div style="color:var(--pp-text-body)">' + esc(i.mode) + "</div>" +
+      "<div>" + esc(i.last) + "</div>" +
+      '<div style="color:var(--pp-text-body)">' + esc(i.detail) + "</div>" +
+      "<div>" + badge(i.statusLabel, i.statusTone) + "</div>" +
+      '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer">retry</div>' +
+    "</div>";
+  }
+
+  function renderHome() {
+    var stats = HOME_STATS.map(homeStatCardHtml).join("");
+
+    var attention = buildAttentionItems().map(homeAttentionRowHtml).join("");
+
+    var exposure =
+      EXPOSURE_TOP.map(function (e) { return homeExposureRowHtml(e, true); }).join("") +
+      '<div style="border-top:1px solid var(--pp-border);margin:6px 0"></div>' +
+      '<div style="display:flex;justify-content:space-between;font-size:12px;padding:7px 0">' +
+        '<span style="color:var(--pp-text-body)">Total at risk</span>' +
+        '<span style="font-weight:700;color:var(--pp-text-heading)">€ 298.268,00</span></div>' +
+      '<div style="font-size:10px;font-weight:700;color:var(--pp-text-body);margin-top:14px;letter-spacing:.04em">THIS MONTH</div>' +
+      EXPOSURE_BOTTOM.map(function (e) { return homeExposureRowHtml(e, false); }).join("");
+
+    var integrations =
+      '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
+        '<div style="display:grid;grid-template-columns:' + HOME_INTEGRATION_COLS +
+          ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+          "<div>INTEGRATION</div><div>MODE</div><div>LAST SUCCESS</div><div>DETAIL</div><div>STATUS</div><div></div>" +
+        "</div>" +
+        buildIntegrations().map(homeIntegrationRowHtml).join("") +
+      "</div>";
+
+    return '<div style="display:flex;flex-direction:column;gap:20px">' +
+      '<div style="display:flex;flex-wrap:wrap;gap:14px">' + stats + "</div>" +
+      '<div style="display:flex;gap:20px;align-items:flex-start">' +
+        '<div style="flex:1.7">' +
+          cardHtml("Needs attention now", "ranked by urgency, not by age", attention) +
+        "</div>" +
+        '<div style="flex:1">' +
+          cardHtml("Exposure", "value at risk right now", exposure) +
+        "</div>" +
+      "</div>" +
+      cardHtml("Integration health", "", integrations) +
+    "</div>";
+  }
+
+  /** Topbar for Home — renderVals()'s `s.page === 'Home'` branch, verbatim. */
+  function homeChrome() {
+    return {
+      title: "Operations",
+      subtitle: "Thursday 30 July 2026, 14:28",
+      crumb: null,
+      actions: []
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Customers screen — renderer.
+   *
+   * Two views, switched by state.customerId:
+   *   list   — every company, click a row to open it
+   *   detail — stat cards, Company, Metering points, Commercial settings
+   *            (with a real edit mode) and Customer accounts
+   *
+   * Every style= string below is copied verbatim from the mockup's markup;
+   * only the DS components (Card / Badge / StatCard / Button) go through the
+   * page's own primitives.
+   * ------------------------------------------------------------------ */
+
+  /** CUSTOMER_LIST lookup by KvK number (the list's own row id). */
+  function customersFind(kvk) {
+    for (var i = 0; i < CUSTOMER_LIST.length; i++) {
+      if (CUSTOMER_LIST[i].kvk === kvk) { return CUSTOMER_LIST[i]; }
+    }
+    return null;
+  }
+
+  /** The DS StatCard; the customer detail cards carry no sublabel. */
+  function customersStatCard(label, value, tone) {
+    return statCard(label, value, tone, "", false);
+  }
+
+  // --- list -----------------------------------------------------------------
+
+  function customersListHtml() {
+    var COLS = '1.8fr 1fr 1fr 1.2fr 1fr 0.5fr';
+
+    var head = '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+      '<div>COMPANY</div><div>KVK</div><div style="text-align:right">CONNECTIONS</div><div style="text-align:right">AVAILABLE BALANCE</div><div>STATUS</div><div></div>' +
+      '</div>';
+
+    var rows = CUSTOMER_LIST.map(function (c) {
+      // NOTE: the mockup interpolates {{ c.availableColor }} here, a key that
+      // CUSTOMER_LIST does not define — the declaration is empty and the
+      // browser drops it, so the balance renders in the inherited colour.
+      // Reproduced as-is; do not "fix" it to c.availableTone.
+      return '<div onclick="BO.selectCustomer(\'' + esc(c.kvk) + '\')" style="cursor:pointer;display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:11px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
+        '<div style="font-weight:600;color:var(--pp-teal-700)">' + esc(c.name) + '</div>' +
+        '<div>' + esc(c.kvk) + '</div>' +
+        '<div style="text-align:right">' + esc(c.connections) + '</div>' +
+        '<div style="text-align:right;color:">' + esc(c.available) + '</div>' +
+        '<div>' + badge(c.status, c.statusTone) + '</div>' +
+        '<div style="text-align:right;color:var(--pp-teal-600)">→</div>' +
+        '</div>';
+    }).join('');
+
+    var table = '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
+      head + rows + '</div>';
+
+    return '<div style="display:flex;flex-direction:column;gap:16px">' +
+      cardHtml('Customers', 'click a company or KvK number to open its detail page', table) +
+      '</div>';
+  }
+
+  // --- detail: Company ------------------------------------------------------
+
+  function customersCompanyCardHtml(d) {
+    var rows = d.companyFields.map(function (f) {
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:8px 0;border-top:' + esc(f.borderTop) + ';color:var(--pp-text-body)">' +
+        '<span>' + esc(f.label) + '</span>' +
+        '<span style="font-weight:600;color:var(--pp-text-heading)">' + esc(f.value) + '</span>' +
+        '</div>';
+    }).join('');
+
+    var foot = '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">' +
+      badge('BANK DETAILS VERIFIED', 'success') +
+      '<button type="button" class="btn-secondary btn-sm" onclick="BO.noop()">Edit</button>' +
+      '</div>';
+
+    return cardHtml('Company', 'the customer is a legal entity', rows + foot);
+  }
+
+  // --- detail: Metering points ----------------------------------------------
+
+  function customersMeteringCardHtml(d) {
+    var COLS = '0.8fr 1.6fr 1fr 1fr 1fr 1.1fr 0.6fr';
+
+    var head = '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+      '<div>EAN</div><div>CONNECTION NAME</div><div>COMMODITY</div><div>VALID FROM</div><div>VALID TO</div><div>DATA</div><div></div>' +
+      '</div>';
+
+    var rows = d.metering.map(function (m) {
+      return '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
+        '<div style="font-family:var(--font-mono)">' + esc(m.ean) + '</div>' +
+        '<div style="color:' + esc(m.nameColor) + '">' + esc(m.name) + '</div>' +
+        '<div style="color:' + esc(m.commodityColor) + '">' + esc(m.commodity) + '</div>' +
+        '<div>' + esc(m.validFrom) + '</div>' +
+        '<div style="color:' + esc(m.validToColor) + '">' + esc(m.validTo) + '</div>' +
+        '<div>' + badge(m.dataLabel, m.dataTone) + '</div>' +
+        '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer">edit</div>' +
+        '</div>';
+    }).join('');
+
+    var table = '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
+      head + rows + '</div>';
+
+    // The mockup passes meteringSummary as the Card's `action` prop, i.e. a
+    // bare text node in the card header (no styling of its own).
+    return cardHtml('Metering points', '', table, cardAction(d.meteringSummary));
+  }
+
+  // --- detail: Commercial settings (editable) -------------------------------
+
+  function customersCommercialCardHtml() {
+    var editing = state.commercialEditing;
+    var fields = state.commercialFields;
+
+    var headActions = editing
+      ? '<div style="display:flex;gap:8px">' +
+          '<button type="button" class="btn-secondary btn-sm" onclick="BO.cancelCommercialEdit()">Cancel</button>' +
+          '<button type="button" class="btn-primary btn-sm" onclick="BO.saveCommercialEdit()">Save</button>' +
+        '</div>'
+      : '<button type="button" class="btn-secondary btn-sm" onclick="BO.startCommercialEdit()">Edit</button>';
+
+    var body;
+    if (!editing) {
+      body = fields.map(function (f, i) {
+        var borderTop = i === 0 ? 'none' : '1px solid var(--pp-border)';
+        return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:9px 0;border-top:' + borderTop + ';color:var(--pp-text-body)">' +
+          '<span>' + esc(f.label) + '</span>' +
+          '<span style="font-weight:600;color:' + esc(f.color) + '">' + esc(f.value) + '</span>' +
+          '</div>';
+      }).join('');
+    } else {
+      body = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px">' +
+        fields.map(function (f, i) {
+          var control;
+          if (f.money) {
+            // The input is uncontrolled (value attribute only) and its handler
+            // deliberately does NOT re-render — see BO.updateCommercialField.
+            control = '<div style="display:flex;align-items:center;border:1px solid var(--pp-border-strong);border-radius:7px;overflow:hidden">' +
+              '<span style="padding:8px 0 8px 10px;font-size:12.5px;color:var(--pp-text-faint);background:var(--pp-surface-alt)">' + esc(f.prefix) + '</span>' +
+              '<input value="' + esc(f.numeric) + '" oninput="BO.updateCommercialField(' + i + ', this.value)" style="flex:1;min-width:0;padding:8px 4px;border:none;outline:none;font-size:12.5px;font-family:var(--font-sans);color:var(--pp-text-heading)">' +
+              '<span style="padding:8px 10px 8px 0;font-size:12.5px;color:var(--pp-text-faint);background:var(--pp-surface-alt)">' + esc(f.suffix) + '</span>' +
+              '</div>';
+          } else {
+            control = '<div style="padding:8px 10px;border:1px solid var(--pp-border);border-radius:7px;font-size:12.5px;color:var(--pp-text-faint);background:var(--pp-surface-alt)">' + esc(f.value) + '</div>';
+          }
+          return '<div>' +
+            '<div style="font-size:10.5px;font-weight:600;color:var(--pp-text-body);margin-bottom:6px">' + esc(f.label) + '</div>' +
+            control +
+            '</div>';
+        }).join('') +
+        '</div>';
+    }
+
+    // Hand-rolled card (not the DS Card) because the header carries buttons —
+    // geometry copied verbatim from the mockup.
+    return '<div style="background:#fff;border:1px solid var(--pp-border);border-radius:10px;padding:18px 20px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div style="font-size:13.5px;font-weight:700;color:var(--pp-text-heading)">Commercial settings</div>' +
+        headActions +
+      '</div>' +
+      body +
+      '</div>';
+  }
+
+  // --- detail: Customer accounts --------------------------------------------
+
+  function customersAccountsCardHtml(d) {
+    var COLS = '1.2fr 1.2fr 1fr 1.1fr 1fr 0.6fr';
+
+    var head = '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+      '<div>NAME</div><div>ROLE IN COMPANY</div><div>USERNAME</div><div>LAST SIGN-IN</div><div>STATUS</div><div></div>' +
+      '</div>';
+
+    var rows = d.accounts.map(function (a) {
+      return '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center;color:' + esc(a.textColor) + '">' +
+        '<div style="font-weight:600">' + esc(a.name) + '</div>' +
+        '<div>' + esc(a.role) + '</div>' +
+        '<div style="font-family:var(--font-mono);font-size:11px">' + esc(a.username) + '</div>' +
+        '<div>' + esc(a.lastSignIn) + '</div>' +
+        '<div>' + badge(a.statusLabel, a.statusTone) + '</div>' +
+        '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer">' + esc(a.actionLabel) + '</div>' +
+        '</div>';
+    }).join('');
+
+    return '<div style="background:#fff;border:1px solid var(--pp-border);border-radius:10px;padding:18px 20px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div>' +
+          '<div style="font-size:13.5px;font-weight:700;color:var(--pp-text-heading)">Customer accounts</div>' +
+          '<div style="font-size:11.5px;color:var(--pp-text-body);margin-top:4px">all accounts have identical privileges</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:12px">' +
+          '<span style="font-size:11.5px;color:var(--pp-text-body)">' + esc(d.accountsSummary) + '</span>' +
+          '<button type="button" class="btn-primary btn-sm" onclick="BO.noop()">Add account</button>' +
+        '</div>' +
+      '</div>' +
+      '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:14px">' + head + rows + '</div>' +
+      '<div style="font-size:10.5px;color:var(--pp-text-faint);margin-top:14px">Deactivated accounts stay on record so past trades still name a person.</div>' +
+      '</div>';
+  }
+
+  // --- detail ---------------------------------------------------------------
+
+  function customersDetailHtml(c) {
+    var d = buildCustomerDetail(c);
+
+    var stats = '<div style="display:flex;flex-wrap:wrap;gap:14px">' +
+      customersStatCard('STATUS', d.status, d.statusTone) +
+      customersStatCard('CONNECTIONS', d.connections, 'default') +
+      customersStatCard('AVAILABLE BALANCE', d.available, d.availableTone) +
+      customersStatCard('OPEN TRADES', d.openTrades, 'default') +
+      customersStatCard('LAST INVOICE', d.lastInvoice, 'default') +
+      '</div>';
+
+    var topRow = '<div style="display:flex;gap:16px;align-items:flex-start">' +
+      '<div style="flex:1">' + customersCompanyCardHtml(d) + '</div>' +
+      '<div style="flex:1.7">' + customersMeteringCardHtml(d) + '</div>' +
+      '</div>';
+
+    var bottomRow = '<div style="display:flex;gap:16px;align-items:flex-start">' +
+      '<div style="flex:1">' + customersCommercialCardHtml() + '</div>' +
+      '<div style="flex:1">' + customersAccountsCardHtml(d) + '</div>' +
+      '</div>';
+
+    return '<div style="display:flex;flex-direction:column;gap:16px">' +
+      stats + topRow + bottomRow +
+      '</div>';
+  }
+
+  // --- entry points ---------------------------------------------------------
+
+  /** The screen body: the customer list, or one customer's detail page. */
+  function renderCustomers() {
+    var c = state.customerId ? customersFind(state.customerId) : null;
+    return c ? customersDetailHtml(c) : customersListHtml();
+  }
+
+  /** Topbar for this screen, ported from the mockup's renderVals() branch. */
+  function customersChrome() {
+    var c = state.customerId ? customersFind(state.customerId) : null;
+    if (!c) {
+      return {
+        title: 'Customers',
+        subtitle: CUSTOMER_LIST.length + ' companies',
+        crumb: null,
+        actions: []
+      };
+    }
+    return {
+      title: c.name,
+      subtitle: '',
+      crumb: { backLabel: 'Customers', backFn: 'BO.closeCustomerDetail()', rest: 'KvK ' + c.kvk },
+      actions: [
+        { label: 'View as customer', variant: 'secondary', onClick: 'BO.noop()' },
+        { label: 'Add connection', variant: 'primary', onClick: 'BO.noop()' }
+      ]
+    };
+  }
+
+  // --- Wallets --------------------------------------------------------------
+  // Ported from the Back Office mockup's `isWallets` screen. Static/read-only:
+  // the mockup's only affordances are an "open" link per row and two inert
+  // forms, so everything clickable here goes to BO.noop().
+  //
+  // The only structural change from the mockup slice is the outer wrapper: its
+  // own `padding:28px` is dropped because this page's `.content` already
+  // supplies it. Every other style below is the mockup's inline `style=`,
+  // verbatim.
+
+  /** The mockup's grid template, shared by the table head and every row. */
+  var WALLET_COLS = "1.6fr 1fr 1fr 1fr 1fr 1fr 1.2fr 0.6fr";
+  /** Field label above each input in the two forms. */
+  var WALLET_FIELD_LABEL = "font-size:10.5px;font-weight:600;color:var(--pp-text-body);margin-bottom:6px";
+  /** Default input chrome, and the teal-bordered emphasised variant (AMOUNT). */
+  var WALLET_INPUT = "width:100%;padding:9px 12px;border:1px solid var(--pp-border-strong);border-radius:7px;font-size:13px;font-family:var(--font-sans);color:var(--pp-text-heading)";
+  var WALLET_INPUT_ACCENT = "width:100%;padding:9px 12px;border:1px solid var(--pp-teal-600);border-radius:7px;font-size:13px;font-weight:600;font-family:var(--font-sans);color:var(--pp-text-heading)";
+
+
+  /**
+   * One DS StatCard, via the page's own primitive. Wrapped rather than passed
+   * straight to .map(), which would hand the array index in as `value`.
+   */
+  function walletStatCardHtml(s) {
+    return statCard(s.label, s.value, s.tone, s.sublabel, false);
+  }
+
+  function walletRowHtml(w) {
+    return '<div style="display:grid;grid-template-columns:' + WALLET_COLS + ';gap:10px;padding:11px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
+      '<div style="font-weight:600;color:var(--pp-text-heading)">' + esc(w.name) + "</div>" +
+      '<div style="text-align:right;color:' + esc(w.settledColor) + '">' + esc(w.settled) + "</div>" +
+      '<div style="text-align:right">' + esc(w.reserved) + "</div>" +
+      '<div style="text-align:right;font-weight:700;color:' + esc(w.availableColor) + '">' + esc(w.available) + "</div>" +
+      '<div style="text-align:right">' + esc(w.minimum) + "</div>" +
+      "<div>" + badge(w.statusLabel, w.statusTone) + "</div>" +
+      '<div style="color:var(--pp-text-body)">' + esc(w.lastMovement) + "</div>" +
+      '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer" onclick="BO.noop()">open</div>' +
+      "</div>";
+  }
+
+  function walletTableHtml() {
+    return '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
+      '<div style="display:grid;grid-template-columns:' + WALLET_COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+        "<div>CUSTOMER</div>" +
+        '<div style="text-align:right">SETTLED</div>' +
+        '<div style="text-align:right">RESERVED</div>' +
+        '<div style="text-align:right">AVAILABLE</div>' +
+        '<div style="text-align:right">MINIMUM</div>' +
+        "<div>STATUS</div>" +
+        "<div>LAST MOVEMENT</div>" +
+        "<div></div>" +
+      "</div>" +
+      WALLETS.map(walletRowHtml).join("") +
+      "</div>";
+  }
+
+  /**
+   * One labelled input. `attrHtml` is the input's own value/placeholder
+   * attribute; the mockup's inputs are uncontrolled and inert, so there is no
+   * handler on any of them.
+   */
+  function walletFieldHtml(label, attrHtml, inputStyle, wrapStyle) {
+    return "<div" + (wrapStyle ? ' style="' + wrapStyle + '"' : "") + ">" +
+      '<div style="' + WALLET_FIELD_LABEL + '">' + esc(label) + "</div>" +
+      "<input " + attrHtml + ' style="' + inputStyle + '">' +
+      "</div>";
+  }
+
+  function walletValueAttr(v) { return 'value="' + esc(v) + '"'; }
+
+  function walletDepositCardHtml() {
+    var body =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;margin-top:6px">' +
+        walletFieldHtml("CUSTOMER", walletValueAttr("Meijer Koelhuizen"), WALLET_INPUT) +
+        walletFieldHtml("AMOUNT", walletValueAttr("€ 20.000,00"), WALLET_INPUT_ACCENT) +
+        walletFieldHtml("VALUE DATE", walletValueAttr("13-08-2026"), WALLET_INPUT) +
+        walletFieldHtml("BANK REFERENCE", walletValueAttr("PP-9014-TR"), WALLET_INPUT) +
+      "</div>" +
+      '<div style="display:flex;justify-content:flex-end;margin-top:16px">' +
+        '<button type="button" class="btn-primary" onclick="BO.noop()">Register deposit</button>' +
+      "</div>";
+    return cardHtml("Register a bank deposit", "", body);
+  }
+
+  function walletAdjustmentCardHtml() {
+    var body =
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;margin-top:6px">' +
+        walletFieldHtml("DIRECTION", walletValueAttr("Credit"), WALLET_INPUT) +
+        walletFieldHtml("AMOUNT", walletValueAttr("€ 0,00"), WALLET_INPUT) +
+        walletFieldHtml("REASON — SHOWN TO THE CUSTOMER",
+          'placeholder="' + esc("e.g. “Goodwill credit agreed with J. de Vries on 12 Aug”") + '"',
+          WALLET_INPUT, "grid-column:1 / 3") +
+      "</div>" +
+      '<div style="display:flex;justify-content:flex-end;margin-top:16px">' +
+        '<button type="button" class="btn-secondary" disabled onclick="BO.noop()">Post adjustment</button>' +
+      "</div>";
+    return cardHtml("Manual adjustment", "", body, cardAction("REASON REQUIRED"));
+  }
+
+  function renderWallets() {
+    return '<div style="display:flex;flex-direction:column;gap:16px">' +
+      '<div style="display:flex;flex-wrap:wrap;gap:14px">' +
+        WALLET_STATS.map(walletStatCardHtml).join("") +
+      "</div>" +
+      cardHtml("Wallets", "sorted by available balance, lowest first",
+        walletTableHtml(), cardAction("Below minimum ▾")) +
+      '<div style="display:flex;gap:16px;align-items:flex-start">' +
+        '<div style="flex:1">' + walletDepositCardHtml() + "</div>" +
+        '<div style="flex:1">' + walletAdjustmentCardHtml() + "</div>" +
+      "</div>" +
+      "</div>";
+  }
+
+  function walletsChrome() {
+    return {
+      title: "Wallets",
+      subtitle: "47 customers · 4 below their minimum · total held € 8,42 M",
+      crumb: null,
+      actions: [{ label: "Register bank deposit", variant: "primary", onClick: "BO.noop()" }]
+    };
+  }
+
+  /* --- Invoicing (invoice run) ---------------------------------------------
+   * A read-only screen: five run-summary StatCards, one critical Banner for the
+   * customer whose calculation halted, and two tables (skipped customers, and
+   * the drafts ready for review). Nothing on it is interactive in the mockup —
+   * the "re-run" and "→" cells only carry cursor:pointer, with no click handler
+   * behind them — so nothing is wired up here either.
+   *
+   * Every style outside the page's own primitives (statCard / dsBanner /
+   * cardHtml / badge) is the mockup's inline style attribute, copied verbatim.
+   */
+
+  /* The page's own StatCard primitive does exactly what the DS StatCard does
+     (tone as a class on `.value`, `default`/"" meaning no class) — delegate to
+     it rather than re-implementing it. */
+  function invoicingStatCard(s) {
+    return statCard(s.label, s.value, s.tone, s.sublabel, false);
+  }
+
+  var INVOICING_SKIPPED_COLS = '1.3fr 1.5fr 2fr 1fr 0.6fr';
+  var INVOICING_DRAFTS_COLS = '1.6fr 0.9fr 1fr 1.1fr 1fr 1.1fr 1fr 0.5fr';
+
+  function invoicingSkippedTable() {
+    var head =
+      '<div style="display:grid;grid-template-columns:' + INVOICING_SKIPPED_COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+        '<div>CUSTOMER</div><div>REASON</div><div>DETAIL</div><div>FIX OWNER</div><div></div>' +
+      '</div>';
+    var rows = SKIPPED.map(function (s) {
+      return '<div style="display:grid;grid-template-columns:' + INVOICING_SKIPPED_COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
+        '<div style="font-weight:600;color:var(--pp-text-heading)">' + esc(s.customer) + '</div>' +
+        '<div style="font-family:var(--font-mono);font-size:10.5px;color:var(--pp-amber)">' + esc(s.reason) + '</div>' +
+        '<div style="color:var(--pp-text-body)">' + esc(s.detail) + '</div>' +
+        '<div>' + esc(s.fixOwner) + '</div>' +
+        '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer">re-run</div>' +
+        '</div>';
+    }).join('');
+    return '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
+      head + rows + '</div>';
+  }
+
+  function invoicingDraftsTable() {
+    var head =
+      '<div style="display:grid;grid-template-columns:' + INVOICING_DRAFTS_COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+        '<div>CUSTOMER</div>' +
+        '<div style="text-align:right">CONNECTIONS</div>' +
+        '<div style="text-align:right">VOLUME</div>' +
+        '<div style="text-align:right">SUBTOTAL</div>' +
+        '<div style="text-align:right">VAT</div>' +
+        '<div style="text-align:right">TOTAL</div>' +
+        '<div>DATA</div><div></div>' +
+      '</div>';
+    var rows = DRAFTS.map(function (d) {
+      return '<div style="display:grid;grid-template-columns:' + INVOICING_DRAFTS_COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
+        '<div style="font-weight:600;color:var(--pp-text-heading)">' + esc(d.customer) + '</div>' +
+        '<div style="text-align:right">' + esc(d.connections) + '</div>' +
+        '<div style="text-align:right">' + esc(d.volume) + '</div>' +
+        '<div style="text-align:right">' + esc(d.subtotal) + '</div>' +
+        '<div style="text-align:right">' + esc(d.vat) + '</div>' +
+        '<div style="text-align:right;font-weight:700;color:var(--pp-text-heading)">' + esc(d.total) + '</div>' +
+        '<div>' + badge(d.dataLabel, d.dataTone) + '</div>' +
+        '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer">→</div>' +
+        '</div>';
+    }).join('');
+    return '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
+      head + rows + '</div>';
+  }
+
+  function renderInvoicing() {
+    var stats = '<div class="stat-row" style="gap:14px">' +
+      INVOICE_RUN_STATS.map(invoicingStatCard).join('') + '</div>';
+
+    var draftsAction = cardAction('41 · showing 5');
+
+    return '<div style="display:flex;flex-direction:column;gap:16px">' +
+      stats +
+      dsBanner(INVOICE_RUN_BANNER.tone, INVOICE_RUN_BANNER.title, INVOICE_RUN_BANNER.body) +
+      cardHtml('Skipped customers',
+        'each skip names its cause — the run continued for everyone else',
+        invoicingSkippedTable()) +
+      cardHtml('Drafts ready for review', '', invoicingDraftsTable(), draftsAction) +
+      '</div>';
+  }
+
+  function invoicingChrome() {
+    return {
+      title: 'Invoice run — August 2026',
+      subtitle: 'Started 5 Sep 02:00 · completed 02:26 · 47 customers in scope',
+      crumb: null,
+      actions: [
+        { label: 'Re-run skipped', variant: 'secondary', onClick: 'BO.noop()' },
+        { label: 'Finalise 41 drafts', variant: 'primary', onClick: 'BO.noop()' }
+      ]
+    };
+  }
+
+  // --- Data & feeds -------------------------------------------------------
+  // The mockup's PVNed ingestion screen (`isDataFeeds`), ported markup-for-
+  // markup. Every inline style below is copied verbatim from the mockup; the
+  // Card / StatCard / Badge / Button chrome goes through this page's own
+  // primitives. The screen is entirely static/read-only in the mockup, so
+  // every control here is inert (BO.noop()).
+
+  /** The DS StatCard. */
+  function dfStatCard(label, value, tone, sublabel) {
+    return statCard(label, value, tone, sublabel, false);
+  }
+
+  /** One 21-cell data-state row: name + EAN, then the day cells. */
+  function dfConnectionRow(c) {
+    var cells = c.cells.map(function (cell) {
+      return '<div style="flex:1;height:26px;border-radius:4px;background:' + esc(cell.bg) +
+        ";border:1px solid " + esc(cell.border) +
+        ';display:flex;align-items:center;justify-content:center;font-size:9.5px;font-weight:700;color:var(--pp-text-body)">' +
+        esc(cell.code) + "</div>";
+    }).join("");
+    return '<div style="display:flex;align-items:center;gap:14px">' +
+        '<div style="width:190px;min-width:190px">' +
+          '<div style="font-size:12px;font-weight:600;color:var(--pp-text-heading)">' + esc(c.name) + "</div>" +
+          '<div style="font-size:10px;color:var(--pp-text-faint);font-family:var(--font-mono)">' + esc(c.ean) + "</div>" +
+        "</div>" +
+        '<div style="display:flex;gap:4px;flex:1">' + cells + "</div>" +
+      "</div>";
+  }
+
+  function dfLegendItem(l) {
+    return '<div style="display:flex;align-items:center;gap:6px">' +
+      '<div style="width:12px;height:10px;border-radius:2px;background:' + esc(l.color) + '"></div>' +
+      '<span style="font-size:11px;color:var(--pp-text-body)">' + esc(l.label) + "</span>" +
+      "</div>";
+  }
+
+  var DF_MESSAGE_COLS = "0.9fr 1.2fr 1.4fr 0.7fr 1fr 1.7fr";
+
+  function dfMessageRow(m) {
+    return '<div style="display:grid;grid-template-columns:' + DF_MESSAGE_COLS +
+        ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
+        "<div>" + esc(m.received) + "</div>" +
+        "<div>" + esc(m.type) + "</div>" +
+        '<div style="font-family:var(--font-mono);font-size:11px">' + esc(m.docId) + "</div>" +
+        '<div style="text-align:right">' + esc(m.series) + "</div>" +
+        "<div>" + badge(m.statusLabel, m.statusTone) + "</div>" +
+        '<div style="color:' + esc(m.detailColor) + '">' + esc(m.detail) + "</div>" +
+      "</div>";
+  }
+
+  function renderDataFeeds() {
+    var stats =
+      '<div style="display:flex;flex-wrap:wrap;gap:14px">' +
+        dfStatCard("DOCUMENTS TODAY", "412", "success", "all acknowledged < 1 s") +
+        dfStatCard("PROCESSING LAG", "42 s", "success", "p95 · target < 5 min") +
+        dfStatCard("FAILED", "2", "warning", "both validation errors") +
+        dfStatCard("QUARANTINED", "1", "warning", "EAN not registered") +
+        dfStatCard("SILENT CONNECTIONS", "3", "critical", "no data for 3+ days") +
+      "</div>";
+
+    var connections = buildConnections();
+    var stateBody =
+      '<div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">' +
+        connections.map(dfConnectionRow).join("") +
+      "</div>" +
+      '<div style="display:flex;gap:22px;margin-top:16px">' +
+        LEGEND.map(dfLegendItem).join("") +
+      "</div>";
+    var stateCard = cardHtml(
+      "Data state per connection",
+      "last 21 delivery dates · all customers",
+      stateBody,
+      cardAction("Silent first ▾")
+    );
+
+    var messagesBody =
+      '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
+        '<div style="display:grid;grid-template-columns:' + DF_MESSAGE_COLS +
+          ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+          "<div>RECEIVED</div><div>TYPE</div><div>DOCUMENT ID</div>" +
+          '<div style="text-align:right">SERIES</div><div>STATUS</div><div>DETAIL</div>' +
+        "</div>" +
+        MESSAGES.map(dfMessageRow).join("") +
+      "</div>";
+
+    var quarantineBody =
+      '<div style="background:var(--pp-amber-bg);border:1px solid var(--pp-amber-border);border-radius:8px;padding:14px 16px;margin-top:4px">' +
+        '<div style="font-size:12.5px;font-weight:700;color:#92400e">EAN 8716 8710 0000 0006 44</div>' +
+        '<div style="font-size:11px;color:#92400e;margin-top:8px">Consumption + production, 12 Aug 2026</div>' +
+        '<div style="font-size:11px;color:#92400e;margin-top:6px">192 points held · first seen 3 days ago</div>' +
+        '<div style="font-size:10.5px;color:#b45309;margin-top:10px">Sender GLN matches PVNed. Likely a new connection.</div>' +
+      "</div>" +
+      '<div style="display:flex;gap:12px;margin-top:14px">' +
+        '<button type="button" class="btn-primary" onclick="BO.noop()">Register EAN</button>' +
+        '<button type="button" class="btn-secondary" onclick="BO.noop()">Assign to customer</button>' +
+      "</div>" +
+      '<div style="font-size:10.5px;color:var(--pp-text-faint);margin-top:14px">Resolving the EAN replays the held series automatically.</div>';
+
+    var bottom =
+      '<div style="display:flex;gap:16px;align-items:flex-start">' +
+        '<div style="flex:1.7">' +
+          cardHtml("Inbound messages", "", messagesBody, cardAction("last 24 h")) +
+        "</div>" +
+        '<div style="flex:1">' +
+          cardHtml("Quarantine", "never discarded", quarantineBody) +
+        "</div>" +
+      "</div>";
+
+    // The mockup's screen root is `padding:28px;display:flex;flex-direction:
+    // column;gap:16px`; the padding is dropped here because this page's
+    // `.content` already supplies it.
+    return '<div style="display:flex;flex-direction:column;gap:16px">' +
+      stats + stateCard + bottom + "</div>";
+  }
+
+  /** renderVals()'s `s.page === 'Data & feeds'` branch, verbatim. */
+  function dataFeedsChrome() {
+    return {
+      title: "Data & feeds",
+      subtitle: "PVNed ingestion · 412 documents today · 1 quarantined",
+      crumb: null,
+      actions: [{ label: "Replay message", variant: "secondary", onClick: "BO.noop()" }]
+    };
+  }
+
+  // ===== END generated screens =====
+
   // --- navigation -----------------------------------------------------------
 
   function renderSidebar() {
@@ -491,23 +1329,84 @@
 
   function goTo(page) {
     state.page = page;
-    // Leaving the desk drops any open request detail, so coming back lands on
-    // the queues rather than a stale trade.
+    // Leaving a screen drops its open detail, so coming back lands on the list
+    // rather than a stale record — the mockup's own goTo() does the same.
     if (page !== "Trade desk") { state.view = "list"; state.tradeId = null; }
+    if (page !== "Customers") { closeCustomerDetail(true); }
     renderSidebar();
     render();
   }
 
-  /** The mockup's own placeholder screen, for the nav entries we don't build. */
+  // --- Customers ------------------------------------------------------------
+
+  function selectCustomer(kvk) {
+    state.customerId = kvk;
+    state.commercialEditing = false;
+    render();
+  }
+  function closeCustomerDetail(quiet) {
+    state.customerId = null;
+    state.commercialEditing = false;
+    state.commercialSnapshot = null;
+    if (!quiet) { render(); }
+  }
+
+  /**
+   * Commercial-terms editing.
+   *
+   * One deliberate divergence from the mockup: there, `cancelCommercialEdit()`
+   * and `saveCommercialEdit()` are the same one-line stub, so Cancel keeps every
+   * keystroke — the button does not do what it says. Here Cancel restores the
+   * snapshot taken when editing started, which is what the control claims to do.
+   */
+  function startCommercialEdit() {
+    state.commercialSnapshot = state.commercialFields.map(function (f) { return f; });
+    state.commercialEditing = true;
+    render();
+  }
+  function cancelCommercialEdit() {
+    if (state.commercialSnapshot) { state.commercialFields = state.commercialSnapshot; }
+    state.commercialSnapshot = null;
+    state.commercialEditing = false;
+    render();
+  }
+  function saveCommercialEdit() {
+    state.commercialSnapshot = null;
+    state.commercialEditing = false;
+    render();
+  }
+
+  /**
+   * Deliberately does NOT re-render: a re-render rebuilds the <input> under the
+   * cursor and steals focus mid-keystroke. The read-only view is rebuilt on
+   * Save instead, which is the only place the new value is shown.
+   */
+  function updateCommercialField(i, numeric) {
+    var fields = state.commercialFields.slice();
+    var f = fields[i];
+    if (!f) { return; }
+    var next = { label: f.label, color: f.color, money: f.money, numeric: numeric };
+    if (f.money) {
+      next.prefix = f.prefix; next.suffix = f.suffix;
+      next.value = f.prefix + numeric + f.suffix;
+    } else {
+      next.value = numeric;
+    }
+    fields[i] = next;
+    state.commercialFields = fields;
+  }
+
+  /**
+   * The mockup's own placeholder screen, word for word. It applies to exactly
+   * the two entries the mockup itself leaves unbuilt (`isPlaceholder` is
+   * `page === 'Reference data' || page === 'Audit'`) — every other nav entry is
+   * a real screen here, as it is there.
+   */
   function renderPlaceholder() {
-    deskBody.classList.remove("detail");
-    deskBody.innerHTML = '<div class="placeholder"><strong>' + esc(state.page) + "</strong>" +
-      "Not part of this Trade desk page. This rebuild covers the Back Office's " +
-      "Trade desk only — see <em>Back Office Portal - Preview.html</em> for the " +
-      "full design of this screen.</div>";
-    crumb.textContent = "Back office";
-    pageTitle.textContent = state.page;
-    topbarActions.innerHTML = "";
+    deskBody.innerHTML = '<div class="placeholder">Not covered in this round of mockups. ' +
+      "This is one of the screens the design system intentionally leaves out for now " +
+      '(see its "what\'s intentionally not built" notes).</div>';
+    applyChrome({ title: state.page, subtitle: "", crumb: null, actions: [] });
   }
 
   /**
@@ -538,11 +1437,38 @@
     render();
   }
 
-  function render() {
-    if (state.page !== "Trade desk") { return renderPlaceholder(); }
+  /**
+   * One entry per nav screen. `gap20` marks the two screens the mockup spaces
+   * at 20px rather than 16px (Home, and the Trade desk's detail view); anything
+   * not listed here falls through to the mockup's placeholder, which is exactly
+   * Reference data and Audit.
+   */
+  var SCREENS = {
+    "Home": { body: renderHome, chrome: homeChrome, gap20: true },
+    "Trade desk": { self: renderDesk },
+    "Customers": { body: renderCustomers, chrome: customersChrome },
+    "Wallets": { body: renderWallets, chrome: walletsChrome },
+    "Invoicing": { body: renderInvoicing, chrome: invoicingChrome },
+    "Data & feeds": { body: renderDataFeeds, chrome: dataFeedsChrome }
+  };
+
+  /**
+   * The Trade desk renders itself (it owns two views and writes its own chrome);
+   * every cloned screen is a pure `body()` string plus a `chrome()` object.
+   */
+  function renderDesk() {
     // The mockup spaces the detail view 20px and the queue list 16px.
-    deskBody.classList.toggle("detail", state.view === "detail");
+    deskBody.classList.toggle("gap-20", state.view === "detail");
     return state.view === "detail" ? renderDetail() : renderList();
+  }
+
+  function render() {
+    var screen = SCREENS[state.page];
+    if (!screen) { deskBody.classList.remove("gap-20"); return renderPlaceholder(); }
+    if (screen.self) { return screen.self(); }
+    deskBody.classList.toggle("gap-20", !!screen.gap20);
+    deskBody.innerHTML = screen.body();
+    applyChrome(screen.chrome());
   }
 
   // --- transitions ----------------------------------------------------------
@@ -568,7 +1494,11 @@
   window.BO = {
     goTo: goTo, openTrade: openTrade, backToList: backToList, clearRequests: clearRequests,
     refresh: refresh, sendOffer: sendOffer, onPriceInput: onPriceInput,
-    confirmTrade: confirmTrade, parsePrice: parsePrice, _state: state
+    confirmTrade: confirmTrade, parsePrice: parsePrice, noop: noop,
+    selectCustomer: selectCustomer, closeCustomerDetail: closeCustomerDetail,
+    startCommercialEdit: startCommercialEdit, cancelCommercialEdit: cancelCommercialEdit,
+    saveCommercialEdit: saveCommercialEdit, updateCommercialField: updateCommercialField,
+    _state: state
   };
 
   /**

@@ -57,7 +57,8 @@ page through that server's URL.
 | `portal-trade-link.js` | ~16 KB | Pure JS module (dual Node/browser) carrying trades both ways between the Customer Portal and the Back Office Trade desk over `localStorage` — request out, priced offer back — see "Cross-portal trade requests" below. Unit tested via `portal-trade-link.test.js`. |
 | `back-office-desk-data.js` | ~6 KB | Pure JS module (dual Node/browser): the Back Office mockup's own seeded `TRADES`/`QUEUE_META` ported verbatim, plus `buildQueues()`, which merges live Customer Portal requests into the seeded columns. |
 | `Customer Portal - Consumption (Live Data).html` | ~108 KB | Standalone, hand-written multi-page portal (loads `consumption-calc.js`, `consumption-data-loader.js`, `portal-seed-data.js` and `portal-trade-link.js` via `<script src>`) with a working Dashboard/Connections/Consumption/Prices/Trading/Wallet/Invoices sidebar — see "Customer Portal (Live Data) page" below. Must be served over http(s), not opened via `file://`. |
-| `Back Office Portal - Trade Desk (Live Data).html` | ~27 KB | Functional stand-in for the Back Office mockup's **Trade desk** screen only (loads `portal-trade-link.js` and `back-office-desk-data.js`). Three-column To price / Awaiting customer / To confirm queues, with live Customer Portal requests merged in and a pricing form that sends a firm offer back — see "Cross-portal trade requests" below. Also needs http(s). |
+| `back-office-screens-data.js` | ~25 KB | Pure JS module (dual Node/browser): the Back Office mockup's own seeded data for **Home, Customers, Wallets, Invoicing and Data & feeds**, ported verbatim, plus the small `build*` helpers its `renderVals()` applies. `TAG_STYLE` is taken from `back-office-desk-data.js` rather than duplicated. |
+| `Back Office Portal - Trade Desk (Live Data).html` | ~82 KB | Functional stand-in for the **whole** Back Office mockup (loads `portal-trade-link.js`, `back-office-desk-data.js` and `back-office-screens-data.js`). Despite the filename, all six of the mockup's real screens are here — Home, Trade desk, Customers, Wallets, Invoicing and Data & feeds — with `Reference data` and `Audit` left as the mockup's own placeholder. Only the **Trade desk** is backed by live data (the cross-portal trade flow); the other five clone the mockup's static seeded screens. Also needs http(s). |
 | `PeakPowerTrading-CalculationSample.csv` | ~8 KB | Reference calculation sample (one day, 96 rows) the `consumption-calc.js` formulas (Usage Cost, Actual Usage, Base/Peak/Hedge Volume, Uncovered, Long, Short, Delta Cost, Hedge Cost, Total Cost) are validated against — see "Calculations" below. Negative numbers are written in accounting parentheses, e.g. `(70)`, and `-` means zero/absent. Its hedge blocks are unpriced, so its Hedge Cost column is 0 throughout and Total Cost equals Delta Cost. Not consumed by the page itself. |
 
 The two large usage/combined JSON files are over the 30 MB chat-upload
@@ -814,21 +815,78 @@ a one-shot pulse; seeded rows have no underlying payload, so opening one
 shows an explanatory note instead of a detail view.
 
 `Back Office Portal - Preview.html` remains a pure design reference and was
-**not** edited — the Trade desk page is a separate functional rebuild, exactly
-as the Consumption page is for the Customer mockup. Its shell CSS is the same
+**not** edited — the Live Data page is a separate functional rebuild, exactly
+as the Consumption page is for the Customer mockup. Its source was read by
+decoding the preview's own gzip+base64 bundle (its `__bundler/manifest` and
+`__bundler/template` script blocks) rather than guessed at from the rendered
+markup, so every ported constant is the mockup's literal value. Its shell CSS is the same
 design-system block as the Customer Portal page, and every `.desk-*` rule is
 copied verbatim from the mockup's Trade desk inline styles (queue gap 18px,
 card `8px`/`14px 16px`, mono id 11.5/700 teal-600, tag 10.5/700 `4px 10px`
 radius 5, meta 11px, value 12/700, action 10/600 mt10; detail column
 `flex:1.55; min-width:520px`; list spaced 16px, detail 20px).
 
-**Navigation.** All eight Back Office nav entries are navigable, as in the
-mockup. Trade desk is the only one with real behaviour; the other seven render
-the **mockup's own `isPlaceholder` screen** (it has one, for screens the
-design deliberately leaves unbuilt), reusing its exact treatment — white card,
-`10px` radius, `48px 24px`, centred `13px` body text. Leaving the desk clears
-any open request detail, so returning lands on the queues rather than a stale
-trade.
+**Navigation.** All eight Back Office nav entries are navigable and **six of
+them are real screens**, matching the mockup one-for-one. Only `Reference data`
+and `Audit` are placeholders — because those are exactly the two the mockup
+itself leaves unbuilt (`isPlaceholder = page === 'Reference data' || page ===
+'Audit'`), rendered with its own verbatim wording ("Not covered in this round of
+mockups…") in its own treatment (white card, `10px` radius, `48px 24px`, centred
+`13px`). Leaving a screen clears its open detail, so returning lands on the list
+rather than a stale record.
+
+| Screen | Source | Sub-views / behaviour |
+|---|---|---|
+| **Home** | `back-office-screens-data.js` | Six StatCards, "Needs attention now", "Exposure", integration health. The three attention rows carrying a `tradeId` really open that trade on the desk (`BO.goTo('Trade desk')` + `BO.openTrade(id)`); the other two are inert, as in the mockup. |
+| **Trade desk** | live — see "Cross-portal trade flow" | list / detail; the only screen with a real backend behind it. |
+| **Customers** | `back-office-screens-data.js` | **list** / **detail** (`state.customerId`). Detail has stat cards, Company, Metering points, Commercial settings (**editable**) and Customer accounts. `buildCustomerDetail()` is ported verbatim, including its synthesised branch for every customer other than Vandersteen. |
+| **Wallets** | `back-office-screens-data.js` | Four StatCards, the wallet table, and the deposit / manual-adjustment forms. Read-only, as in the mockup. |
+| **Invoicing** | `back-office-screens-data.js` | Five StatCards, the critical DS Banner, Skipped customers and Drafts. Read-only. |
+| **Data & feeds** | `back-office-screens-data.js` | Ingestion StatCards, the per-connection data-state grid + legend, inbound messages and the quarantine card. Read-only. |
+
+**How a screen is wired.** `SCREENS` maps a nav entry to `{ body, chrome }` —
+`body()` returns the screen's HTML string, `chrome()` returns the topbar's
+`{title, subtitle, crumb, actions}`, which is the same shape the mockup's own
+`renderVals()` computes. The Trade desk is the one exception (`{ self }`): it
+owns two views and writes its own chrome. `gap20` marks the two screens the
+mockup spaces at 20px (Home and the trade detail) rather than 16px.
+
+Note the topbar has a **subtitle** element under the title. The mockup shows a
+crumb *or* a subtitle, never both — a detail screen gets the crumb, a list
+screen the subtitle.
+
+**Deliberate divergences from the mockup**, all three because the mockup is a
+static demo and these screens are meant to work:
+
+1. **Cancel actually cancels.** The mockup's `cancelCommercialEdit()` and
+   `saveCommercialEdit()` are the identical one-line stub, so Cancel keeps every
+   keystroke. Here `startCommercialEdit()` snapshots the fields and Cancel
+   restores them.
+2. **`updateCommercialField()` does not re-render** — a re-render rebuilds the
+   `<input>` under the cursor and steals focus mid-keystroke (the same footgun
+   the Customer Portal's volume field hit). The read-only view is rebuilt on
+   Save, which is the only place the new value is shown.
+3. **Card `action` labels get the subtitle's type** via `cardAction()`. The
+   mockup passes a bare string that `Card.jsx` drops into the head unstyled, so
+   it inherits 16px next to a 13.5px title — plainly unintended.
+
+Two mockup quirks are reproduced rather than fixed, both marked in the code:
+the customers list interpolates `c.availableColor`, a key `CUSTOMER_LIST` does
+not define (so those balances render in the inherited colour), and every
+"Needs attention now" row carries `cursor:pointer` even though only three are
+clickable.
+
+**Design-system helpers.** `cardHtml`/`statCard`/`badge`/`dsBanner`/`cardAction`
+map to `Card.jsx`/`StatCard.jsx`/`Badge.jsx`/`Banner.jsx`. Two subtleties worth
+keeping: `.stat-card` has **no `flex:1`** (StatCard sets only `min-width`, so
+stat rows size to content and pack left), and the Card's subtitle is a
+**sibling** of the head, not a child — the head's own `margin-bottom` is 14px,
+dropping to 4px when a subtitle follows and carries the remaining 14px.
+
+`.banner` (12px/16px, one text run) is this page's own lighter one-line variant
+used by the Trade desk; `.ds-banner` is the real DS Banner (14px/18px, 14px gap,
+22px dot, 13px title over an 11.5px body) used by Invoicing. They are not
+interchangeable.
 
 When the page was first built its `.card`/`.card-title`/`.card-subtitle` rules
 were accidentally left out of the extracted CSS, so every card rendered
