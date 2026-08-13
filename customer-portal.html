@@ -84,14 +84,30 @@
      this now acts on one card, not the whole page. */
   .chart-toolbar { display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; padding-bottom:var(--space-2); margin-bottom:var(--space-3); border-bottom:1px solid var(--pp-border); }
   .chart-toolbar .ctl input[type=date] { padding:5px 8px; font-size:11.5px; }
-  .stat-stack { display:flex; flex-direction:column; gap:12px; }
+  /* Product owner asked for Cost and Energy volume side by side in one line
+     rather than stacked rows. Two columns need real room, not just "fits on
+     screen": measured against the actual dataset's largest range (the full
+     Breda quarter+ span, hero cards reaching "18.803.000,0 kWh" /
+     "€ 1.412.678,48"), a hero value at --text-hero (32px) needs roughly
+     230px of card width to avoid overflowing past its own card edge — the
+     shared .stat-card min-width:160px (fine at single-column width, where
+     flex:1.2 has abundant room to grow past it) becomes the binding
+     constraint once two columns halve the available width, and a 160px
+     card cannot hold a 32px hero number. So Consumption's cards get a wider
+     floor, scoped to #stat-row only (the shared class stays 160px for
+     Dashboard/Wallet/Invoices, which don't use hero-sized values). Below
+     the second breakpoint further down, two columns collapse back to one —
+     verified by rendering the real page at real widths, not by arithmetic;
+     see that breakpoint's own comment for the reasoning. */
+  #stat-row .stat-card { min-width:230px; }
+  #stat-row .stat-result-group { min-width:260px; }
+  .stat-stack { display:flex; flex-direction:row; align-items:flex-start; gap:20px; }
   .stat-row { display:flex; gap:16px; flex-wrap:wrap; }
-  /* Consumption's two "equation" rows (Cost, then Energy volume) — see
+  /* Consumption's two "equation" groups (Cost, Energy volume) — see
      renderStatCards. Each is a labelled group of component cards feeding a
      larger .result card, rather than flat peers, so the reader always knows
      which number is the headline and which two explain it. */
-  .stat-stack .stat-group + .stat-group { margin-top:6px; }
-  .stat-group { display:flex; flex-direction:column; gap:8px; }
+  .stat-group { display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; }
   .stat-group-title { font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--pp-text-faint); }
   .stat-equation { display:flex; align-items:stretch; gap:10px; flex-wrap:wrap; }
   .stat-op { display:flex; align-items:center; justify-content:center; min-width:14px; font-size:15px; font-weight:700; color:var(--pp-text-faint); }
@@ -178,11 +194,46 @@
   .table-header-row details { flex:1; min-width:0; }
   .table-wrap { max-height:420px; overflow:auto; border:1px solid var(--pp-border); border-radius:8px; }
   table { width:100%; border-collapse:collapse; font-size:12px; }
-  thead th { position:sticky; top:0; background:var(--pp-surface-alt); text-align:left; padding:9px 14px; font-size:10.5px; font-weight:700; color:var(--pp-text-body); letter-spacing:.03em; border-bottom:1px solid var(--pp-border); text-transform:uppercase; }
+  /* Header and body share one padding rhythm (was 9px/14px vs 6px/14px —
+     the mismatch was part of the cramped feel) so the grid reads as one
+     consistent structure rather than a label row bolted onto denser data
+     rows. Row height grew 6px->8px vertical specifically: with 17 columns
+     the eye travels a long way from Date to Total Cost, and taller rows are
+     what keeps it from losing its line — zebra striping (below) still does
+     the same job it always did, just against slightly taller bands. */
+  thead th { position:sticky; top:0; background:var(--pp-surface-alt); text-align:left; padding:var(--space-2) var(--space-4); font-size:10.5px; font-weight:700; color:var(--pp-text-body); letter-spacing:.03em; border-bottom:1px solid var(--pp-border); text-transform:uppercase; }
   thead th.num, td.num { text-align:right; }
-  tbody td { padding:6px 14px; border-bottom:1px solid var(--pp-border); }
+  tbody td { padding:var(--space-2) var(--space-4); border-bottom:1px solid var(--pp-border); }
   tbody tr:nth-child(even) { background:var(--pp-surface-zebra); }
   tbody tr.clickable { cursor:pointer; }
+  /* The 17 columns are 4 groups (identity / metered / position / money) with
+     nothing today marking where one ends and the next begins — a rule at
+     each boundary (stronger than the hairline row dividers, so it reads as
+     structural rather than just another row-line) plus a touch of extra
+     breathing room does more for tracking a row across the table than
+     uniform padding alone. nth-child, not a class threaded through
+     renderTable's row-building, since the column order is fixed and this
+     keeps the boundary a pure presentation concern.
+
+     FRAGILE ON PURPOSE, READ BEFORE TOUCHING THE COLUMN LIST: these indices
+     are positional, not named, and nothing will fail if they drift — no
+     test catches a group rule landing mid-group, it will just silently
+     group the wrong columns. They encode this exact order (17 columns,
+     <thead> in the markup above and CSV_COLUMNS/renderTable in the JS below
+     must all agree on it — same class of hazard CLAUDE.md already flags for
+     CSV_COLUMNS vs <thead>):
+       1 Date · 2 Time · 3 Data                                    [identity, ends at 3]
+       4 Consumption · 5 Production · 6 EPEX · 7 Usage Cost · 8 Actual Usage   [metered, ends at 8]
+       9 Base Volume · 10 Peak Volume · 11 Hedge Volume · 12 Uncovered · 13 Long · 14 Short  [position, ends at 14]
+       15 Delta Cost · 16 Hedge Cost · 17 Total Cost                [money, no rule needed after — last group]
+     Adding, removing, or reordering a column shifts every boundary after it
+     — update the three indices below (and this comment) in the same change. */
+  thead th:nth-child(3), tbody td:nth-child(3),
+  thead th:nth-child(8), tbody td:nth-child(8),
+  thead th:nth-child(14), tbody td:nth-child(14) {
+    border-right:1px solid var(--pp-border-strong);
+    padding-right:var(--space-5);
+  }
   td.net-export { color:var(--pp-cyan); font-weight:600; }
   /* Certainty-layer text treatment for the table (see customer-portal.html's
      renderTable) — a projected row's numbers are real (historical-profile
@@ -247,7 +298,12 @@
   .banner { display:flex; align-items:center; gap:12px; border-radius:var(--radius-lg); padding:12px 16px; font-size:12.5px; }
   .banner-amber { background:var(--pp-amber-bg); border:1px solid var(--pp-amber-border); color:var(--pp-amber-text); }
   .banner-teal { background:var(--pp-teal-100); border:1px solid var(--pp-teal-300); color:var(--pp-teal-900); }
+  /* Same pattern as .banner-amber/.banner-teal, existing green tokens only
+     (already used by .badge.success/.dq-final) — for the top-up confirmation
+     state (see renderWalletTopupSuccess). */
+  .banner-green { background:var(--pp-green-bg); border:1px solid var(--pp-green-border); color:var(--pp-green-text); }
   .banner-icon { width:22px; height:22px; border-radius:50%; background:var(--pp-amber); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
+  .banner-icon.success { background:var(--pp-green); }
   .banner-body { flex:1; }
   .banner-title { font-weight:700; }
   .banner-sub { margin-top:2px; }
@@ -457,7 +513,7 @@
 
       <div class="page" id="page-consumption">
         <div class="controls">
-          <select id="site-select" disabled></select>
+          <span class="ctl">Connection <select id="site-select" disabled></select></span>
         </div>
         <div class="stat-stack" id="stat-row">
           <div class="stat-row"><div class="stat-card"><div class="label">Loading</div><div class="value">…</div><div class="sublabel">Fetching source data and calculating in the browser</div></div></div>
@@ -667,13 +723,20 @@
   var MIN_VOLUME_MW = 0.1;
   var VOLUME_STEP_MW = 0.1;
   var VOLUME_HINT = "Volume must be at least 0,1 MW and a multiple of 0,1 MW.";
+  // Shared with the Wallet ledger's own low-balance banner (renderWalletPage)
+  // so the top-up screen's banner/chip are derived from the SAME real
+  // threshold rather than a second hardcoded number.
+  var MIN_BALANCE_ALERT = 25000;
+  var MIN_TOPUP_EUR = 10;
 
   var state = {
     page: "Dashboard", connId: null,
     tradingView: "list", tradeId: null, wizardStep: 0,
     walletView: "ledger",
     walletAvailable: PortalSeedData.WALLET_AVAILABLE_BALANCE, walletSettled: 29122.00, walletReserved: 9400.00,
-    walletLedgerExtra: [], topupsExtra: [], topupAmount: 12400,
+    // topupAmount is reset to a real, computed value every time topUpWallet()
+    // opens the screen (see that function) — 0 here is just "not open yet".
+    walletLedgerExtra: [], topupsExtra: [], topupAmount: 0, lastTopup: null,
     wizard: { direction: "Buy", shape: "Peak", periodType: "quarter", monthIdx: 0, quarterIdx: 1,
               connId: "rot", volumeMw: 0.200, note: "" },
     invoiceId: null,
@@ -924,17 +987,78 @@
     renderApp();
   }
 
-  function topUpWallet() { state.walletView = "topup"; renderApp(); }
+  /**
+   * How much (EUR, >=0) would clear the ledger's own real low-balance alert
+   * right now — 0 when the wallet is already at/above it. Used to seed the
+   * top-up screen with a REAL number instead of the fictional per-trade
+   * shortfall the mockup copy used to assert (see renderWalletTopup).
+   */
+  function balanceAlertShortfall() {
+    return Math.max(0, MIN_BALANCE_ALERT - state.walletAvailable);
+  }
+
+  function topUpWallet() {
+    // Default to the real amount that clears the low-balance alert, if any
+    // — otherwise a plain round default. Either way this is a real number
+    // computed from state, never a hardcoded one.
+    var shortfall = balanceAlertShortfall();
+    state.topupAmount = shortfall > 0 ? shortfall : 10000;
+    state.walletView = "topup";
+    renderApp();
+  }
   function backToWallet() { state.walletView = "ledger"; renderApp(); }
+
+  /** onchange (blur/Enter): parse, clamp, reformat the field, full re-render. */
   function setTopupAmount(raw) {
     var cleaned = String(raw).replace(/\./g, "").replace(",", ".");
     var n = parseFloat(cleaned);
-    state.topupAmount = isNaN(n) ? 0 : n;
+    state.topupAmount = isNaN(n) || n < 0 ? 0 : n;
     renderApp();
   }
+
+  /**
+   * oninput (every keystroke): parse only, patch the few dependent elements
+   * in place via refreshTopupUi() — NOT renderApp(). A full re-render here
+   * would rebuild the <input> mid-keystroke and steal focus, the same
+   * footgun already hit once on the wizard's volume field and once on the
+   * Back Office commercial-edit fields; this is the same fix (see
+   * setWizardVolume/refreshWizardVolumeUi for the pattern this mirrors).
+   */
+  function onTopupAmountInput(raw) {
+    var cleaned = String(raw).replace(/\./g, "").replace(",", ".");
+    var n = parseFloat(cleaned);
+    state.topupAmount = isNaN(n) || n < 0 ? 0 : n;
+    refreshTopupUi();
+  }
+
   function setTopupAmountValue(v) { state.topupAmount = v; renderApp(); }
+
+  function topupAmountValid() { return state.topupAmount >= MIN_TOPUP_EUR; }
+
+  /** Patches the pay button, resulting-balance preview and validation message
+   *  in place — the targeted-update counterpart to onTopupAmountInput. */
+  function refreshTopupUi() {
+    var valid = topupAmountValid();
+    var btn = document.getElementById("topup-pay-btn");
+    if (btn) {
+      btn.disabled = !valid;
+      btn.textContent = "Pay € " + ConsumptionCalc.formatNL(state.topupAmount, 2) + " with iDEAL";
+    }
+    var preview = document.getElementById("topup-preview-line");
+    if (preview) {
+      preview.textContent = valid
+        ? "New available balance: € " + ConsumptionCalc.formatNL(state.walletAvailable + state.topupAmount, 2)
+        : "";
+    }
+    var msg = document.getElementById("topup-validation");
+    if (msg) {
+      msg.textContent = valid || state.topupAmount === 0 ? "" :
+        "Minimum top-up is € " + ConsumptionCalc.formatNL(MIN_TOPUP_EUR, 2) + ".";
+    }
+  }
+
   function performTopup() {
-    if (state.topupAmount <= 0) { return; }
+    if (!topupAmountValid()) { return; }
     var amt = state.topupAmount;
     var now = new Date();
     var pad = function (n) { return String(n).padStart(2, "0"); };
@@ -953,9 +1077,16 @@
     state.walletSettled += amt;
     state.walletLedgerExtra.unshift(ledgerEntry);
     state.topupsExtra.unshift(topupEntry);
-    state.walletView = "ledger";
+    // A real confirmation state, not an instant bounce to the ledger — see
+    // renderWalletTopupSuccess(). lastTopup is a snapshot for that screen;
+    // it's fine for it to go stale after the next top-up, nothing else reads it.
+    state.lastTopup = { amount: amt, ref: ref, newAvailable: newAvailable, dateStr: topupDateStr };
+    state.walletView = "topup-success";
     renderApp();
   }
+
+  /** "Back to wallet" from the confirmation screen. */
+  function closeTopupSuccess() { state.walletView = "ledger"; renderApp(); }
 
   function openInvoice(id) {
     state.page = "Invoices"; activatePageDom("invoices");
@@ -975,8 +1106,9 @@
     selectWizardBar: selectWizardBar, setHoverBar: setHoverBar, clearHoverBar: clearHoverBar,
     setWizardConnection: setWizardConnection, setWizardVolume: setWizardVolume,
     commitWizardVolume: commitWizardVolume, onWizardNoteChange: onWizardNoteChange, submitWizard: submitWizard,
-    topUpWallet: topUpWallet, backToWallet: backToWallet,
-    setTopupAmount: setTopupAmount, setTopupAmountValue: setTopupAmountValue, performTopup: performTopup,
+    topUpWallet: topUpWallet, backToWallet: backToWallet, closeTopupSuccess: closeTopupSuccess,
+    setTopupAmount: setTopupAmount, setTopupAmountValue: setTopupAmountValue,
+    onTopupAmountInput: onTopupAmountInput, performTopup: performTopup,
     openInvoice: openInvoice, closeInvoice: closeInvoice,
     acceptOffer: acceptOffer, rejectOffer: rejectOffer,
     noop: function () {}
@@ -1750,14 +1882,16 @@
 
   function renderWalletPage() {
     if (state.walletView === "topup") { renderWalletTopup(); return; }
+    if (state.walletView === "topup-success") { renderWalletTopupSuccess(); return; }
 
     var kpiHtml =
       statCardHtml("Available balance", "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2), "brand", "ready to reserve for new trades") +
       statCardHtml("Settled balance", "€ " + ConsumptionCalc.formatNL(state.walletSettled, 2), "", "cleared funds") +
       statCardHtml("Reserved", "€ " + ConsumptionCalc.formatNL(state.walletReserved, 2), "warning", "1 accepted trade awaiting confirmation");
 
-    var lowBalanceBanner = state.walletAvailable < 25000
-      ? '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">Your minimum balance alert is set at € 25.000 — you are currently below it. Top up to keep trading.</div></div>'
+    var lowBalanceBanner = state.walletAvailable < MIN_BALANCE_ALERT
+      ? '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">Your minimum balance alert is set at € ' +
+        ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) + ' — you are currently below it. Top up to keep trading.</div></div>'
       : "";
 
     var allLedger = state.walletLedgerExtra.concat(PortalSeedData.WALLET_LEDGER);
@@ -1787,24 +1921,67 @@
     document.getElementById("wallet-body").innerHTML = '<div class="stat-row">' + kpiHtml + '</div>' + lowBalanceBanner + ledgerCard;
   }
 
-  function renderWalletTopup() {
-    var shortfallBanner = '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">You are € 12.400,00 short for the trade you were composing (Peak Q1-2027 · 1,0 MW). Top up and you will be returned to it.</div></div>';
+  /**
+   * Real banner derived from state, replacing the old hardcoded "you are
+   * short for the trade you were composing" copy — that trade/return journey
+   * doesn't exist anywhere in this codebase (topUpWallet() is only reached
+   * from the ledger's generic "Top up" button; the wizard's own insufficient-
+   * funds check never links here). Rather than leave the space blank, this
+   * mirrors the Wallet ledger's own real low-balance banner: shown, amber,
+   * with the actual shortfall when the wallet is genuinely below the alert
+   * threshold; a plain informational line otherwise. Either way nothing here
+   * asserts a fact the app didn't compute.
+   */
+  function topupBannerHtml() {
+    var shortfall = balanceAlertShortfall();
+    if (shortfall > 0) {
+      return '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">' +
+        'You are € ' + ConsumptionCalc.formatNL(shortfall, 2) + ' below your € ' + ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) +
+        ' minimum balance alert. Top up to clear it.</div></div>';
+    }
+    return '<div class="banner banner-teal"><div class="banner-body">Your balance is above the € ' +
+      ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) + ' minimum balance alert. Add funds any time to keep trading.</div></div>';
+  }
 
-    var chipsHtml = [10000, 25000, 50000, 100000].map(function (a) {
-      var sel = state.topupAmount === a ? " selected" : "";
-      return '<button type="button" class="amount-chip' + sel + '" onclick="PP.setTopupAmountValue(' + a + ')">€ ' + ConsumptionCalc.formatNL(a, 0) + '</button>';
-    }).join("");
+  function renderWalletTopup() {
+    var shortfall = balanceAlertShortfall();
+
+    // Round chips plus, when there's a real shortfall, one chip computed
+    // from it — so someone who came here below their alert threshold has an
+    // exact amount to click rather than doing the arithmetic themselves
+    // against four numbers that ignore their actual situation.
+    var chipAmounts = [10000, 25000, 50000, 100000];
+    var chipsHtml = (shortfall > 0 ? [{ amt: shortfall, label: "€ " + ConsumptionCalc.formatNL(shortfall, 0) + " — clears alert" }] : [])
+      .concat(chipAmounts.map(function (a) { return { amt: a, label: "€ " + ConsumptionCalc.formatNL(a, 0) }; }))
+      .map(function (c) {
+        var sel = state.topupAmount === c.amt ? " selected" : "";
+        return '<button type="button" class="amount-chip' + sel + '" onclick="PP.setTopupAmountValue(' + c.amt + ')">' + c.label + '</button>';
+      }).join("");
+
+    // Honest urgency: only claim a countdown matters if one genuinely
+    // exists (a real pending offer in state), never a generic scare line.
+    var pendingOffer = state.trades.filter(function (t) { return t.pending; })[0];
+    var urgencyNote = pendingOffer
+      ? "You have an open offer (" + pendingOffer.id + ") expiring in " + mmss(pendingOffer.secondsRemaining) +
+        " — a bank transfer will not arrive before then. Use iDEAL if you need funds to act on it."
+      : "iDEAL clears in seconds; a bank transfer can take 1–2 business days — worth knowing before you're up against a firm offer's countdown.";
 
     var idealCard = '<div class="ideal-card">' +
       '<div class="card-head"><div><div class="card-title">iDEAL</div><div class="card-subtitle" style="margin-bottom:0">Funds available within seconds</div></div>' + badge("RECOMMENDED", "brand") + '</div>' +
       '<div class="field-group" style="margin-bottom:0">' +
         '<div class="fg-label">Amount</div>' +
-        '<div class="amount-input-wrap"><span>€</span><input type="text" value="' + ConsumptionCalc.formatNL(state.topupAmount, 0) + '" onchange="PP.setTopupAmount(this.value)"></div>' +
+        '<div class="amount-input-wrap"><span>€</span><input id="topup-amount-input" type="text" inputmode="decimal" value="' + ConsumptionCalc.formatNL(state.topupAmount, 0) +
+          '" oninput="PP.onTopupAmountInput(this.value)" onchange="PP.setTopupAmount(this.value)"></div>' +
         '<div class="amount-chips">' + chipsHtml + '</div>' +
+        '<div id="topup-validation" class="fg-hint" style="color:var(--pp-red)">' +
+          (topupAmountValid() ? "" : "Minimum top-up is € " + ConsumptionCalc.formatNL(MIN_TOPUP_EUR, 2) + ".") + '</div>' +
       '</div>' +
       '<div class="field-group" style="margin-bottom:0"><div class="fg-label">Your bank</div><div class="readonly-field">ING</div></div>' +
-      '<button type="button" class="btn-primary" style="width:100%" onclick="PP.performTopup()">Pay € ' + ConsumptionCalc.formatNL(state.topupAmount, 2) + ' with iDEAL</button>' +
-      '<div class="caption">You will be redirected to your bank to complete the payment. Funds are typically available within a few seconds.</div>' +
+      '<div id="topup-preview-line" class="caption" style="font-weight:600;color:var(--pp-teal-700)">' +
+        (topupAmountValid() ? "New available balance: € " + ConsumptionCalc.formatNL(state.walletAvailable + state.topupAmount, 2) : "") + '</div>' +
+      '<button type="button" id="topup-pay-btn" class="btn-primary" style="width:100%"' + (topupAmountValid() ? "" : " disabled") +
+        ' onclick="PP.performTopup()">Pay € ' + ConsumptionCalc.formatNL(state.topupAmount, 2) + ' with iDEAL</button>' +
+      '<div class="caption">You will be redirected to your bank to complete the payment. ' + urgencyNote + '</div>' +
       '</div>';
 
     var bank = PortalSeedData.BANK_DETAILS;
@@ -1814,7 +1991,8 @@
       '<div class="copy-row"><div><div class="cr-label">IBAN</div><div class="cr-value">' + bank.iban + '</div></div><span class="copy-affordance">copy</span></div>' +
       '<div class="copy-row"><div><div class="cr-label">BIC</div><div class="cr-value">' + bank.bic + '</div></div><span class="copy-affordance">copy</span></div>' +
       '<div class="copy-row highlight"><div><div class="cr-label">Payment reference</div><div class="cr-value" style="color:var(--pp-teal-700)">' + bank.reference + '</div></div><span class="copy-affordance">copy</span></div>' +
-      '<div class="caption">Always include the payment reference so we can match your transfer automatically.</div>' +
+      '<div class="caption">Always include the payment reference so we can match your transfer automatically.' +
+        (pendingOffer ? " A transfer sent now will not arrive before your open offer (" + pendingOffer.id + ") expires — use iDEAL for that." : "") + '</div>' +
       '<a class="btn-link" onclick="PP.noop()">Download instructions as PDF</a>' +
       '</div>';
 
@@ -1827,9 +2005,31 @@
     }).join("");
     var topupsCard = cardHtml("Recent top-ups", "", '<div class="grid-table dense">' + head + rows + '</div>');
 
-    document.getElementById("wallet-body").innerHTML = shortfallBanner +
+    document.getElementById("wallet-body").innerHTML = topupBannerHtml() +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;margin-top:16px">' + idealCard + bankCard + '</div>' +
       '<div style="margin-top:16px">' + topupsCard + '</div>';
+  }
+
+  /**
+   * Real confirmation state — performTopup() used to mutate the balances and
+   * jump straight back to the ledger in one call, with nothing on screen
+   * marking that anything happened. This is that missing step: what was
+   * paid, the new balance, the reference, then an explicit way back.
+   */
+  function renderWalletTopupSuccess() {
+    var t = state.lastTopup;
+    if (!t) { backToWallet(); return; }
+    var successBanner = '<div class="banner banner-green"><div class="banner-icon success">✓</div><div class="banner-body">' +
+      '<div class="banner-title">Top-up successful</div>' +
+      '<div class="banner-sub">€ ' + ConsumptionCalc.formatNL(t.amount, 2) + ' via iDEAL · reference ' + t.ref + ' · ' + t.dateStr + '</div></div></div>';
+
+    var summaryCard = cardHtml("New balance", "", '<div class="balance-box">' +
+      '<div class="bb-row"><span>Amount paid</span><span>€ ' + ConsumptionCalc.formatNL(t.amount, 2) + '</span></div>' +
+      '<div class="bb-row total"><span>Available balance</span><span style="color:var(--pp-green)">€ ' + ConsumptionCalc.formatNL(t.newAvailable, 2) + '</span></div>' +
+      '</div>' +
+      '<button type="button" class="btn-primary" style="width:100%;margin-top:14px" onclick="PP.closeTopupSuccess()">Back to wallet</button>');
+
+    document.getElementById("wallet-body").innerHTML = successBanner + '<div style="margin-top:16px;max-width:420px">' + summaryCard + '</div>';
   }
 
   // --- Invoices ----------------------------------------------------------
@@ -3488,13 +3688,39 @@
   // and grouped/calculated client-side (see consumption-data-loader.js).
   // Nothing here is pre-computed ahead of time — editing hedge_blocks_2026.json
   // or the combined dataset takes effect on the next page load, no build step.
+  /**
+   * "871687100000000011" -> "8716 8710 0000 0000 11" — matches the spaced
+   * EAN format PortalSeedData.CONNECTIONS already uses elsewhere in this
+   * portal (Connections list/detail), so the same metering point reads the
+   * same way in both places. Groups of 4 with a trailing 2 (18 digits).
+   */
+  function formatEan(ean) {
+    return String(ean).replace(/(\d{4})(?=\d)/g, "$1 ");
+  }
+
+  /**
+   * "Rotterdam DC · 8716 8710 0000 0000 11" — a middot, not an em dash:
+   * this portal already uses " — " for the "no name set" placeholder
+   * itself (SITE_META), so joining name+EAN with the same character would
+   * print three dashes in a row for that one connection. The middot is
+   * also the separator the chart subtitle already uses for this kind of
+   * joining, so it's not a new convention. For a connection with no real
+   * name, the placeholder text adds nothing next to its own EAN — the EAN
+   * *is* the identifier in that case — so the name is dropped entirely
+   * rather than printed alongside a middot too.
+   */
+  function connectionOptionLabel(site) {
+    var hasRealName = !/^—.*—$/.test(String(site.name).trim());
+    return (hasRealName ? site.name + " · " : "") + formatEan(site.ean);
+  }
+
   function init(loadedData) {
     DATA = loadedData;
 
     DATA.sites.forEach(function (site) {
       var opt = document.createElement("option");
       opt.value = site.id;
-      opt.textContent = site.name;
+      opt.textContent = connectionOptionLabel(site);
       siteSelect.appendChild(opt);
     });
 
