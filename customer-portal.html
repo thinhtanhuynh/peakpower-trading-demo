@@ -464,7 +464,32 @@
      than let the browser choose those break points, one breakpoint decides
      them deliberately. This is a desktop trading tool, not a mobile one —
      no attempt at a true small-screen layout below this, just a stated stop
-     rather than an inherited one. */
+     rather than an inherited one.
+
+     Cost/Energy volume side by side (.stat-stack row) needs real width per
+     column, which is why it gets its OWN, higher breakpoint below rather
+     than reusing 760px. Verified by rendering the actual page against the
+     largest range in the dataset (Breda, full measured+projected span:
+     hero values up to "18.803.000,0 kWh" / "€ 1.412.678,48") at 10px
+     increments: the hero value stays on one line down to a 890px stackWidth
+     and starts wrapping at 885px — a getClientRects() check on a Range
+     over the value text is what actually detects that (the .value element
+     itself is a block-level div, so ITS OWN getClientRects() is always one
+     rect regardless of how many lines the text inside wraps into — a
+     first-pass version of this check trusted that and reported "1 line"
+     for text that was visibly wrapped in a screenshot; only the rendered
+     pixels caught the mistake). 920px leaves a safety margin above the
+     measured 890px floor. */
+  @media (max-width: 920px) {
+    .stat-stack { flex-direction:column; gap:12px; }
+    .stat-stack .stat-group + .stat-group { margin-top:6px; }
+  }
+  /* Below this, a single stacked column (now full page width again, see
+     920px above) starts running out of room for its own three cards
+     side by side — same "let it wrap into rows, don't shrink the card
+     below the hero value's floor" strategy. This is a desktop trading
+     tool, not a mobile one — no attempt at a true small-screen layout
+     below this, just a stated stop rather than an inherited one. */
   @media (max-width: 760px) {
     .stat-equation, .stat-result-group { flex-direction:column; align-items:stretch; }
     .stat-op { min-width:0; padding:2px 0; }
