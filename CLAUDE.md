@@ -857,6 +857,51 @@ column — on a single-day range every row repeats the same date; on a
 multi-day range it's what disambiguates the repeating `HH:MM` values
 across days.
 
+### Visual hierarchy, and three numbers not to "tidy"
+
+The page reads answer-first, and three constants carry that. Each was
+arrived at by rendering and looking, so changing one on aesthetic grounds
+will quietly undo something that was measured.
+
+**`--text-hero` (32px) on `.stat-card.result .value`.** Result and component
+cards were both 23px, so each equation read as three equal figures with
+operators between them rather than "these two make that one". The result
+card also takes a tint and shadow. Watch for stale duplicate rules when
+changing this — one was already found silently overriding the new size.
+
+**Cost chart 190px vs. the usage chart's 260px.** The cost chart is the usage
+chart's derived view (`Total = Hedge + Delta`, same grammar). It used to say
+so in a subtitle while looking identical, which is the flaw this page had
+everywhere: relationships asserted in words instead of shown. **Only the
+height differs — every horizontal value (`padLeft`, `width`, `plotW`,
+`stepX`, `barW`) is byte-identical**, because the shared crosshair depends
+on x alone and the two range charts must stay pixel-aligned. That has been
+violated once before; `range-alignment-audit.js` asserts it.
+
+**`HATCH_MIN_BAR_WIDTH = 5`.** The 45° provisional hatch is scaled to bar
+width by `hatchPitchFor()`, and **below 5px it is dropped entirely** in
+favour of a flat fill at the provisional opacity. This is not a tuning
+value: on the range chart's ~3px bars the pattern tile is sub-resolution, so
+SVG cannot draw a diagonal at all and it renders as a flat wash
+indistinguishable from a solid fill — verified by browser screenshot and
+pixel crop, which is the only way this surfaces. Drawing an illegible
+texture is worse than omitting it, because it claims a distinction the
+pixels do not carry. Texture is one of four redundant certainty cues
+(with opacity, the boundary marker and the tooltip wording), so dropping the
+one that cannot render loses no meaning. `narrow-bar-audit.js` asserts all
+three halves: no hatch at the narrow scale, the fallback keeps the reduced
+opacity, and wide bars still hatch so the threshold cannot over-trigger.
+
+**One breakpoint, at 760px** — the page's only `@media` rule. Everything
+else responsive here is emergent (`flex-wrap` + `min-width` + `flex:1`, plus
+the day chart's `ResizeObserver`), which is fine until wrap *position*
+carries meaning. It does in three places: the equation (which stops being an
+equation if its parts wrap arbitrarily), the chart toolbar, and the table
+summary row. Below 760px those stack deliberately. There is no small-screen
+layout below that and none is intended — this is a desktop trading tool, and
+the breakpoint is a stated stop rather than an inherited one. Known and
+accepted: the chart SVGs overflow the viewport below ~950px.
+
 ### Where the controls live, and why they moved
 
 There is no longer a single controls row. Each control sits with **what it
