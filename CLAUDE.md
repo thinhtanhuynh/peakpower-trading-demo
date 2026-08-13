@@ -470,20 +470,21 @@ CVD, so no single cue carries it):**
    just triggered unconditionally here instead of opt-in. None of
    `COST_TOTAL_LINE`/`COST_HEDGE_LINE`/`COST_BUY_FILL`/`COST_SELL_FILL` are
    steps of a named ramp (they're one-off hex — see "Palette modernization"
-   above), so "one step darker" is computed, not looked up: convert to
-   HSL, subtract 12 percentage points of lightness (clamp at 0), keep hue
-   and saturation — reproducible from whichever fill hex is passed in, so
-   it auto-tracks if the four ever change again rather than needing a
-   second hardcoded table kept in sync with the first. Precomputed for the
-   current four (all clear 3:1 against the white chart surface, so the
-   hatch reads even at hairline width):
+   above), so "one step darker" is computed, not looked up. Shipped as
+   `darkenHex(hex, 0.22)` in `customer-portal.html` — an RGB×(1−0.22)
+   multiply, kept simple since it only needs to run on the four known
+   fills — reproducible from whichever fill hex is passed in, so it
+   auto-tracks if the four ever change again rather than needing a second
+   hardcoded table kept in sync with the first. As-shipped values (all
+   clear 3:1 against the white chart surface, so the hatch reads even at
+   hairline width):
 
-   | Fill | Hatch ink | Contrast vs white |
+   | Fill | Hatch ink (`darkenHex(·, 0.22)`) | Contrast vs white |
    |---|---|---|
-   | `#059f8f` teal | `#036359` | 7.16:1 |
-   | `#4338ca` indigo | `#332a9d` | 10.72:1 |
-   | `#e8590c` orange | `#ae4309` | 5.82:1 |
-   | `#0891b2` cyan | `#065f75` | 7.24:1 |
+   | `#059f8f` teal | `#047c70` | 5.09:1 |
+   | `#4338ca` indigo | `#342c9e` | 10.50:1 |
+   | `#e8590c` orange | `#b54509` | 5.50:1 |
+   | `#0891b2` cyan | `#06718b` | 5.61:1 |
 3. **Stroke pattern, lines only, and only for hues with no existing
    category dash** — the projected segment of the teal Actual-Usage/
    Total-Cost line switches from solid to a fine dot (`stroke-dasharray:

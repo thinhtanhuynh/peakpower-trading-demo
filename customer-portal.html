@@ -481,12 +481,23 @@
 
 <script src="consumption-calc.js"></script>
 <script src="consumption-data-loader.js"></script>
+<script src="usage-projection.js"></script>
 <script src="portal-seed-data.js"></script>
 <script src="portal-trade-link.js"></script>
 <script>
 (function () {
   "use strict";
   var DATA = null;
+  // Lazily-built, cached per site: UsageProjection.buildUsageProfile() is a
+  // full scan of that site's real history (217 dates x 96 intervals), so it's
+  // built once on first use per site rather than on every render().
+  var usageProfiles = {};
+  function getUsageProfile(siteId) {
+    if (!usageProfiles[siteId]) {
+      usageProfiles[siteId] = UsageProjection.buildUsageProfile(DATA.byDate, DATA.bySite[siteId] || {});
+    }
+    return usageProfiles[siteId];
+  }
   var siteSelect = document.getElementById("site-select");
   var fromDate = document.getElementById("from-date");
   var toDate = document.getElementById("to-date");
@@ -1781,31 +1792,43 @@
     return '<div class="stat-group">' + titleHtml + '<div class="stat-equation">' + equationHtml + '</div></div>';
   }
 
-  /**
-   * A card's opts for the certainty layer, from an optional per-card entry
-   * on stats.certainty[key]: { state: "measured"|"projected"|"mixed",
-   * measuredFormatted, projectedFormatted }. Absent (today, and any
-   * fully-measured range) means opts stays {} — byte-identical output to
-   * before this existed. "projected" (0 measured days behind this figure)
-   * marks the whole card with the badge and no breakdown line, since there
-   * is no measured part to break out. "mixed" additionally adds the faint
-   * "+ … projected" clause under the (measured-only) headline value.
-   */
-  function certaintyOpts(stats, key) {
-    var c = stats.certainty && stats.certainty[key];
-    if (!c) { return {}; }
-    if (c.state === "projected") { return { projected: true }; }
-    if (c.state === "mixed") {
-      return { projected: true, breakdown: "+ " + c.projectedFormatted + " projected" };
-    }
-    return {};
-  }
-
   function mergeOpts(a, b) {
     var out = {};
     for (var k in a) { out[k] = a[k]; }
     for (var k2 in b) { out[k2] = b[k2]; }
     return out;
+  }
+
+  /**
+   * Certainty opts for a VOLUME card (Actual usage, Uncovered) — usage and
+   * hedge position are both computable from a historical-profile projection
+   * with no spot price involved, so a future range still gets a real number,
+   * just marked. `format` turns a raw kWh number into the card's display
+   * string. `projectedStats`/`realDayCount`/`totalDayCount` are optional —
+   * absent (today, and any fully-measured range) leaves opts at {}, i.e.
+   * byte-identical output to before this existed.
+   */
+  function volumeCertaintyOpts(realDayCount, totalDayCount, projectedValueKwh, format) {
+    if (realDayCount == null || realDayCount === totalDayCount) { return {}; }
+    if (realDayCount === 0) { return { projected: true }; }
+    return { projected: true, breakdown: "+ " + format(projectedValueKwh) + " projected" };
+  }
+
+  /**
+   * Certainty opts for a COST card that can be WITHHELD (Delta cost, Total
+   * cost) — forward's spot price is genuinely unknown, so unlike the volume
+   * cards there is no projected number to show once a range runs past the
+   * measured data, per forward's decision: cost stays real for measured
+   * days, and is explicitly marked unavailable rather than guessed for the
+   * rest. Returns { unavailable, sublabel } — `unavailable` swaps the
+   * card's value for an em dash (see caller), never a fabricated total.
+   */
+  function costCertaintyOpts(realDayCount, totalDayCount) {
+    if (realDayCount == null || realDayCount === totalDayCount) { return {}; }
+    if (realDayCount === 0) {
+      return { unavailable: true, sublabel: "forward price unknown" };
+    }
+    return { unavailable: false, sublabel: "excludes " + (totalDayCount - realDayCount) + " projected day(s) — forward price unknown" };
   }
 
   /**
@@ -1815,8 +1838,23 @@
    * usage − Hedge volume = Uncovered). Long/Short collapse into that one
    * Uncovered card, which takes whichever identity applies — they are
    * mutually exclusive signs of the same figure, never both non-zero.
+   *
+   * `range` is optional: { measuredStats, projectedStats, realDayCount,
+   * totalDayCount } from a date range that can now extend past the measured
+   * dataset. Omitted (or a fully-measured range) renders exactly as before.
+   * Cost (Delta/Total) is withheld rather than projected when it runs past
+   * measured days — forward EPEX is genuinely unknown, unlike usage/hedge
+   * volume, which stay real (historical-profile projection, no price
+   * needed). Hedge cost is never withheld — it's priced at the hedge
+   * block's own locked-in contract price, not spot, so it stays a plain
+   * unmarked number even on a fully-projected range.
    */
-  function renderStatCards(stats) {
+  function renderStatCards(stats, range) {
+    range = range || {};
+    var realDayCount = range.realDayCount;
+    var totalDayCount = range.totalDayCount;
+    var projected = range.projectedStats || {};
+
     var actualUsageTone = stats.actualUsageKwh < 0 ? "export" : "";
     // .negative (red), not the DS's .critical (orange) — an additional cost
     // reads as red here, while the design system reserves critical/orange for
@@ -1829,22 +1867,46 @@
     var uncoveredTone = stats.shortKwh > 0 ? "short" : (stats.longKwh > 0 ? "export" : "");
     var uncoveredSublabel = stats.shortKwh > 0 ? "under-hedged, bought at spot" :
       (stats.longKwh > 0 ? "over-hedged, sold at spot" : "fully hedged");
+    // The projected portion's own uncovered magnitude, same short-else-long
+    // rule as the combined card — an edge case (measured short, projected
+    // long, or vice versa) would show a same-signed breakdown regardless;
+    // rare enough not to special-case further here.
+    var projectedUncoveredKwh = projected.shortKwh > 0 ? projected.shortKwh : (projected.longKwh || 0);
+
+    function eurValue(v) { return "€ " + ConsumptionCalc.formatNL(Math.abs(v), 2); }
+    function kwhValue(v) { return ConsumptionCalc.formatNL(v, 1) + " kWh"; }
+
+    var deltaCostOpts = costCertaintyOpts(realDayCount, totalDayCount);
+    var totalCostOpts = mergeOpts({ result: true }, costCertaintyOpts(realDayCount, totalDayCount));
+
+    var deltaCostHtml = deltaCostOpts.unavailable
+      ? statCardHtml("Delta cost", "€ —", "", deltaCostOpts.sublabel, {})
+      : statCardHtml("Delta cost", (stats.deltaCostEur >= 0 ? "+ " : "− ") + eurValue(stats.deltaCostEur), deltaCostTone,
+          deltaCostOpts.sublabel || (stats.deltaCostEur >= 0 ? "additional cost vs. hedge" : "savings / revenue vs. hedge"), {});
+    var totalCostHtml = totalCostOpts.unavailable
+      ? statCardHtml("Total cost", "€ —", "", totalCostOpts.sublabel, { result: true })
+      : statCardHtml("Total cost", (stats.totalCostEur >= 0 ? "+ " : "− ") + eurValue(stats.totalCostEur), totalCostTone,
+          totalCostOpts.sublabel || "hedge + delta cost", { result: true });
 
     var costEquation =
-      statCardHtml("Hedge cost", "€ " + ConsumptionCalc.formatNL(stats.hedgeCostEur, 2), "", "hedge volume at block price", certaintyOpts(stats, "hedgeCost")) +
+      // Hedge cost is priced at the block's own contract price, not spot —
+      // never withheld or marked projected, even on a fully-projected range.
+      statCardHtml("Hedge cost", eurValue(stats.hedgeCostEur), "", "hedge volume at block price", {}) +
       statOpHtml("+") +
-      statCardHtml("Delta cost", (stats.deltaCostEur >= 0 ? "+ " : "− ") + "€ " + ConsumptionCalc.formatNL(Math.abs(stats.deltaCostEur), 2), deltaCostTone, stats.deltaCostEur >= 0 ? "additional cost vs. hedge" : "savings / revenue vs. hedge", certaintyOpts(stats, "deltaCost")) +
+      deltaCostHtml +
       statOpHtml("=") +
-      statCardHtml("Total cost", (stats.totalCostEur >= 0 ? "+ " : "− ") + "€ " + ConsumptionCalc.formatNL(Math.abs(stats.totalCostEur), 2), totalCostTone, "hedge + delta cost", mergeOpts({ result: true }, certaintyOpts(stats, "totalCost")));
+      totalCostHtml;
 
     var volumeEquation =
-      statCardHtml("Actual usage", ConsumptionCalc.formatNL(stats.actualUsageKwh, 1) + " kWh", actualUsageTone, stats.actualUsageKwh < 0 ? "net exporter" : "net importer", certaintyOpts(stats, "actualUsage")) +
+      statCardHtml("Actual usage", kwhValue(stats.actualUsageKwh), actualUsageTone, stats.actualUsageKwh < 0 ? "net exporter" : "net importer",
+        volumeCertaintyOpts(realDayCount, totalDayCount, projected.actualUsageKwh, kwhValue)) +
       statOpHtml("−") +
       // Hedge volume is a real booked position regardless of date — never
       // gets the projected treatment, even on an otherwise-projected row.
-      statCardHtml("Hedge volume", ConsumptionCalc.formatNL(stats.hedgeVolumeKwh, 1) + " kWh", "", "base + peak, locked in") +
+      statCardHtml("Hedge volume", kwhValue(stats.hedgeVolumeKwh), "", "base + peak, locked in") +
       statOpHtml("=") +
-      statCardHtml(uncoveredLabel, ConsumptionCalc.formatNL(uncoveredValueKwh, 1) + " kWh", uncoveredTone, uncoveredSublabel, mergeOpts({ result: true }, certaintyOpts(stats, "uncovered")));
+      statCardHtml(uncoveredLabel, kwhValue(uncoveredValueKwh), uncoveredTone, uncoveredSublabel,
+        mergeOpts({ result: true }, volumeCertaintyOpts(realDayCount, totalDayCount, projectedUncoveredKwh, kwhValue)));
 
     statRow.innerHTML =
       statGroupHtml("Cost", costEquation) +
@@ -1908,48 +1970,156 @@
     return Math.max(pitch - gap, 0.5);
   }
 
-  function buildChartSvg(times, actualUsage, hedgeVolume, uncovered, width) {
+  // --- Certainty layer (Actual vs Provisional) -------------------------------
+  // See CLAUDE.md "Certainty layer — provisional offers & projected data" for
+  // the full vocabulary. Shared by all four chart variants so the future-date
+  // boundary and the offer overlay look and behave identically everywhere.
+
+  var CERTAINTY_PROVISIONAL_OPACITY = 0.55;
+  var CERTAINTY_HATCH_DARKEN = 0.22; // "one step darker" — see hatchDefs below
+
+  function darkenHex(hex, amt) {
+    var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+    r = Math.max(0, Math.round(r * (1 - amt)));
+    g = Math.max(0, Math.round(g * (1 - amt)));
+    b = Math.max(0, Math.round(b * (1 - amt)));
+    function hx(v) { var s = v.toString(16); return s.length < 2 ? "0" + s : s; }
+    return "#" + hx(r) + hx(g) + hx(b);
+  }
+
+  function hatchId(hue) { return "hatch-" + hue.replace("#", ""); }
+
+  /**
+   * One <pattern> per distinct hue used this render — 45°, 6px pitch hairline
+   * hatch, inked in the fill's own hue one step darker (never a new hue).
+   * This is the dataviz "Lines" texture spec, triggered unconditionally here
+   * (primary channel for "not yet real", not opt-in redundant decoration).
+   */
+  function hatchDefs(hues) {
+    var seen = {}, defs = "";
+    hues.forEach(function (hue) {
+      if (seen[hue]) { return; }
+      seen[hue] = true;
+      defs += '<pattern id="' + hatchId(hue) + '" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+        '<rect width="6" height="6" fill="' + hue + '"></rect>' +
+        '<line x1="0" y1="0" x2="0" y2="6" stroke="' + darkenHex(hue, CERTAINTY_HATCH_DARKEN) + '" stroke-width="1"></line>' +
+        '</pattern>';
+    });
+    return defs;
+  }
+
+  /**
+   * Mandatory boundary marker (CLAUDE.md certainty-layer #4) — a solid
+   * vertical rule spanning the plot, with a label pair directly above it.
+   * `x` is the bar's left edge in the chart's own coordinate system.
+   */
+  function boundaryMarkerMarkup(x, padTop, plotH, labelLeft, labelRight) {
+    var xr = x.toFixed(1);
+    return '<line x1="' + xr + '" y1="' + padTop + '" x2="' + xr + '" y2="' + (padTop + plotH) +
+      '" stroke="#94a3b8" stroke-width="1"></line>' +
+      '<text x="' + (x - 4).toFixed(1) + '" y="' + (padTop - 2) + '" font-size="10" fill="#94a3b8" text-anchor="end">' + labelLeft + '</text>' +
+      '<text x="' + (x + 4).toFixed(1) + '" y="' + (padTop - 2) + '" font-size="10" fill="#94a3b8" text-anchor="start">' + labelRight + '</text>';
+  }
+
+  /**
+   * Every boundary this chart needs to mark: the Measured/Projected data-
+   * coverage edge (from `hasUsage`) plus the pending-offer window's rising
+   * and falling edges (from `offerVolume`). `barX(i)` is each chart's own
+   * left-edge-of-bar-i formula — day and multi-day charts anchor differently.
+   */
+  function certaintyBoundaries(hasUsage, offerVolume, barX) {
+    var marks = [], i;
+    if (hasUsage) {
+      for (i = 1; i < hasUsage.length; i++) {
+        if (hasUsage[i - 1] && !hasUsage[i]) { marks.push({ x: barX(i), left: "Measured", right: "Projected" }); break; }
+      }
+    }
+    if (offerVolume) {
+      for (i = 0; i < offerVolume.length; i++) {
+        var on = offerVolume[i] > 0;
+        var prevOn = i > 0 && offerVolume[i - 1] > 0;
+        var nextOn = i < offerVolume.length - 1 && offerVolume[i + 1] > 0;
+        if (on && !prevOn) { marks.push({ x: barX(i), left: "Confirmed", right: "If accepted" }); }
+        if (on && !nextOn) { marks.push({ x: barX(i + 1), left: "If accepted", right: "Confirmed" }); }
+      }
+    }
+    return marks;
+  }
+
+  function buildChartSvg(times, actualUsage, hedgeVolume, uncovered, width, opts) {
     var n = times.length;
     width = width || 960;
+    opts = opts || {};
+    var hasUsage = opts.hasUsage || null;
+    var offerVolume = opts.offerVolume || null;
     var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
     var plotW = width - padLeft - 10;
     var plotH = height - padTop - padBottom;
     var minVal = 0, maxVal = 0;
-    for (var i = 0; i < n; i++) {
-      minVal = Math.min(minVal, actualUsage[i], hedgeVolume[i]);
-      maxVal = Math.max(maxVal, actualUsage[i], hedgeVolume[i]);
+    var i;
+    for (i = 0; i < n; i++) {
+      if (!hasUsage || hasUsage[i]) {
+        minVal = Math.min(minVal, actualUsage[i]);
+        maxVal = Math.max(maxVal, actualUsage[i]);
+      }
+      minVal = Math.min(minVal, hedgeVolume[i]);
+      maxVal = Math.max(maxVal, hedgeVolume[i] + (offerVolume ? offerVolume[i] : 0));
     }
     if (minVal === maxVal) { maxVal = minVal + 1; }
     var range = maxVal - minVal;
     function yFor(val) { return padTop + (maxVal - val) / range * plotH; }
     var zeroY = yFor(0);
     var barW = plotW / n;
-    var coveredBars = "", bars = "";
+    function barX(idx) { return padLeft + idx * barW; }
+    var coveredBars = "", bars = "", offerBars = "";
     for (i = 0; i < n; i++) {
-      var yNet = yFor(actualUsage[i]);
-      var yHedge = yFor(hedgeVolume[i]);
-      var barTop = Math.min(yNet, yHedge);
-      var barH = Math.abs(yNet - yHedge);
-      var barX = padLeft + i * barW;
-      var barFill = uncovered[i] >= 0 ? "#e8590c" : "#0891b2";
-      var barOpacity = uncovered[i] >= 0 ? "0.55" : "0.3";
+      var bx = barX(i);
+      if (!hasUsage || hasUsage[i]) {
+        var yNet = yFor(actualUsage[i]);
+        var yHedge = yFor(hedgeVolume[i]);
+        var barTop = Math.min(yNet, yHedge);
+        var barH = Math.abs(yNet - yHedge);
+        var barFill = uncovered[i] >= 0 ? "#e8590c" : "#0891b2";
+        var barOpacity = uncovered[i] >= 0 ? "0.55" : "0.3";
 
-      var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
-      var yCovered = yFor(coveredVal);
-      var covTop = Math.min(zeroY, yCovered);
-      var covH = Math.abs(zeroY - yCovered);
-      coveredBars += '<rect x="' + barX.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
-        '" height="' + covH.toFixed(1) + '" fill="#facc15" opacity="0.2"></rect>';
+        var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
+        var yCovered = yFor(coveredVal);
+        var covTop = Math.min(zeroY, yCovered);
+        var covH = Math.abs(zeroY - yCovered);
+        coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+          '" height="' + covH.toFixed(1) + '" fill="#facc15" opacity="0.2"></rect>';
 
-      bars += '<rect x="' + barX.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
-        '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
+        bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+          '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
+      }
+      // Provisional offer: an additional hatched area stacked on top of the
+      // confirmed hedge line, only across the offer's own delivery window.
+      if (offerVolume && offerVolume[i] > 0) {
+        var yBase = yFor(hedgeVolume[i]);
+        var yTop = yFor(hedgeVolume[i] + offerVolume[i]);
+        offerBars += '<rect x="' + bx.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="url(#' + hatchId("#4338ca") + ')" opacity="' +
+          CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
+      }
     }
-    var netPoints = "", hedgePoints = "";
+    // The Actual-Usage line only exists where hasUsage is true — break it
+    // into one <polyline> per contiguous measured run rather than drawing
+    // through null gaps (there is no forecast to show, unlike the offer
+    // overlay: past the data boundary the line simply stops).
+    var netSegments = [], seg = null, hedgePoints = "";
     for (i = 0; i < n; i++) {
       var px = padLeft + i * barW + barW / 2;
-      netPoints += px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1) + " ";
+      if (!hasUsage || hasUsage[i]) {
+        if (!seg) { seg = []; netSegments.push(seg); }
+        seg.push(px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1));
+      } else {
+        seg = null;
+      }
       hedgePoints += px.toFixed(1) + "," + yFor(hedgeVolume[i]).toFixed(1) + " ";
     }
+    var netLines = netSegments.map(function (pts) {
+      return '<polyline points="' + pts.join(" ") + '" fill="none" stroke="#059f8f" stroke-width="2"></polyline>';
+    }).join("");
     var axisLabels = "";
     for (i = 0; i < n; i++) {
       if (times[i].slice(3) === "00" && parseInt(times[i].slice(0, 2), 10) % 4 === 0) {
@@ -1958,14 +2128,20 @@
           '" font-size="10" fill="#64748b">' + times[i] + '</text>';
       }
     }
+    var boundaries = certaintyBoundaries(hasUsage, offerVolume, barX).map(function (m) {
+      return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
+    }).join("");
     lastChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
-    return '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
+    return '<defs>' + hatchDefs(["#4338ca"]) + '</defs>' +
+      '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
       '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
       coveredBars +
       bars +
-      '<polyline points="' + netPoints.trim() + '" fill="none" stroke="#059f8f" stroke-width="2"></polyline>' +
+      offerBars +
+      netLines +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="2" stroke-dasharray="5,3"></polyline>' +
       axisLabels +
+      boundaries +
       '<line id="chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
       '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
   }
@@ -1986,29 +2162,40 @@
   function buildTooltipHtml(context, i) {
     var dateStr = resolveDate(context.dates, i);
     var s = context.series;
+    var hasUsage = !context.hasUsage || context.hasUsage[i];
     // Each chart's tooltip covers only what that chart plots: the usage chart
     // shows volumes, the cost chart shows money.
     var rows;
     if (context.kind === "cost") {
-      // Delta Cost is what the uncovered gap costs at spot: a positive figure
-      // is volume bought, a negative one is surplus hedge sold.
-      var delta = s.deltaCost[i];
-      var deltaLabel = delta > 0 ? "Buy" : (delta < 0 ? "Sell" : "Buy / Sell");
-      rows = [
-        ["Hedge", ConsumptionCalc.formatNL(s.hedgeCost[i], 2) + " €"],
-        [deltaLabel, ConsumptionCalc.formatNL(delta, 2) + " €"],
-        ["Total", ConsumptionCalc.formatNL(s.totalCost[i], 2) + " €"]
-      ];
+      rows = [["Hedge", ConsumptionCalc.formatNL(s.hedgeCost[i], 2) + " €"]];
+      if (hasUsage) {
+        // Delta Cost is what the uncovered gap costs at spot: a positive
+        // figure is volume bought, a negative one is surplus hedge sold.
+        var delta = s.deltaCost[i];
+        var deltaLabel = delta > 0 ? "Buy" : (delta < 0 ? "Sell" : "Buy / Sell");
+        rows.push([deltaLabel, ConsumptionCalc.formatNL(delta, 2) + " €"]);
+        rows.push(["Total", ConsumptionCalc.formatNL(s.totalCost[i], 2) + " €"]);
+      }
     } else {
-      rows = [
-        ["Hedge", ConsumptionCalc.formatNL(s.hedgeVolume[i], 1) + " kWh"],
-        ["Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"]
-      ];
-      // Long and Short are mutually exclusive per interval — only ever one of
-      // the two is non-zero, so hide whichever is 0 rather than showing a
-      // permanently-empty row.
-      if (s.short[i] !== 0) { rows.push(["Short", ConsumptionCalc.formatNL(s.short[i], 1) + " kWh"]); }
-      if (s.long[i] !== 0) { rows.push(["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"]); }
+      rows = [["Hedge", ConsumptionCalc.formatNL(s.hedgeVolume[i], 1) + " kWh"]];
+      if (hasUsage) {
+        rows.push(["Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"]);
+        // Long and Short are mutually exclusive per interval — only ever one
+        // of the two is non-zero, so hide whichever is 0 rather than showing
+        // a permanently-empty row.
+        if (s.short[i] !== 0) { rows.push(["Short", ConsumptionCalc.formatNL(s.short[i], 1) + " kWh"]); }
+        if (s.long[i] !== 0) { rows.push(["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"]); }
+      }
+    }
+    // Certainty layer #6: state it in words, never rely on the visual alone.
+    if (!hasUsage) {
+      rows.push(["Status", "Projected — no usage data yet"]);
+    }
+    if (context.offerVolume && context.offerVolume[i] > 0) {
+      var offerUnit = context.kind === "cost" ? " €" : " kWh";
+      var offerVal = context.kind === "cost" ? context.offerCost[i] : context.offerVolume[i];
+      rows.push(["Offer", ConsumptionCalc.formatNL(offerVal, context.kind === "cost" ? 2 : 1) + offerUnit]);
+      rows.push(["Status", "Provisional offer — not yet accepted"]);
     }
     var html = '<div class="tt-head">' + formatDateShort(dateStr) + " · " + context.times[i] + "</div>";
     for (var r = 0; r < rows.length; r++) {
@@ -2141,10 +2328,12 @@
     lastDrawnDayWidth = width;
     chart.setAttribute("viewBox", "0 0 " + width + " 260");
     chart.style.width = width + "px";
-    chart.innerHTML = buildChartSvg(range.times, series.actualUsage, series.hedgeVolume, series.uncovered, width);
+    chart.innerHTML = buildChartSvg(range.times, series.actualUsage, series.hedgeVolume, series.uncovered, width,
+      { hasUsage: range.hasUsage, offerVolume: range.offerVolume });
     costChart.setAttribute("viewBox", "0 0 " + width + " 260");
     costChart.style.width = width + "px";
-    costChart.innerHTML = buildCostChartSvg(range.times, series.hedgeCost, series.deltaCost, series.totalCost, width);
+    costChart.innerHTML = buildCostChartSvg(range.times, series.hedgeCost, series.deltaCost, series.totalCost, width,
+      { hasUsage: range.hasUsage, offerCost: range.offerCost });
   }
 
   // Re-draw the day charts when the wrap's width actually changes (window
@@ -2333,8 +2522,11 @@
   var lastMonthChartGeom = null;
   var monthChart = document.getElementById("month-chart");
 
-  function buildMonthChartSvg(dates, times, actualUsage, hedgeVolume, uncovered) {
+  function buildMonthChartSvg(dates, times, actualUsage, hedgeVolume, uncovered, opts) {
     var n = times.length;
+    opts = opts || {};
+    var hasUsage = opts.hasUsage || null;
+    var offerVolume = opts.offerVolume || null;
     var pxPerInterval = 4;
     var width = Math.max(960, n * pxPerInterval);
     var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
@@ -2343,8 +2535,12 @@
     var minVal = 0, maxVal = 0;
     var i;
     for (i = 0; i < n; i++) {
-      minVal = Math.min(minVal, actualUsage[i], hedgeVolume[i]);
-      maxVal = Math.max(maxVal, actualUsage[i], hedgeVolume[i]);
+      if (!hasUsage || hasUsage[i]) {
+        minVal = Math.min(minVal, actualUsage[i]);
+        maxVal = Math.max(maxVal, actualUsage[i]);
+      }
+      minVal = Math.min(minVal, hedgeVolume[i]);
+      maxVal = Math.max(maxVal, hedgeVolume[i] + (offerVolume ? offerVolume[i] : 0));
     }
     if (minVal === maxVal) { maxVal = minVal + 1; }
     var range = maxVal - minVal;
@@ -2352,34 +2548,52 @@
     var zeroY = yFor(0);
     var stepX = n > 1 ? plotW / (n - 1) : 0;
     var barW = n > 1 ? stepX : plotW;
+    function barX(idx) { return padLeft + idx * stepX - barW / 2; }
 
-    var coveredBars = "", bars = "";
+    var coveredBars = "", bars = "", offerBars = "";
     for (i = 0; i < n; i++) {
-      var yNet = yFor(actualUsage[i]);
-      var yHedge = yFor(hedgeVolume[i]);
-      var barTop = Math.min(yNet, yHedge);
-      var barH = Math.abs(yNet - yHedge);
-      var barX = padLeft + i * stepX - barW / 2;
-      var barFill = uncovered[i] >= 0 ? "#e8590c" : "#0891b2";
-      var barOpacity = uncovered[i] >= 0 ? "0.55" : "0.3";
+      var bx = barX(i);
+      if (!hasUsage || hasUsage[i]) {
+        var yNet = yFor(actualUsage[i]);
+        var yHedge = yFor(hedgeVolume[i]);
+        var barTop = Math.min(yNet, yHedge);
+        var barH = Math.abs(yNet - yHedge);
+        var barFill = uncovered[i] >= 0 ? "#e8590c" : "#0891b2";
+        var barOpacity = uncovered[i] >= 0 ? "0.55" : "0.3";
 
-      var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
-      var yCovered = yFor(coveredVal);
-      var covTop = Math.min(zeroY, yCovered);
-      var covH = Math.abs(zeroY - yCovered);
-      coveredBars += '<rect x="' + barX.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
-        '" height="' + covH.toFixed(1) + '" fill="#facc15" opacity="0.2"></rect>';
+        var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
+        var yCovered = yFor(coveredVal);
+        var covTop = Math.min(zeroY, yCovered);
+        var covH = Math.abs(zeroY - yCovered);
+        coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+          '" height="' + covH.toFixed(1) + '" fill="#facc15" opacity="0.2"></rect>';
 
-      bars += '<rect x="' + barX.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
-        '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
+        bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+          '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
+      }
+      if (offerVolume && offerVolume[i] > 0) {
+        var yBase = yFor(hedgeVolume[i]);
+        var yTop = yFor(hedgeVolume[i] + offerVolume[i]);
+        offerBars += '<rect x="' + bx.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="url(#' + hatchId("#4338ca") + ')" opacity="' +
+          CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
+      }
     }
 
-    var netPoints = "", hedgePoints = "";
+    var netSegments = [], seg = null, hedgePoints = "";
     for (i = 0; i < n; i++) {
       var px = padLeft + i * stepX;
-      netPoints += px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1) + " ";
+      if (!hasUsage || hasUsage[i]) {
+        if (!seg) { seg = []; netSegments.push(seg); }
+        seg.push(px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1));
+      } else {
+        seg = null;
+      }
       hedgePoints += px.toFixed(1) + "," + yFor(hedgeVolume[i]).toFixed(1) + " ";
     }
+    var netLines = netSegments.map(function (pts) {
+      return '<polyline points="' + pts.join(" ") + '" fill="none" stroke="#059f8f" stroke-width="1.5"></polyline>';
+    }).join("");
 
     var dayGridlines = "";
     var dayLabels = "";
@@ -2393,15 +2607,22 @@
       }
     }
 
+    var boundaries = certaintyBoundaries(hasUsage, offerVolume, barX).map(function (m) {
+      return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
+    }).join("");
+
     lastMonthChartGeom = { padLeft: padLeft, spacing: stepX, offset: 0, n: n, width: width };
 
-    return dayGridlines +
+    return '<defs>' + hatchDefs(["#4338ca"]) + '</defs>' +
+      dayGridlines +
       '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
       coveredBars +
       bars +
-      '<polyline points="' + netPoints.trim() + '" fill="none" stroke="#059f8f" stroke-width="1.5"></polyline>' +
+      offerBars +
+      netLines +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="1.5" stroke-dasharray="5,3"></polyline>' +
       dayLabels +
+      boundaries +
       '<line id="month-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
       '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
   }
@@ -2441,18 +2662,27 @@
    * which reproduces the two usage charts' differing conventions from one
    * body: the day chart anchors at barW/2, the range chart at 0.
    */
-  function costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, anchorOffset, lineWidth) {
+  function costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, anchorOffset, lineWidth, opts) {
+    opts = opts || {};
+    var hasUsage = opts.hasUsage || null;
+    var offerCost = opts.offerCost || null;
     var minVal = 0, maxVal = 0, i;
     for (i = 0; i < n; i++) {
-      minVal = Math.min(minVal, hedgeCost[i], totalCost[i]);
-      maxVal = Math.max(maxVal, hedgeCost[i], totalCost[i]);
+      if (!hasUsage || hasUsage[i]) {
+        minVal = Math.min(minVal, totalCost[i]);
+        maxVal = Math.max(maxVal, totalCost[i]);
+      }
+      minVal = Math.min(minVal, hedgeCost[i]);
+      maxVal = Math.max(maxVal, hedgeCost[i] + (offerCost ? offerCost[i] : 0));
     }
     if (minVal === maxVal) { maxVal = minVal + 1; }
     var range = maxVal - minVal;
     function yFor(v) { return padTop + (maxVal - v) / range * plotH; }
     var zeroY = yFor(0);
+    function barX(idx) { return padLeft + idx * stepX + anchorOffset - barW / 2; }
 
-    var deltaBars = "", totalPoints = "", hedgePoints = "";
+    var deltaBars = "", offerBars = "", hedgePoints = "";
+    var totalSegments = [], seg = null;
     // Same bar geometry as the usage chart's, so the two align pixel-for-pixel
     // under the shared crosshair.
     var w = barWidthFor(barW);
@@ -2460,39 +2690,59 @@
       var anchor = padLeft + i * stepX + anchorOffset;
       var x = anchor - barW / 2;
       var yH = yFor(hedgeCost[i]);
-      var yT = yFor(totalCost[i]);
-      // Delta cost spans the gap between the two lines; its sign is encoded by
-      // colour AND by which side of the hedge line it sits on, so the
-      // orange/cyan pair is never the only cue.
-      var buy = deltaCost[i] >= 0;
-      deltaBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yH, yT).toFixed(1) +
-        '" width="' + w.toFixed(1) + '" height="' + Math.abs(yH - yT).toFixed(1) +
-        '" fill="' + (buy ? COST_BUY_FILL : COST_SELL_FILL) + '" opacity="' + (buy ? "0.55" : "0.3") + '"></rect>';
+      if (!hasUsage || hasUsage[i]) {
+        var yT = yFor(totalCost[i]);
+        // Delta cost spans the gap between the two lines; its sign is encoded
+        // by colour AND by which side of the hedge line it sits on, so the
+        // orange/cyan pair is never the only cue.
+        var buy = deltaCost[i] >= 0;
+        deltaBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yH, yT).toFixed(1) +
+          '" width="' + w.toFixed(1) + '" height="' + Math.abs(yH - yT).toFixed(1) +
+          '" fill="' + (buy ? COST_BUY_FILL : COST_SELL_FILL) + '" opacity="' + (buy ? "0.55" : "0.3") + '"></rect>';
+        if (!seg) { seg = []; totalSegments.push(seg); }
+        seg.push(anchor.toFixed(1) + "," + yT.toFixed(1));
+      } else {
+        seg = null;
+      }
+      if (offerCost && offerCost[i] > 0) {
+        var yBase = yH, yTop = yFor(hedgeCost[i] + offerCost[i]);
+        offerBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + w.toFixed(1) +
+          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="url(#' + hatchId(COST_HEDGE_LINE) + ')" opacity="' +
+          CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
+      }
       hedgePoints += anchor.toFixed(1) + "," + yH.toFixed(1) + " ";
-      totalPoints += anchor.toFixed(1) + "," + yT.toFixed(1) + " ";
     }
+    var totalLines = totalSegments.map(function (pts) {
+      return '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + COST_TOTAL_LINE +
+        '" stroke-width="' + lineWidth + '" stroke-linejoin="round" stroke-linecap="round"></polyline>';
+    }).join("");
+    var boundaries = certaintyBoundaries(hasUsage, offerCost, barX).map(function (m) {
+      return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
+    }).join("");
     return {
       zeroY: zeroY,
-      markup: '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
+      markup: '<defs>' + hatchDefs([COST_HEDGE_LINE]) + '</defs>' +
+        '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
         '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
         deltaBars +
-        '<polyline points="' + totalPoints.trim() + '" fill="none" stroke="' + COST_TOTAL_LINE +
-        '" stroke-width="' + lineWidth + '" stroke-linejoin="round" stroke-linecap="round"></polyline>' +
+        offerBars +
+        totalLines +
         '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="' + COST_HEDGE_LINE +
-        '" stroke-width="' + lineWidth + '" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"></polyline>'
+        '" stroke-width="' + lineWidth + '" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"></polyline>' +
+        boundaries
     };
   }
 
   var lastCostChartGeom = null;
   var costChart = document.getElementById("cost-chart");
 
-  function buildCostChartSvg(times, hedgeCost, deltaCost, totalCost, width) {
+  function buildCostChartSvg(times, hedgeCost, deltaCost, totalCost, width, opts) {
     var n = times.length;
     width = width || 960;
     var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
     var plotW = width - padLeft - 10, plotH = height - padTop - padBottom;
     var barW = plotW / n;
-    var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, barW, barW, barW / 2, 2);
+    var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, barW, barW, barW / 2, 2, opts);
 
     var axisLabels = "";
     for (var i = 0; i < n; i++) {
@@ -2510,7 +2760,7 @@
   var lastMonthCostChartGeom = null;
   var costMonthChart = document.getElementById("cost-month-chart");
 
-  function buildMonthCostChartSvg(dates, times, hedgeCost, deltaCost, totalCost) {
+  function buildMonthCostChartSvg(dates, times, hedgeCost, deltaCost, totalCost, opts) {
     // Geometry MUST match buildMonthChartSvg exactly: the two range charts sit
     // one above the other and share a synced crosshair, so any difference in
     // width or per-interval spacing would visibly misalign them.
@@ -2522,7 +2772,7 @@
     var plotH = height - padTop - padBottom;
     var stepX = n > 1 ? plotW / (n - 1) : 0;
     var barW = n > 1 ? stepX : plotW;
-    var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, 0, 1.5);
+    var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, 0, 1.5, opts);
 
     var dayGridlines = "", dayLabels = "", prevDate = null;
     for (var i = 0; i < n; i++) {
@@ -2649,24 +2899,34 @@
     document.getElementById("cost-month-chart-wrap").style.display = singleDay ? "none" : "";
     costChartSubtitle.textContent = chartSubtitle.textContent;
 
-    var ctx = { dates: range.dates, times: range.times, prices: range.prices, series: series };
+    // hasUsage/offerVolume/offerCost ride along on the context so the
+    // tooltip (buildTooltipHtml) can say "Projected"/"Provisional offer" in
+    // words per the certainty-layer spec, not just draw the visual treatment.
+    var ctx = {
+      dates: range.dates, times: range.times, prices: range.prices, series: series,
+      hasUsage: range.hasUsage, offerVolume: range.offerVolume, offerCost: range.offerCost
+    };
     if (singleDay) {
       lastDayContext = ctx;
-      lastCostDayContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost" };
+      lastCostDayContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost",
+        hasUsage: range.hasUsage, offerVolume: range.offerVolume, offerCost: range.offerCost };
       lastMonthContext = null;
       lastCostMonthContext = null;
       drawDayCharts(range, series, dayChartWidth());
     } else {
       lastMonthContext = ctx;
-      lastCostMonthContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost" };
+      lastCostMonthContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost",
+        hasUsage: range.hasUsage, offerVolume: range.offerVolume, offerCost: range.offerCost };
       lastDayContext = null;
       lastCostDayContext = null;
-      var markup = buildMonthChartSvg(range.dates, range.times, series.actualUsage, series.hedgeVolume, series.uncovered);
+      var monthOpts = { hasUsage: range.hasUsage, offerVolume: range.offerVolume };
+      var markup = buildMonthChartSvg(range.dates, range.times, series.actualUsage, series.hedgeVolume, series.uncovered, monthOpts);
       monthChart.setAttribute("viewBox", "0 0 " + lastMonthChartGeom.width + " 260");
       monthChart.style.width = lastMonthChartGeom.width + "px";
       monthChart.innerHTML = markup;
 
-      var costMarkup = buildMonthCostChartSvg(range.dates, range.times, series.hedgeCost, series.deltaCost, series.totalCost);
+      var costMonthOpts = { hasUsage: range.hasUsage, offerCost: range.offerCost };
+      var costMarkup = buildMonthCostChartSvg(range.dates, range.times, series.hedgeCost, series.deltaCost, series.totalCost, costMonthOpts);
       costMonthChart.setAttribute("viewBox", "0 0 " + lastMonthCostChartGeom.width + " 260");
       costMonthChart.style.width = lastMonthCostChartGeom.width + "px";
       costMonthChart.innerHTML = costMarkup;
