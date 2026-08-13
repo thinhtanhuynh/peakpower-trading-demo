@@ -857,9 +857,47 @@ column — on a single-day range every row repeats the same date; on a
 multi-day range it's what disambiguates the repeating `HH:MM` values
 across days.
 
-**Date-range filter:** the controls row holds the site dropdown, a
-**From** and a **To** `<input type="date">`, three **Day / Month /
-Quarter** preset buttons, and an **Export CSV** button. From/To are the
+### Where the controls live, and why they moved
+
+There is no longer a single controls row. Each control sits with **what it
+filters**, which is the change that made this page read answer-first instead
+of form-first:
+
+| Control | Lives | Because |
+|---|---|---|
+| Site `#site-select` | page level, by the title | it changes everything on the page |
+| From/To + Day/Month/Quarter `#from-date` `#to-date` | inside the usage-chart card, as its toolbar | they filter the charts and table, and sit next to what visibly changes |
+| Export CSV `#export-csv` | on the interval table's summary row | export belongs with the thing it exports |
+
+**The ids are the contract, not the DOM position.** All four elements are
+acquired once by `getElementById` at startup and nothing reads their parent,
+position or a container class — which is why they could be relocated without
+touching `goToConsumption()`, the presets or the export. Keep the ids if you
+move them again.
+
+The 15-minute table is a **collapsed `<details>` disclosure**. Two rules
+around it, both load-bearing:
+
+- The collapse is **CSS/`<details>` only — rows always stay in the DOM.**
+  `highlightTableRow()` queries `tr[data-idx]`, so conditional rendering
+  would break chart-click-to-row silently.
+- `highlightTableRow()` **force-opens the disclosure before scrolling**,
+  because `scrollIntoView` under a closed `<details>` is a no-op. Nothing
+  throws in either failure mode, which is why `scratchpad/tablelink.js`
+  asserts `details.open` directly — note **jsdom does not implement
+  `<details>` hiding** and reports `display:block` for closed content, so a
+  computed-style check there passes vacuously and proves nothing.
+
+**The Consumption header writes an empty crumb rather than not writing one.**
+It used to restate the site and range that the controls now show a few pixels
+away. Consumption is the one screen that does not route its chrome through
+`renderTopbarChrome()`, so *deleting* the assignment would leave whatever the
+previously-visited screen set — open a connection, click Consumption, and its
+EAN sits above the title looking like a real breadcrumb, on the populated path
+only. All three Consumption paths therefore assign `""`.
+
+**Date-range filter:** **From** and **To** `<input type="date">` plus three
+**Day / Month / Quarter** preset buttons. From/To are the
 single source of truth for everything rendered (stat cards, chart, table,
 export); the presets are one-shot actions, not modes — each snaps the
 range to the day, month, or quarter **containing the current To date**
