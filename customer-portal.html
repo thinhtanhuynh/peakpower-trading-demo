@@ -2151,17 +2151,30 @@
   function renderWalletTopup() {
     var shortfall = balanceAlertShortfall();
 
-    // Round chips plus, when there's a real shortfall, one chip computed
-    // from it — so someone who came here below their alert threshold has an
-    // exact amount to click rather than doing the arithmetic themselves
-    // against four numbers that ignore their actual situation.
-    var chipAmounts = [10000, 25000, 50000, 100000];
-    var chipsHtml = (shortfall > 0 ? [{ amt: shortfall, label: "€ " + ConsumptionCalc.formatNL(shortfall, 0) + " — clears alert" }] : [])
-      .concat(chipAmounts.map(function (a) { return { amt: a, label: "€ " + ConsumptionCalc.formatNL(a, 0) }; }))
-      .map(function (c) {
-        var sel = state.topupAmount === c.amt ? " selected" : "";
-        return '<button type="button" class="amount-chip' + sel + '" onclick="PP.setTopupAmountValue(' + c.amt + ')">' + c.label + '</button>';
-      }).join("");
+    // Round chips exactly as the mockup specifies (flex:1, four across).
+    // The computed "clears alert" chip, when there's a real shortfall, gets
+    // its OWN full-width row above them rather than becoming a fifth flex:1
+    // item — five-way-equal made its longer label wrap while the round four
+    // stayed on one line, which made the single most useful chip on the
+    // screen look like the broken one. A full-width lead row avoids the
+    // wrap and reads as "the recommended amount", not "one of five" — the
+    // mockup never had a computed chip to begin with, so there's nothing in
+    // it to be unfaithful to here (per team-lead).
+    function chipHtml(amt, label) {
+      var sel = state.topupAmount === amt ? " selected" : "";
+      return '<button type="button" class="amount-chip' + sel + '" onclick="PP.setTopupAmountValue(' + amt + ')">' + label + '</button>';
+    }
+    // No manual margin here — this becomes its own top-level sibling of the
+    // round-chip row below, both direct children of .ideal-card's own
+    // gap:14px flex column, so the card's existing gap already spaces them
+    // (an explicit margin here would double up, the same footgun fixed
+    // elsewhere on this screen).
+    var smartChipHtml = shortfall > 0
+      ? '<div class="amount-chips">' + chipHtml(shortfall, "€ " + ConsumptionCalc.formatNL(shortfall, 0) + " — clears alert") + '</div>'
+      : "";
+    var chipsHtml = [10000, 25000, 50000, 100000].map(function (a) {
+      return chipHtml(a, "€ " + ConsumptionCalc.formatNL(a, 0));
+    }).join("");
 
     // Honest urgency: only claim a countdown matters if one genuinely
     // exists (a real pending offer in state), never a generic scare line.
@@ -2186,7 +2199,7 @@
         '<div id="topup-validation" class="fg-hint" style="margin-top:6px;color:var(--pp-red)">' +
           (topupAmountValid() ? "" : "Minimum top-up is € " + ConsumptionCalc.formatNL(MIN_TOPUP_EUR, 2) + ".") + '</div>' +
       '</div>' +
-      '<div class="amount-chips">' + chipsHtml + '</div>' +
+      smartChipHtml + '<div class="amount-chips">' + chipsHtml + '</div>' +
       '<div class="field-group" style="margin-bottom:0">' +
         '<div class="fg-label"' + fgLabelStyle + '>Your bank</div><div class="readonly-field">ING</div>' +
       '</div>' +
