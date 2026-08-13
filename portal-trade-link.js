@@ -434,6 +434,12 @@
 
     return {
       id: req.id, shape: req.shape, period: req.period, direction: req.direction,
+      // Carried through so the portal can frame its Consumption chart on this
+      // trade's own period and connection. The display strings above are
+      // formatted for reading and are not parseable back into dates.
+      periodStart: req.periodStart || null,
+      periodEnd: req.periodEnd || null,
+      connections: req.connections || [],
       power: power, volume: volume,
       price: priced ? "€ " + formatNL(req.offer.priceMwh, 4) : null,
       value: priced ? "€ " + formatNL(req.offer.valueEur, 2) : null,

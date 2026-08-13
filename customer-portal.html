@@ -624,14 +624,37 @@
   }
 
   // Deep-link from another screen: focus one site on one day.
-  function goToConsumption(siteId, dateStr) {
+  function goToConsumption(siteId, dateStr, toDateStr) {
     if (siteId && DATA) { siteSelect.value = siteId; }
     if (dateStr && DATA) {
       fromDate.value = clampDate(dateStr);
-      toDate.value = clampDate(dateStr);
+      toDate.value = clampDate(toDateStr || dateStr);
       markActivePreset();
     }
     goTo("Consumption");
+  }
+
+  /**
+   * "See this offer on the chart" — from a trade's detail straight to
+   * Consumption, framed on that trade's own delivery period and connection,
+   * so the provisional offer line is on screen on arrival rather than
+   * something the customer has to go and reconstruct with three controls.
+   *
+   * Falls back gracefully: a trade with no structured period (the older
+   * display-only seed rows) still lands on Consumption rather than doing
+   * nothing, and the range is clamped to what the date inputs allow.
+   */
+  function viewTradeOnChart(tradeId) {
+    var t = state.trades.filter(function (x) { return x.id === tradeId; })[0];
+    if (!t) { goTo("Consumption"); return; }
+    var conn = (t.connections && t.connections.length && t.connections[0].id) || null;
+    goToConsumption(conn, t.periodStart || null, t.periodEnd || null);
+  }
+
+  /** Whether a trade carries enough structure to be framed on the chart. */
+  function tradeIsChartable(t) {
+    return !!(t && t.periodStart && t.periodEnd &&
+      t.connections && t.connections.length && t.connections[0].id);
   }
 
   function openConnection(id) { state.connId = id; renderApp(); }
@@ -860,7 +883,7 @@
   function closeInvoice() { state.invoiceId = null; renderApp(); }
 
   window.PP = {
-    goTo: goTo, goToConsumption: goToConsumption,
+    goTo: goTo, goToConsumption: goToConsumption, viewTradeOnChart: viewTradeOnChart,
     openConnection: openConnection, closeConnection: closeConnection,
     openTrade: openTrade, backToTrades: backToTrades,
     startWizard: startWizard, startWizardFromPrice: startWizardFromPrice,
@@ -1356,6 +1379,13 @@
             '<button type="button" class="btn-reject" onclick="PP.rejectOffer(\'' + esc(t.id) + '\')">Reject</button>'
           : '<button type="button" class="btn-accept" onclick="PP.noop()">Accept</button>' +
             '<button type="button" class="btn-reject" onclick="PP.noop()">Reject</button>') +
+        // Deciding on an offer is exactly when seeing it against your own
+        // usage matters, so the route to the chart sits in the decision row
+        // rather than somewhere the customer has to go looking for it.
+        (tradeIsChartable(t)
+          ? '<button type="button" class="btn-ghost" onclick="PP.viewTradeOnChart(\'' + esc(t.id) +
+            '\')">See it on your consumption chart</button>'
+          : '') +
         '<button type="button" class="btn-ghost" onclick="PP.noop()">Ask a question</button>' +
         '<span class="ob-countdown">' + mmss(t.secondsRemaining) + '</span>' +
         '</div></div>';
@@ -1376,7 +1406,13 @@
     var factsHtml = t.facts.map(function (f) {
       return '<div class="kv-row"><span class="k">' + esc(f[0]) + '</span><span class="v">' + esc(f[1]) + '</span></div>';
     }).join("") + (t.value ? '<div class="kv-row"><span class="k">Total value</span><span class="v">' + esc(t.value) + '</span></div>' : "");
-    var tradeCard = cardHtml("Trade", "", factsHtml);
+    // Available for any trade with a real period, not just a pending offer —
+    // a confirmed block is worth seeing against usage too.
+    var chartFoot = tradeIsChartable(t)
+      ? '<div class="card-foot-action"><button type="button" class="btn-secondary" onclick="PP.viewTradeOnChart(\'' +
+        esc(t.id) + '\')">View on consumption chart</button></div>'
+      : "";
+    var tradeCard = cardHtml("Trade", "", factsHtml + chartFoot);
 
     var linkedCard = "";
     if (t.linked && t.linked.length) {
