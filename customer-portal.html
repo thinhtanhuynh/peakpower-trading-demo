@@ -3007,8 +3007,19 @@
       if (!candidates.length) { return null; }
     }
     candidates.sort(function (a, b) { return (b.submittedAt || "").localeCompare(a.submittedAt || ""); });
+
+    // EVERY live offer over this range is drawn, not just the newest. A
+    // customer can hold several pending offers on the same connection and
+    // period — nothing prevents it, and the wizard will happily submit a
+    // second — and showing only one silently understates what accepting them
+    // all would add. computeIntervalHedgeVolumes() already sums across a
+    // block list (it does exactly that for stacked hedge blocks), so the fix
+    // is to hand it every block rather than a one-element array.
+    var blocks = candidates.map(function (req) {
+      var line = (req.connections || []).filter(function (c) { return c.id === siteId; })[0];
+      return blockForOffer(req, line);
+    });
     var req = candidates[0];
-    var line = req.connections.filter(function (c) { return c.id === siteId; })[0];
     return {
       // A seeded record has no link lifecycle, so effectiveStatus() (which
       // reads offer/response/expiry) has nothing to decide from.
@@ -3016,7 +3027,15 @@
       seeded: !!req.seeded,
       periodLabel: req.period,
       shape: String(req.shape || "").toLowerCase(),
-      block: {
+      count: candidates.length,
+      ids: candidates.map(function (r) { return r.id; }),
+      blocks: blocks
+    };
+  }
+
+  /** One offer record + its line for this site, as a hedge-shaped block. */
+  function blockForOffer(req, line) {
+    return {
         shape: String(req.shape || "").toLowerCase(),
         periodStart: req.periodStart,
         periodEnd: req.periodEnd,
@@ -3032,7 +3051,6 @@
         priceKwh: (req.offer ? req.offer.priceMwh : req.indicativePrice) != null
           ? (req.offer ? req.offer.priceMwh : req.indicativePrice) / 1000 : 0,
         firm: !!req.offer
-      }
     };
   }
 
@@ -3109,7 +3127,7 @@
     var offerVolume = [], offerCost = [];
     var siteId = siteSelect.value;
     var offer = findOfferForRange(siteId, from, to);
-    var offerBlocks = offer ? [offer.block] : null;
+    var offerBlocks = offer ? offer.blocks : null;
     var profile = null; // built lazily, only if this range actually needs a projection
     dates.forEach(function (d) {
       var ds = DATA.byDate[d];
@@ -3577,8 +3595,13 @@
       : "";
     // Name the provisional line, or it is just an unexplained dotted stroke.
     var offerNote = range.offer
-      ? " · dotted indigo = pending " + range.offer.periodLabel + " offer (" +
-        range.offer.status.toLowerCase() + " — not yet in your position)"
+      // Name how many, because the line is their SUM — "pending offer"
+      // singular next to a level built from three of them would misread.
+      ? (range.offer.count > 1
+          ? " · dotted indigo = " + range.offer.count + " pending offers combined (" +
+            range.offer.ids.join(", ") + ") — not yet in your position"
+          : " · dotted indigo = pending " + range.offer.periodLabel + " offer (" +
+            range.offer.status.toLowerCase() + " — not yet in your position)")
       : "";
     chartSubtitle.textContent = range.times.length + " intervals · " +
       dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam" + futureNote + offerNote;
