@@ -76,8 +76,14 @@
   textarea { width:100%; resize:vertical; min-height:56px; }
   select:disabled, input[type=date]:disabled { opacity:.5; cursor:not-allowed; }
   select:focus, input[type=date]:focus, input[type=text]:focus, input[type=number]:focus, textarea:focus { outline:none; border-color:var(--pp-teal-500); box-shadow:0 0 0 3px rgba(20,184,166,0.15); }
-  .controls .ctl { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
+  .controls .ctl, .chart-toolbar .ctl { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
   .controls .spacer { flex:1; }
+  /* In-card toolbar for the usage chart's own From/To + Day/Month/Quarter
+     controls — deliberately lighter than the page-level .controls bar
+     (smaller gap, a rule underneath instead of living in the flow), since
+     this now acts on one card, not the whole page. */
+  .chart-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding-bottom:10px; margin-bottom:14px; border-bottom:1px solid var(--pp-border); }
+  .chart-toolbar .ctl input[type=date] { padding:5px 8px; font-size:11.5px; }
   .stat-stack { display:flex; flex-direction:column; gap:12px; }
   .stat-row { display:flex; gap:16px; flex-wrap:wrap; }
   /* Consumption's two "equation" rows (Cost, then Energy volume) — see
@@ -141,6 +147,20 @@
   .card .card-foot-action { margin-top:16px; padding-top:14px; border-top:1px solid var(--pp-border); }
   .legend { display:flex; gap:22px; margin-top:10px; font-size:11px; color:var(--pp-text-body); flex-wrap:wrap; }
   .legend .swatch { width:12px; height:10px; display:inline-block; border-radius:2px; margin-right:6px; vertical-align:middle; }
+  /* Collapsed-by-default interval table (see highlightTableRow — CSS-only
+     disclosure so rows stay queryable/scrollable-to while closed). */
+  .table-summary { display:flex; align-items:baseline; gap:10px; cursor:pointer; list-style:none; }
+  .table-summary::-webkit-details-marker { display:none; }
+  .table-summary::before { content:"▸"; display:inline-block; margin-right:2px; font-size:10px; color:var(--pp-text-faint); transition:transform .15s ease; }
+  #table-details[open] .table-summary::before { transform:rotate(90deg); }
+  .table-summary-title { font-size:13.5px; font-weight:700; color:var(--pp-text-heading); }
+  .table-summary-sub { font-size:11.5px; color:var(--pp-text-body); }
+  /* Export CSV sits beside the summary line as a flex sibling of <details>
+     (see the HTML comment above it) — align-items:flex-start keeps the
+     button pinned to the summary's row instead of stretching/centering
+     against the full expanded table height when open. */
+  .table-header-row { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .table-header-row details { flex:1; min-width:0; }
   .table-wrap { max-height:420px; overflow:auto; border:1px solid var(--pp-border); border-radius:8px; }
   table { width:100%; border-collapse:collapse; font-size:12px; }
   thead th { position:sticky; top:0; background:var(--pp-surface-alt); text-align:left; padding:9px 14px; font-size:10.5px; font-weight:700; color:var(--pp-text-body); letter-spacing:.03em; border-bottom:1px solid var(--pp-border); text-transform:uppercase; }
@@ -403,15 +423,6 @@
       <div class="page" id="page-consumption">
         <div class="controls">
           <select id="site-select" disabled></select>
-          <span class="ctl">From <input type="date" id="from-date" disabled></span>
-          <span class="ctl">To <input type="date" id="to-date" disabled></span>
-          <div class="chart-tabs">
-            <button type="button" class="chart-tab active" data-period="day" disabled>Day</button>
-            <button type="button" class="chart-tab" data-period="month" disabled>Month</button>
-            <button type="button" class="chart-tab" data-period="quarter" disabled>Quarter</button>
-          </div>
-          <span class="spacer"></span>
-          <button type="button" class="btn-primary" id="export-csv" disabled>Export CSV</button>
         </div>
         <div class="stat-stack" id="stat-row">
           <div class="stat-row"><div class="stat-card"><div class="label">Loading</div><div class="value">…</div><div class="sublabel">Fetching source data and calculating in the browser</div></div></div>
@@ -421,6 +432,17 @@
             <div>
               <div class="card-title">Consumption &amp; production — 15-minute intervals</div>
               <div class="card-subtitle" id="chart-subtitle"></div>
+            </div>
+          </div>
+          <!-- The range/preset controls live with the chart they drive, not
+               the page header — this card is the one thing they act on. -->
+          <div class="chart-toolbar">
+            <span class="ctl">From <input type="date" id="from-date" disabled></span>
+            <span class="ctl">To <input type="date" id="to-date" disabled></span>
+            <div class="chart-tabs">
+              <button type="button" class="chart-tab active" data-period="day" disabled>Day</button>
+              <button type="button" class="chart-tab" data-period="month" disabled>Month</button>
+              <button type="button" class="chart-tab" data-period="quarter" disabled>Quarter</button>
             </div>
           </div>
           <div id="day-chart-wrap">
@@ -441,6 +463,8 @@
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div>
               <div class="card-title">Cost — 15-minute intervals</div>
+              <!-- Framed as derived from the usage chart above, not an equal
+                   peer — see render() for the exact text. -->
               <div class="card-subtitle" id="cost-chart-subtitle"></div>
             </div>
           </div>
@@ -458,14 +482,32 @@
           </div>
         </div>
         <div class="card">
-          <div class="card-title">15-minute interval detail</div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Date</th><th>Time</th><th>Data</th><th class="num">Consumption (kWh)</th><th class="num">Production (kWh)</th><th class="num">EPEX (€/kWh)</th><th class="num">Usage Cost (€)</th><th class="num">Actual Usage (kWh)</th><th class="num">Base Volume (kWh)</th><th class="num">Peak Volume (kWh)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Uncovered (kWh)</th><th class="num">Long (kWh)</th><th class="num">Short (kWh)</th><th class="num">Delta Cost (€)</th><th class="num">Hedge Cost (€)</th><th class="num">Total Cost (€)</th></tr>
-              </thead>
-              <tbody id="table-body"></tbody>
-            </table>
+          <!-- CSS-only disclosure: rows stay in the DOM at all times (only
+               visibility toggles), so highlightTableRow()'s querySelector +
+               scrollIntoView keep working while collapsed. open persists
+               across renders since this element is never recreated —
+               renderTable() only replaces #table-body's innerHTML.
+               Export CSV is a FLEX SIBLING of <details>, not a child of it —
+               native <details> hides every child but <summary> while closed,
+               so a button nested inside would be unreachable without first
+               expanding the table, defeating the point of exporting without
+               having to look at the spreadsheet. -->
+          <div class="table-header-row">
+            <details id="table-details">
+              <summary class="table-summary">
+                <span class="table-summary-title">15-minute interval detail</span>
+                <span class="table-summary-sub" id="table-summary-sub"></span>
+              </summary>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Date</th><th>Time</th><th>Data</th><th class="num">Consumption (kWh)</th><th class="num">Production (kWh)</th><th class="num">EPEX (€/kWh)</th><th class="num">Usage Cost (€)</th><th class="num">Actual Usage (kWh)</th><th class="num">Base Volume (kWh)</th><th class="num">Peak Volume (kWh)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Uncovered (kWh)</th><th class="num">Long (kWh)</th><th class="num">Short (kWh)</th><th class="num">Delta Cost (€)</th><th class="num">Hedge Cost (€)</th><th class="num">Total Cost (€)</th></tr>
+                  </thead>
+                  <tbody id="table-body"></tbody>
+                </table>
+              </div>
+            </details>
+            <button type="button" class="btn-primary" id="export-csv" disabled>Export CSV</button>
           </div>
         </div>
       </div>
@@ -525,6 +567,7 @@
   var pageTitle = document.getElementById("page-title");
   var chartSubtitle = document.getElementById("chart-subtitle");
   var costChartSubtitle = document.getElementById("cost-chart-subtitle");
+  var tableSummarySub = document.getElementById("table-summary-sub");
   var statRow = document.getElementById("stat-row");
   var chart = document.getElementById("chart");
   var tableBody = document.getElementById("table-body");
@@ -2463,10 +2506,15 @@
   }
 
   var previousHoveredRow = null;
+  var tableDetails = document.getElementById("table-details");
   function highlightTableRow(i) {
     if (previousHoveredRow) { previousHoveredRow.classList.remove("hovered"); }
     var row = tableBody.querySelector('tr[data-idx="' + i + '"]');
     if (row) {
+      // The table is a collapsed-by-default <details> — scrollIntoView on a
+      // hidden ancestor is a no-op, so a chart click must force it open
+      // before scrolling, not just highlight a row nobody can see.
+      if (tableDetails && !tableDetails.open) { tableDetails.open = true; }
       row.classList.add("hovered");
       row.scrollIntoView({ block: "nearest" });
     }
@@ -3101,6 +3149,7 @@
       chart.innerHTML = "";
       costChart.innerHTML = "";
       costChartSubtitle.textContent = "";
+      tableSummarySub.textContent = "";
       tableBody.innerHTML = "";
       return;
     }
@@ -3121,7 +3170,10 @@
     if (range.times.length === 0) {
       lastRender = null;
       exportBtn.disabled = true;
-      crumb.textContent = site.name;
+      // Site is already visible page-level (site-select) — a crumb repeating
+      // it here is the same redundancy design flagged on the populated path,
+      // just in the no-data state nobody screenshots. Clear, don't restate.
+      crumb.textContent = "";
       chartSubtitle.textContent = "";
       statRow.innerHTML = statusCardHtml("No data", "—",
         from > to ? "“From” is after “To”." : "No data in this date range.");
@@ -3130,6 +3182,7 @@
       costChart.innerHTML = "";
       costMonthChart.innerHTML = "";
       costChartSubtitle.textContent = "";
+      tableSummarySub.textContent = "";
       tableBody.innerHTML = "";
       return;
     }
@@ -3165,7 +3218,15 @@
     var projectedStats = realDayCount === totalDayCount ? null : filterRangeByUsage(false);
 
     var dayCount = totalDayCount;
-    crumb.textContent = site.name + " · " + rangeLabel(from, to);
+    // Site/From/To are now visible page-level and in the chart-card toolbar,
+    // so a crumb restating "site · range" here would duplicate controls
+    // sitting right next to it — design's call, confirmed by team-lead. The
+    // assignment itself must stay (not just deleted): crumb is one shared
+    // element across all seven screens (see renderTopbarChrome), and
+    // Consumption is the one screen that doesn't route through it — skipping
+    // this write would leave whatever crumb another screen last set (e.g. a
+    // connection's EAN) showing above Consumption's own content.
+    crumb.textContent = "";
     // Honest about what part of the range is real: usage data currently ends
     // at MAX_DATE, so a range reaching past it is labelled as projected
     // (from this site's own historical profile) rather than silently implying
@@ -3192,7 +3253,11 @@
     document.getElementById("month-chart-wrap").style.display = singleDay ? "none" : "";
     document.getElementById("cost-day-chart-wrap").style.display = singleDay ? "" : "none";
     document.getElementById("cost-month-chart-wrap").style.display = singleDay ? "none" : "";
-    costChartSubtitle.textContent = chartSubtitle.textContent;
+    // Frames the cost chart as derived FROM the usage chart above it, not an
+    // equal peer — the "Same intervals" phrasing points back at that card
+    // rather than restating its own interval/day count.
+    costChartSubtitle.textContent = "Same intervals, valued in €" + futureNote + offerNote;
+    tableSummarySub.textContent = range.times.length + " intervals · " + rangeLabel(from, to);
 
     // hasUsage/offerVolume/offerCost ride along on the context so the
     // tooltip (buildTooltipHtml) can say "Projected"/"Provisional offer" in
