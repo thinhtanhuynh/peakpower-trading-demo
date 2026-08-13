@@ -976,6 +976,19 @@ driving the export, so a new table column means adding one entry there
 (the `<thead>` markup is still separate — keep the two in sync). The
 button is disabled whenever the range is empty.
 
+**The interval table's column order is depended on in four places, and
+three of them fail silently.** `<thead>`, `renderTable()`, `CSV_COLUMNS`,
+and the group-boundary rule `thead th:nth-child(3)/(8)/(14)` that draws the
+identity / metered / position / money separators. Those indices are
+positional, not named: add, remove or reorder a column and every boundary
+after it shifts, the rules land mid-group, and **nothing fails** — no test
+asserts it, so the table simply groups the wrong things. This is not
+theoretical; the `Data` (Measured/Projected) column was added in this
+round and took the CSV from 16 to 17 columns while CLAUDE.md's own count
+went stale. The rule in `customer-portal.html` carries a comment listing
+all 17 indices and which one ends each group; update it, the three indices,
+`CSV_COLUMNS` and `<thead>` **in the same change**.
+
 ### Looking past the end of the data (forward ranges)
 
 The From/To range extends to the furthest hedge block's `periodEnd`
