@@ -2131,6 +2131,39 @@
     return marks;
   }
 
+  /**
+   * The "if you accepted this offer" line: base + offer, drawn as the upper
+   * edge of the provisional band so the gap between it and the confirmed
+   * hedge line IS what the offer would add.
+   *
+   * The band alone was not enough — a hatched area reads as shading, and the
+   * thing being asked of this chart is a comparison between two levels, which
+   * wants an edge you can actually trace. Only drawn across the offer's own
+   * delivery window, in segments, so it never implies coverage outside it.
+   *
+   * Indigo, because it belongs to the same category as the hedge it extends;
+   * `2,2` rather than the hedge's `5,3` so the two are distinguishable when
+   * they run close together, and 55% opacity per the certainty vocabulary —
+   * three cues, none load-bearing alone.
+   */
+  function provisionalOfferLine(n, base, offer, xAt, yFor) {
+    if (!offer) { return ""; }
+    var segs = [], cur = null, i;
+    for (i = 0; i < n; i++) {
+      if (offer[i] > 0 && base[i] != null) {
+        var pt = xAt(i).toFixed(1) + "," + yFor(base[i] + offer[i]).toFixed(1);
+        if (!cur) { cur = []; segs.push(cur); }
+        cur.push(pt);
+      } else if (cur) {
+        cur = null;
+      }
+    }
+    return segs.filter(function (s) { return s.length > 1; }).map(function (s) {
+      return '<polyline class="offer-line" points="' + s.join(" ") + '" fill="none" stroke="#4338ca"' +
+        ' stroke-width="2" stroke-dasharray="2,2" stroke-opacity="0.55"></polyline>';
+    }).join("");
+  }
+
   function buildChartSvg(times, actualUsage, hedgeVolume, uncovered, width, opts) {
     var n = times.length;
     width = width || 960;
@@ -2236,6 +2269,8 @@
       offerBars +
       netLines +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="2" stroke-dasharray="5,3"></polyline>' +
+      provisionalOfferLine(n, hedgeVolume, offerVolume,
+        function (i) { return padLeft + i * barW + barW / 2; }, yFor) +
       axisLabels +
       boundaries +
       '<line id="chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
@@ -2539,12 +2574,34 @@
       if (!r.periodStart || !r.periodEnd || r.periodEnd < from || r.periodStart > to) { return false; }
       return (r.connections || []).some(function (c) { return c.id === siteId; });
     });
-    if (!candidates.length) { return null; }
+    // Fall back to a seeded pending offer when the link has nothing covering
+    // this range. Without this the overlay is invisible until you have
+    // submitted a trade yourself — which made a shipped feature look missing.
+    // Seeded records are display data for the Trading screen, so only those
+    // carrying real period/connection fields can be drawn.
+    if (!candidates.length) {
+      candidates = (PortalSeedData.TRADES_SEED || []).filter(function (t) {
+        if (!t.pending || !t.periodStart || !t.periodEnd) { return false; }
+        if (t.periodEnd < from || t.periodStart > to) { return false; }
+        return (t.connections || []).some(function (c) { return c.id === siteId; });
+      }).map(function (t) {
+        return {
+          id: t.id, period: t.period, shape: t.shape, seeded: true,
+          periodStart: t.periodStart, periodEnd: t.periodEnd,
+          indicativePrice: t.priceMwh, connections: t.connections,
+          offer: { priceMwh: t.priceMwh }
+        };
+      });
+      if (!candidates.length) { return null; }
+    }
     candidates.sort(function (a, b) { return (b.submittedAt || "").localeCompare(a.submittedAt || ""); });
     var req = candidates[0];
     var line = req.connections.filter(function (c) { return c.id === siteId; })[0];
     return {
-      status: PortalTradeLink.effectiveStatus(req, now),
+      // A seeded record has no link lifecycle, so effectiveStatus() (which
+      // reads offer/response/expiry) has nothing to decide from.
+      status: req.seeded ? "Offer received" : PortalTradeLink.effectiveStatus(req, now),
+      seeded: !!req.seeded,
       periodLabel: req.period,
       shape: String(req.shape || "").toLowerCase(),
       block: {
@@ -2791,6 +2848,8 @@
       offerBars +
       netLines +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="1.5" stroke-dasharray="5,3"></polyline>' +
+      provisionalOfferLine(n, hedgeVolume, offerVolume, function (i) { return padLeft + i * stepX; }, yFor) +
+      provisionalOfferLine(n, hedgeVolume, offerVolume, function (i) { return padLeft + i * stepX; }, yFor) +
       dayLabels +
       boundaries +
       '<line id="month-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
@@ -2899,6 +2958,8 @@
         totalLines +
         '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="' + COST_HEDGE_LINE +
         '" stroke-width="' + lineWidth + '" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"></polyline>' +
+        provisionalOfferLine(n, hedgeCost, offerCost,
+          function (i) { return padLeft + i * stepX + anchorOffset; }, yFor) +
         boundaries
     };
   }
@@ -3078,8 +3139,13 @@
         ? " · projected — no measured usage yet"
         : " · measured usage ends " + formatDateShort(MAX_DATE) + ", projected after that")
       : "";
+    // Name the provisional line, or it is just an unexplained dotted stroke.
+    var offerNote = range.offer
+      ? " · dotted indigo = pending " + range.offer.periodLabel + " offer (" +
+        range.offer.status.toLowerCase() + " — not yet in your position)"
+      : "";
     chartSubtitle.textContent = range.times.length + " intervals · " +
-      dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam" + futureNote;
+      dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam" + futureNote + offerNote;
 
     renderStatCards(stats, { realDayCount: realDayCount, totalDayCount: totalDayCount, measuredStats: measuredStats, projectedStats: projectedStats });
 

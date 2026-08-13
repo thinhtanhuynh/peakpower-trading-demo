@@ -99,7 +99,12 @@
   ];
 
   var TRADES_SEED = [
-    { id: "TRD-1078", shape: "Base", period: "Nov 2026", direction: "Buy", power: "0,200 MW", volume: "144,00 MWh", price: "€ 102,4000", value: "€ 14.745,60", status: "Awaiting your response", statusTone: "warning", pending: true,
+    // The demo's showcase pending offer. The structured fields below exist so
+    // the Consumption chart can DRAW it as a provisional layer — the display
+    // strings above it are for the Trading screen and are not parseable.
+    { id: "TRD-1078", shape: "Base", period: "Nov 2026", direction: "Buy",
+      periodStart: "2026-11-01", periodEnd: "2026-11-30", powerMw: 0.200, priceMwh: 102.40,
+      connections: [{ id: "rot", name: "Rotterdam DC", sub: "…0011", powerMw: 0.200 }], power: "0,200 MW", volume: "144,00 MWh", price: "€ 102,4000", value: "€ 14.745,60", status: "Awaiting your response", statusTone: "warning", pending: true,
       expiresLabel: "15:01", secondsRemaining: 1487, secondsTotal: 1800,
       events: [
         { title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "12 Aug 2026, 09:10:00", body: "Base Nov-2026 · 0,200 MW indicative request.", tone: "submit" },
