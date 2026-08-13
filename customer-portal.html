@@ -160,12 +160,18 @@
      label 11/600/.04em, value 23/700 mt8, sublabel 11 faint mt6). No
      min-width here (was 160px) — six cards fitting one line at iPad
      portrait needs cards free to shrink; clamp()'d type (below) is what
-     keeps the shrunk card legible instead of a width floor. A fixed
-     height makes all six cards the same height regardless of content
-     (badge row, sublabel length, breakdown line all vary) — sized to fit
-     the tallest real combination (hero value + badge + 2-line sublabel +
-     breakdown), so shorter cards simply have a little empty space below
-     rather than every card growing to match the tallest one live. */
+     keeps the shrunk card legible instead of a width floor.
+     No fixed height either (was 150px, picked to fit the tallest real
+     combination — hero value + badge + 2-line sublabel + breakdown) — the
+     product owner correctly flagged that as dead space under every
+     shorter card. Removing it and relying on the grid's default
+     align-items:stretch (see .stat-equation) turns out to equalise all
+     six card heights on its own, sized to whichever card is actually
+     tallest in THIS render rather than a number picked in advance —
+     verified, not assumed (getBoundingClientRect() across widths and
+     states, not eyeballed). justify-content:center on the flex column
+     below is what then splits a shorter card's leftover space above and
+     below its content instead of letting it all pool at the bottom. */
   /* container-type here (not just on .stat-group) is what makes the value
      clamp()s below track THIS card's own width rather than the whole
      column's — cqw against the group container was the first version's
@@ -175,7 +181,7 @@
      card's own actual share is (a component card is always the ~narrowest
      of the three, a result card ~1.2x it — group-relative cqw can't see
      that). Card-relative cqw does, directly. */
-  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; flex:1; min-width:0; height:150px; display:flex; flex-direction:column; overflow:hidden; container-type:inline-size; container-name:statcard; }
+  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; overflow:hidden; container-type:inline-size; container-name:statcard; }
   /* Auto-scales alongside the value (same card-relative cqw) — at the
      narrowest one-line widths this is what keeps "Total cost" legible
      instead of ellipsis-truncating to "TOT…", which rendering caught
@@ -525,29 +531,51 @@
   .gt-row.conn-pick input[type=radio] { accent-color:var(--pp-teal-600); cursor:pointer; }
   .wizard-actions { display:flex; gap:10px; margin-top:16px; }
 
-  /* Wallet */
-  .ideal-card { border:1.5px solid var(--pp-teal-300); border-radius:var(--radius-lg); padding:20px 22px; background:#fff; display:flex; flex-direction:column; gap:14px; }
-  .bank-card { border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:20px 22px; background:#fff; display:flex; flex-direction:column; gap:10px; }
-  .amount-input-wrap { display:flex; align-items:center; gap:8px; border:1.5px solid var(--pp-teal-300); border-radius:var(--radius-md); padding:9px 12px; margin-top:8px; transition:border-color .15s ease, box-shadow .15s ease; }
+  /* Wallet — top-up screen, fidelity-matched to Customer Portal - Preview.html's
+     own isWalletTopup markup (decoded verbatim; see CLAUDE.md and the team's
+     scratchpad extraction). These classes are used only on this screen, so
+     they're edited directly rather than through per-instance overrides.
+     Interaction states (:hover/:focus-within/.selected) have no mockup
+     counterpart (it's a static markup) and are kept — a real affordance,
+     not an invented look — built on the corrected base colors below. */
+  .ideal-card { border:1.5px solid var(--pp-teal-600); border-radius:var(--radius-lg); padding:20px 22px; background:#fff; display:flex; flex-direction:column; gap:14px; }
+  .bank-card { border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:20px 22px; background:#fff; display:flex; flex-direction:column; gap:14px; }
+  /* Mockup's raw (non-Card-component) header for iDEAL/Bank transfer — bigger
+     than the app's usual 13.5px Card title, since the mockup doesn't route
+     these two cards through the real Card primitive (only "Recent top-ups"
+     does; see .card-title below is deliberately NOT used here). */
+  .topup-card-head { display:flex; align-items:center; justify-content:space-between; }
+  .topup-card-title { font-size:20px; font-weight:700; color:var(--pp-text-heading); }
+  .topup-card-subtitle { font-size:12.5px; color:var(--pp-text-body); margin-top:2px; }
+  .amount-input-wrap { display:flex; align-items:center; border:1.5px solid var(--pp-teal-600); border-radius:var(--radius-md); padding:0 14px; transition:border-color .15s ease, box-shadow .15s ease; }
   .amount-input-wrap:focus-within { border-color:var(--pp-teal-600); box-shadow:0 0 0 3px rgba(20,184,166,0.15); }
-  .amount-input-wrap span { font-weight:700; color:var(--pp-teal-700); }
-  .amount-input-wrap input { border:none; outline:none; font-size:16px; font-weight:700; flex:1; padding:0; }
-  .amount-chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-  .amount-chip { border:1px solid var(--pp-border-strong); background:#fff; border-radius:999px; padding:6px 14px; font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font-sans); color:var(--pp-text-heading); transition:border-color .15s ease, color .15s ease, background-color .15s ease; }
+  .amount-input-wrap span { font-size:13px; font-weight:600; color:var(--pp-text-faint); padding-right:4px; user-select:none; }
+  .amount-input-wrap input { border:none; outline:none; padding:9px 0; font-size:13px; font-weight:600; color:var(--pp-text-heading); font-family:inherit; background:transparent; flex:1; }
+  .amount-chips { display:flex; gap:10px; flex-wrap:wrap; }
+  .amount-chip { flex:1; text-align:center; padding:6px 0; border:1px solid var(--pp-border-strong); border-radius:13px; font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font-sans); color:var(--pp-text-body); background:var(--pp-surface-alt); transition:border-color .15s ease, color .15s ease, background-color .15s ease; }
   .amount-chip:hover { border-color:var(--pp-teal-600); color:var(--pp-teal-700); background:var(--pp-teal-100); }
   .amount-chip.selected { border-color:var(--pp-teal-600); background:var(--pp-teal-600); color:#fff; }
 
   .copy-row { display:flex; justify-content:space-between; align-items:center; gap:10px; background:var(--pp-surface-alt); border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:10px 14px; font-size:12.5px; transition:border-color .15s ease, background-color .15s ease; }
   .copy-row:hover { border-color:var(--pp-border-strong); }
-  .copy-row .cr-label { color:var(--pp-text-body); font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+  .copy-row .cr-label { color:var(--pp-text-body); font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; }
   .copy-row .cr-value { font-weight:600; font-family:var(--font-mono); font-size:13px; margin-top:3px; }
-  .copy-row.highlight { background:var(--pp-teal-100); border-color:var(--pp-teal-300); }
+  .copy-row.highlight { background:var(--pp-teal-100); border-color:var(--pp-teal-300); border-radius:8px; padding:12px 14px; }
   .copy-row.highlight:hover { border-color:var(--pp-teal-500); }
   .copy-row.highlight .cr-label { color:var(--pp-teal-700); }
   .copy-affordance { font-size:11px; color:var(--pp-teal-600); cursor:pointer; font-weight:600; transition:color .15s ease; flex-shrink:0; }
   .copy-affordance:hover { color:var(--pp-teal-900); text-decoration:underline; }
 
-  .readonly-field { background:var(--pp-surface-alt); border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:9px 12px; font-size:12.5px; color:var(--pp-text-body); }
+  .readonly-field { border:1px solid var(--pp-border-strong); border-radius:var(--radius-md); padding:9px 14px; font-size:13px; color:var(--pp-text-heading); }
+
+  /* The old fictional shortfall banner used the shared .banner-amber (with
+     its icon circle) — the mockup's own topup banner is plain text in a
+     colored box, no icon, and its own padding/font-size. Kept separate from
+     .banner-amber/.banner-teal (used elsewhere, e.g. the ledger's real
+     low-balance banner) rather than changing those shared rules. */
+  .topup-note { border-radius:10px; padding:12px 18px; font-size:12px; }
+  .topup-note.amber { background:var(--pp-amber-bg); border:1px solid var(--pp-amber-border); color:var(--pp-amber-text); }
+  .topup-note.teal { background:var(--pp-teal-100); border:1px solid var(--pp-teal-300); color:var(--pp-teal-900); }
   /* Public-demo disclaimer, pinned below the page content. */
   .demo-footer { margin-top:24px; padding-top:14px; border-top:1px solid var(--pp-border);
                  font-size:11.5px; line-height:1.55; color:var(--pp-text-faint); }
@@ -634,10 +662,6 @@
     .stat-equation { display:flex; flex-direction:column; align-items:stretch; }
     .stat-result-group { display:flex; flex-direction:column; align-items:stretch; min-width:0; }
     .stat-op { min-width:0; padding:2px 0; }
-    /* The fixed height above (sized for six cards on one line at iPad
-       portrait+) is taller than any single card needs once it's alone on
-       its own row at full column width — let it size to content instead. */
-    .stat-card { height:auto; }
     .stat-card .value, .stat-card.result .value { font-size:var(--text-xl); }
     .stat-card.result .value { font-size:var(--text-hero); }
     .chart-toolbar { flex-direction:column; align-items:flex-start; }
@@ -2116,12 +2140,12 @@
   function topupBannerHtml() {
     var shortfall = balanceAlertShortfall();
     if (shortfall > 0) {
-      return '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">' +
+      return '<div class="topup-note amber">' +
         'You are € ' + ConsumptionCalc.formatNL(shortfall, 2) + ' below your € ' + ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) +
-        ' minimum balance alert. Top up to clear it.</div></div>';
+        ' minimum balance alert. Top up to clear it.</div>';
     }
-    return '<div class="banner banner-teal"><div class="banner-body">Your balance is above the € ' +
-      ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) + ' minimum balance alert. Add funds any time to keep trading.</div></div>';
+    return '<div class="topup-note teal">Your balance is above the € ' +
+      ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) + ' minimum balance alert. Add funds any time to keep trading.</div>';
   }
 
   function renderWalletTopup() {
@@ -2147,37 +2171,50 @@
         " — a bank transfer will not arrive before then. Use iDEAL if you need funds to act on it."
       : "iDEAL clears in seconds; a bank transfer can take 1–2 business days — worth knowing before you're up against a firm offer's countdown.";
 
+    // AMOUNT/YOUR BANK labels reuse the shared .fg-label (10.5px/700, same
+    // margin-bottom) but override its letter-spacing to the mockup's .03em
+    // per-instance — that class is shared with the trading wizard's fields,
+    // so it isn't changed globally for a 0.01em difference.
+    var fgLabelStyle = ' style="letter-spacing:.03em"';
+
     var idealCard = '<div class="ideal-card">' +
-      '<div class="card-head"><div><div class="card-title">iDEAL</div><div class="card-subtitle" style="margin-bottom:0">Funds available within seconds</div></div>' + badge("RECOMMENDED", "brand") + '</div>' +
+      '<div class="topup-card-head"><div><div class="topup-card-title">iDEAL</div><div class="topup-card-subtitle">Funds available within seconds</div></div>' + badge("RECOMMENDED", "brand") + '</div>' +
       '<div class="field-group" style="margin-bottom:0">' +
-        '<div class="fg-label">Amount</div>' +
+        '<div class="fg-label"' + fgLabelStyle + '>Amount</div>' +
         '<div class="amount-input-wrap"><span>€</span><input id="topup-amount-input" type="text" inputmode="decimal" value="' + ConsumptionCalc.formatNL(state.topupAmount, 0) +
           '" oninput="PP.onTopupAmountInput(this.value)" onchange="PP.setTopupAmount(this.value)"></div>' +
-        '<div class="amount-chips">' + chipsHtml + '</div>' +
-        '<div id="topup-validation" class="fg-hint" style="color:var(--pp-red)">' +
+        '<div id="topup-validation" class="fg-hint" style="margin-top:6px;color:var(--pp-red)">' +
           (topupAmountValid() ? "" : "Minimum top-up is € " + ConsumptionCalc.formatNL(MIN_TOPUP_EUR, 2) + ".") + '</div>' +
       '</div>' +
-      '<div class="field-group" style="margin-bottom:0"><div class="fg-label">Your bank</div><div class="readonly-field">ING</div></div>' +
-      '<div id="topup-preview-line" class="caption" style="font-weight:600;color:var(--pp-teal-700)">' +
+      '<div class="amount-chips">' + chipsHtml + '</div>' +
+      '<div class="field-group" style="margin-bottom:0">' +
+        '<div class="fg-label"' + fgLabelStyle + '>Your bank</div><div class="readonly-field">ING</div>' +
+      '</div>' +
+      '<div id="topup-preview-line" style="font-size:11px;font-weight:600;color:var(--pp-teal-700)">' +
         (topupAmountValid() ? "New available balance: € " + ConsumptionCalc.formatNL(state.walletAvailable + state.topupAmount, 2) : "") + '</div>' +
       '<button type="button" id="topup-pay-btn" class="btn-primary" style="width:100%"' + (topupAmountValid() ? "" : " disabled") +
         ' onclick="PP.performTopup()">Pay € ' + ConsumptionCalc.formatNL(state.topupAmount, 2) + ' with iDEAL</button>' +
-      '<div class="caption">You will be redirected to your bank to complete the payment. ' + urgencyNote + '</div>' +
+      '<div class="caption" style="text-align:center;line-height:1.5">You will be redirected to your bank and returned here.<br>PeakPower never sees your bank credentials.<br>' + urgencyNote + '</div>' +
       '</div>';
 
     var bank = PortalSeedData.BANK_DETAILS;
     var bankCard = '<div class="bank-card">' +
-      '<div class="card-head"><div><div class="card-title">Bank transfer</div><div class="card-subtitle" style="margin-bottom:0">Transfer from your own bank using the reference below</div></div>' + badge("1–2 BUSINESS DAYS", "neutral") + '</div>' +
+      '<div class="topup-card-head"><div><div class="topup-card-title">Bank transfer</div><div class="topup-card-subtitle">Transfer from your own bank using the reference below</div></div>' + badge("1–2 BUSINESS DAYS", "neutral") + '</div>' +
       '<div class="copy-row"><div><div class="cr-label">Account holder</div><div class="cr-value" style="font-family:var(--font-sans);font-weight:600">' + bank.accountHolder + '</div></div><span class="copy-affordance">copy</span></div>' +
       '<div class="copy-row"><div><div class="cr-label">IBAN</div><div class="cr-value">' + bank.iban + '</div></div><span class="copy-affordance">copy</span></div>' +
       '<div class="copy-row"><div><div class="cr-label">BIC</div><div class="cr-value">' + bank.bic + '</div></div><span class="copy-affordance">copy</span></div>' +
-      '<div class="copy-row highlight"><div><div class="cr-label">Payment reference</div><div class="cr-value" style="color:var(--pp-teal-700)">' + bank.reference + '</div></div><span class="copy-affordance">copy</span></div>' +
-      '<div class="caption">Always include the payment reference so we can match your transfer automatically.' +
+      '<div class="copy-row highlight"><div><div class="cr-label">Payment reference</div><div class="cr-value" style="font-size:20px;color:var(--pp-teal-700)">' + bank.reference + '</div></div><span class="copy-affordance">copy</span></div>' +
+      '<div style="font-size:12px;color:var(--pp-text-body);font-weight:500">Without the reference we cannot match your transfer automatically.' +
         (pendingOffer ? " A transfer sent now will not arrive before your open offer (" + pendingOffer.id + ") expires — use iDEAL for that." : "") + '</div>' +
-      '<a class="btn-link" onclick="PP.noop()">Download instructions as PDF</a>' +
+      '<a class="btn-link" style="display:block;text-align:right;font-size:11.5px;color:var(--pp-teal-600)" onclick="PP.noop()">Download instructions as PDF</a>' +
       '</div>';
 
     var allTopups = state.topupsExtra.concat(PortalSeedData.TOPUPS);
+    // Mockup's own gap for this specific table is 12px, wider than the
+    // shared .grid-table.dense convention's 10px (used app-wide, e.g. the
+    // Wallet ledger and invoice line items) — not changed here since that
+    // convention serves several other screens; see the note sent to
+    // team-lead. cols itself already matches (1.4fr 1.2fr 1.2fr 1fr 1fr).
     var cols = "1.4fr 1.2fr 1.2fr 1fr 1fr";
     var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>DATE</div><div>METHOD</div><div>REFERENCE</div><div>STATUS</div><div class="gt-cell-num">AMOUNT</div></div>';
     var rows = allTopups.map(function (t) {
@@ -2186,9 +2223,13 @@
     }).join("");
     var topupsCard = cardHtml("Recent top-ups", "", '<div class="grid-table dense">' + head + rows + '</div>');
 
+    // #wallet-body's own 16px flex-column gap (see the shared -body wrapper
+    // rule) already spaces these three top-level children — no manual
+    // margin-top needed, matching the mockup's own single outer gap:16px
+    // rather than doubling the spacing.
     document.getElementById("wallet-body").innerHTML = topupBannerHtml() +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;margin-top:16px">' + idealCard + bankCard + '</div>' +
-      '<div style="margin-top:16px">' + topupsCard + '</div>';
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">' + idealCard + bankCard + '</div>' +
+      topupsCard;
   }
 
   /**
