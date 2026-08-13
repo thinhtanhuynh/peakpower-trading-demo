@@ -79,16 +79,38 @@
     };
   }
 
-  /** Full per-interval row — every column of the reference calculation sample. */
+  /**
+   * Full per-interval row — every column of the reference calculation sample.
+   *
+   * `consumptionKw`/`productionKw`/`epex` may be `null` for an interval with
+   * no usage data yet (a future date past the live dataset's coverage, see
+   * the Customer Portal's date-range filter) — every usage-derived column
+   * (consumptionKwh..totalCost) comes back `null` rather than a fabricated
+   * number, while the hedge-position columns (base/peak/hedge volume, hedge
+   * cost) are still returned, since those depend only on the hedge blocks and
+   * the calendar, not on metered usage. This branch is additive: existing
+   * callers never pass null, so every real-data result is unchanged.
+   */
   function computeIntervalRow(timeStr, consumptionKw, productionKw, epex, dateStr, hedgeBlocks) {
-    var consumptionKwh = consumptionKw * 0.25;
-    var productionKwh = productionKw * 0.25;
-    var actualUsage = consumptionKwh - productionKwh;
-    var usageCost = actualUsage * epex;
+    var hasUsage = consumptionKw != null && productionKw != null && epex != null;
 
     var hedge = hedgeBlocks
       ? computeIntervalHedgeVolumes(dateStr, timeStr, hedgeBlocks)
       : { baseVolumeKwh: 0, peakVolumeKwh: 0, hedgeVolumeKwh: 0, hedgeCost: 0 };
+
+    if (!hasUsage) {
+      return {
+        epex: null, consumptionKwh: null, productionKwh: null, usageCost: null, actualUsage: null,
+        baseVolumeKwh: hedge.baseVolumeKwh, peakVolumeKwh: hedge.peakVolumeKwh,
+        hedgeVolumeKwh: hedge.hedgeVolumeKwh, uncovered: null, long: null, short: null,
+        deltaCost: null, hedgeCost: hedge.hedgeCost, totalCost: null
+      };
+    }
+
+    var consumptionKwh = consumptionKw * 0.25;
+    var productionKwh = productionKw * 0.25;
+    var actualUsage = consumptionKwh - productionKwh;
+    var usageCost = actualUsage * epex;
 
     var uncovered = actualUsage - hedge.hedgeVolumeKwh;
     var long = Math.max(0, -uncovered);
@@ -142,7 +164,18 @@
     return out;
   }
 
-  /** Day/Month aggregate totals, plus peak demand. */
+  /**
+   * Day/Month aggregate totals, plus peak demand.
+   *
+   * Usage-derived totals (consumptionKwh..totalCostEur, peakKw/peakTime) skip
+   * any interval with no usage data (see computeIntervalRow) rather than
+   * treating it as zero — a future date contributes nothing to "Actual
+   * Usage" rather than silently reading as zero consumption. `hedgeVolumeKwh`/
+   * `hedgeCostEur` still total every interval, including future ones, since
+   * the hedge position is known regardless of usage. `intervalsWithUsage`/
+   * `intervalsTotal` let a caller tell "empty range" apart from "range with
+   * no usage data yet" and show that honestly instead of a bare 0.
+   */
   function computeDayStats(times, prices, consumption, production, dates, hedgeBlocks) {
     var n = times.length;
     var consumptionKwh = 0, productionKwh = 0, usageCostEur = 0;
@@ -150,21 +183,24 @@
     var uncoveredKwh = 0, longKwh = 0, shortKwh = 0, deltaCostEur = 0;
     var hedgeCostEur = 0, totalCostEur = 0;
     var peakKw = -Infinity, peakTime = null;
+    var intervalsWithUsage = 0;
 
     for (var i = 0; i < n; i++) {
       var dateStr = dates ? resolveDate(dates, i) : null;
       var row = computeIntervalRow(times[i], consumption[i], production[i], prices[i], dateStr, hedgeBlocks);
-      consumptionKwh += row.consumptionKwh;
-      productionKwh += row.productionKwh;
-      usageCostEur += row.usageCost;
       baseVolumeKwh += row.baseVolumeKwh;
       peakVolumeKwh += row.peakVolumeKwh;
       hedgeVolumeKwh += row.hedgeVolumeKwh;
+      hedgeCostEur += row.hedgeCost;
+      if (row.actualUsage == null) { continue; }
+      intervalsWithUsage++;
+      consumptionKwh += row.consumptionKwh;
+      productionKwh += row.productionKwh;
+      usageCostEur += row.usageCost;
       uncoveredKwh += row.uncovered;
       longKwh += row.long;
       shortKwh += row.short;
       deltaCostEur += row.deltaCost;
-      hedgeCostEur += row.hedgeCost;
       totalCostEur += row.totalCost;
       if (consumption[i] > peakKw) {
         peakKw = consumption[i];
@@ -187,7 +223,9 @@
       shortKwh: shortKwh,
       deltaCostEur: deltaCostEur,
       hedgeCostEur: hedgeCostEur,
-      totalCostEur: totalCostEur
+      totalCostEur: totalCostEur,
+      intervalsWithUsage: intervalsWithUsage,
+      intervalsTotal: n
     };
   }
 

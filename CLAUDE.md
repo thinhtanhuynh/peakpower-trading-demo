@@ -372,8 +372,192 @@ it automatically.
 
 `Customer Portal - Preview.html`'s `:root` defines **only color tokens** (36
 of them) — no spacing/radius/typography scale. The rebuild's `--space-*`,
-`--radius-*`, `--text-*` tokens are its own addition; all 36 shared **color**
-tokens match the mockup exactly, so don't "fix" a color by hand.
+`--radius-*`, `--text-*` tokens are its own addition. Color tokens **used to**
+match the mockup exactly; as of **2026-08-13** that is no longer true — see
+"Palette modernization (2026-08-13)" below for what changed and why. The two
+`*Preview.html` mockups themselves were **not** edited and remain pure design
+references frozen at the original palette; only `customer-portal.html`,
+`back-office-portal.html` and `index.html` carry the new tokens. Don't
+"fix" a live-page color back to the mockup's value — that would undo this
+change.
+
+#### Palette modernization (2026-08-13)
+
+Product direction: "the colors are quite outdated, they can be much more
+modern." The dataviz skill's validator
+(`scripts/validate_palette.js`) was run against the live chart series colors
+(`#0f766e` teal / `#4f46e5` indigo / `#ea580c` orange / `#0891b2` cyan) before
+touching anything:
+
+```
+[FAIL] Chroma floor        below floor (reads gray): [["#0f766e",0.086]]
+[PASS] CVD separation      worst adjacent #0891b2↔#ea580c ΔE 19.8 (protan) · tritan 5.9
+```
+
+The brand teal used for the Actual-Usage/Total-Cost chart line was
+objectively desaturated enough to read as flat gray next to the dashed
+indigo Hedge line — not a matter of taste. The orange/cyan Short/Long pair
+passed but only marginally under tritanopia (ΔE 5.9, below the ≥8 target).
+
+**What changed, and why two different teals now exist:** a single hex can't
+satisfy both jobs at once here — the dataviz chroma floor (≥0.1, needed so a
+chart line reads as colored rather than gray) and WCAG AA text contrast
+(≥4.5:1 for the small 11–12.5px UI text this token also color) pull in
+opposite directions at this hue's darkness (darker → better contrast, less
+chroma). So the token was split by job:
+
+| Token / use | Old | New | Why |
+|---|---|---|---|
+| Chart line stroke (`COST_TOTAL_LINE`, Actual-Usage line — literal hex in `customer-portal.html`'s SVG builders, not a CSS var) | `#0f766e` (chroma 0.086, reads gray) | `#059f8f` | Clears the chroma floor (0.10); only needs 3:1 against the white chart surface, which it clears (3.30:1). |
+| `--pp-teal-700` (UI text/links/badges/`.card-action`/`.btn-link`, `.badge.brand`) | `#0f766e` (contrast 5.47:1) | `#00796b` | Keeps AA contrast (5.32:1) while nudging chroma up over the old value (0.093 vs 0.086) — as close to the chart teal as text contrast allows. |
+| `--pp-indigo` / Hedge-Volume & Hedge-Cost line | `#4f46e5` | `#4338ca` | Deepened to pair with the punchier teal; normal-vision ΔE against the new teal is 30.5, well clear. |
+| `--pp-orange` / Short-Buy fill | `#ea580c` | `#e8590c` | Minor re-step alongside the cyan re-validation below. |
+| `--pp-cyan` / Long-Sell fill | `#0891b2` | `#0891b2` (unchanged) | Already fine on its own; kept as the fixed point the other three were re-validated against. |
+
+Re-running the validator on the final four chart-series colors
+(`#059f8f,#4338ca,#e8590c,#0891b2`):
+
+```
+[PASS] Lightness band       all 4 inside L 0.43–0.77
+[PASS] Chroma floor         all 4 >= 0.1
+[PASS] CVD separation       worst adjacent #0891b2↔#e8590c ΔE 19.8 (protan) · tritan 19.6
+[PASS] Normal-vision floor  worst adjacent #4338ca↔#059f8f ΔE 30.5 (normal)
+[PASS] Contrast vs surface  all 4 >= 3:1
+```
+
+Tritan separation went from 5.9 (marginal fail territory) to 19.6. The
+semantic/status set (amber/green/red) and the neutral surface stack
+(`--pp-bg`/`--pp-surface`/borders) were left unchanged — they weren't
+implicated by the validator and already carry their own AA-passing
+`-text` variants; revisit them separately if "modern" is later scoped to
+include surfaces. No dark mode exists on these pages (no
+`prefers-color-scheme`/`data-theme` handling), so no dark-surface
+re-validation was needed. Rendered before/after (Dashboard mini-chart,
+sidebar, badges, buttons) via headless Chrome screenshots before landing —
+see the design agent's session for the images if picking this back up.
+
+#### Certainty layer — provisional offers & projected data (vocabulary, 2026-08-13)
+
+Two features add a second axis to the Consumption chart, orthogonal to the
+existing **category** encoding (hue = what a mark *is* — usage, hedge, buy,
+sell): a **provisional coverage overlay** (a pending offer's hedge, stacked
+above the confirmed position — not a real position until accepted) and
+**projected data** (usage/cost past the last measured date, forecast from
+the site's historical profile, on the *same* line as measured data). Both
+are the same underlying problem — "how sure are we this mark is real" — so
+they share one vocabulary rather than each area inventing its own dashed
+line. This is a **state** (`Actual` vs `Provisional`), applied on top of
+whatever category hue is already in play; it never replaces the hue.
+
+Dash is already spent on category (dashed indigo = Hedge, solid = Actual
+Usage/Total Cost — see "Cost chart" above), so certainty cannot also use
+dash on those same lines without stacking two dash languages on one stroke.
+The dataviz skill's texture channel is opt-in-only *for redundant category
+identity*; here texture is the *primary* channel for a distinct semantic
+(this mark is not-yet-real), so it renders by default, not behind an
+accessibility toggle — a documented, deliberate exception to that default.
+
+**`Provisional` treatment — always all of the following together, never
+just one (the whole point is that it survives grayscale, a projector, and
+CVD, so no single cue carries it):**
+
+1. **Opacity** — fills/strokes at 55% of their `Actual` value
+   (`--certainty-provisional-opacity: 0.55`).
+2. **Texture, fills/areas only** (offer band, provisional coverage wash,
+   uncovered/delta bars past the projection boundary) — 45° hairline hatch,
+   6px pitch, inked in the fill's *own* hue one step darker than the wash
+   (never a new hue) — reuses the dataviz "Lines" texture spec verbatim,
+   just triggered unconditionally here instead of opt-in. None of
+   `COST_TOTAL_LINE`/`COST_HEDGE_LINE`/`COST_BUY_FILL`/`COST_SELL_FILL` are
+   steps of a named ramp (they're one-off hex — see "Palette modernization"
+   above), so "one step darker" is computed, not looked up: convert to
+   HSL, subtract 12 percentage points of lightness (clamp at 0), keep hue
+   and saturation — reproducible from whichever fill hex is passed in, so
+   it auto-tracks if the four ever change again rather than needing a
+   second hardcoded table kept in sync with the first. Precomputed for the
+   current four (all clear 3:1 against the white chart surface, so the
+   hatch reads even at hairline width):
+
+   | Fill | Hatch ink | Contrast vs white |
+   |---|---|---|
+   | `#059f8f` teal | `#036359` | 7.16:1 |
+   | `#4338ca` indigo | `#332a9d` | 10.72:1 |
+   | `#e8590c` orange | `#ae4309` | 5.82:1 |
+   | `#0891b2` cyan | `#065f75` | 7.24:1 |
+3. **Stroke pattern, lines only, and only for hues with no existing
+   category dash** — the projected segment of the teal Actual-Usage/
+   Total-Cost line switches from solid to a fine dot (`stroke-dasharray:
+   "1,3"`), visually distinct from the hedge line's own `"5,3"` dash so the
+   two dash languages (category vs certainty) are never on screen looking
+   alike. The indigo Hedge/Hedge-Cost line already carries a category dash
+   and does **not** get a second one — its provisional state (the pending
+   offer) is drawn as a stacked **area** instead of a second line, so it
+   gets the hatch treatment from (2), not a stroke change.
+4. **Boundary marker — mandatory whenever a chart mixes states**, not
+   optional polish: a 1px solid vertical rule (`var(--pp-border-strong)`)
+   spanning the full plot height at the transition x, with a text label
+   pair directly above the plot, 10px `var(--pp-text-faint)` — "Measured"
+   left of the rule / "Projected" right of it for the data-boundary case,
+   "Confirmed" / "If accepted" for the offer-overlay case.
+5. **Legend** — any chart showing a `Provisional` mark adds a two-swatch
+   legend pair: a solid swatch "Measured" / "Confirmed" beside a
+   hatched-and-dotted swatch "Projected" / "Provisional offer" — the
+   dataviz never-color-alone rule applies to state exactly as it does to
+   category.
+6. **Tooltip** — must say so in words ("Projected" / "Provisional offer —
+   not yet accepted"), never rely on the visual treatment alone.
+
+**Stat cards** can't hatch text, so they get the same redundant-cues
+principle translated to that medium, using only existing neutral tokens —
+no new hex, and never a tone color (`.export`/`.short`/`.negative`/
+`.success` still color the value; certainty stays tone-agnostic so
+"projected + short" and "projected + negative" don't read as two different
+treatments):
+
+- **Whole-card marker** (a fully projected card, or the mixed-row headline
+  card whose summed value is partly projected): `border: 1px dashed
+  var(--pp-border-strong)` in place of the card's normal solid border, plus
+  `background: var(--pp-surface-alt)` in place of `--pp-surface` — border
+  and background are the card's structural cue, standing in for the
+  chart's hatch.
+- **Inline measured/projected split within a sublabel** (e.g. "€ 3.200,00
+  measured + € 1.588,62 projected"): the projected clause drops to
+  `var(--pp-text-faint)`, the app's existing secondary-text token — no new
+  token.
+- **Badge**: `.badge.neutral` reading **"Projected"**, not "Provisional" —
+  those are two different meanings (forecast data you haven't measured yet,
+  vs. a pending trade offer you haven't accepted yet) and must stay
+  verbally distinct so the two certainty stories are never confused.
+  Border/background alone is easy to miss at a glance; the badge is the
+  card's equivalent of the chart's mandatory legend + tooltip text — never
+  the sole cue.
+- A component card in a mixed row that is itself fully measured gets none
+  of the above — only a card whose own figure actually mixes states is
+  marked.
+
+**Resolving the bold-value question for a mixed range** (asked and settled
+2026-08-13): the primary bold value is the **measured portion only**, never
+a measured+projected sum — the projected portion is the sublabel's "+ €X
+projected" call-out, per the split above. A summed headline would present a
+partly-guessed figure with full-certainty typography, which is exactly what
+this vocabulary exists to prevent; the chart makes the same choice
+geometrically by never blending a solid measured segment and a dotted
+projected segment into one mark across the boundary. **Fully-projected
+range** (zero measured days in view, e.g. a future month) is the degenerate
+case of the same rule: no measured portion to anchor a primary value
+against, so the value itself renders at `--certainty-provisional-opacity`
+with the "Projected" badge attached directly, no second line — the card
+equivalent of a chart line that's dotted end-to-end with no boundary marker
+in view. Hedge volume is exempt from all of this on every screen (chart and
+cards alike) — it's a real booked position, not date-dependent, so it never
+gets the projected treatment regardless of the range being viewed.
+
+None of this is implemented yet — `charts` owns the chart-geometry code
+that draws it, `forward` owns what counts as measured vs. projected and
+where the offer overlay's numbers come from, `cards` owns applying the
+stat-card translation above. This subsection is the shared source of truth
+so the three don't diverge; update it in place if the vocabulary changes
+rather than letting each screen's code drift from it.
 
 The mockup's real component styles live in a gzip+base64 blob inside the
 preview file (`PeakPowerDesignSystem_7164da`), not in its markup, so inline
