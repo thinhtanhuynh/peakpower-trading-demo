@@ -503,11 +503,15 @@
               <div class="card-subtitle" id="cost-chart-subtitle"></div>
             </div>
           </div>
+          <!-- 190 vs. the usage chart's 260 — deliberately shorter, so the
+               relationship reads visually, not just in the subtitle text.
+               Width/viewBox-x stay identical to the usage chart's; JS keeps
+               them in sync at render time (drawDayCharts, render()). -->
           <div id="cost-day-chart-wrap">
-            <svg id="cost-chart" viewBox="0 0 960 260" style="width:100%;height:260px;display:block"></svg>
+            <svg id="cost-chart" viewBox="0 0 960 190" style="width:100%;height:190px;display:block"></svg>
           </div>
           <div id="cost-month-chart-wrap" class="chart-scroll" style="display:none">
-            <svg id="cost-month-chart" viewBox="0 0 960 260" height="260" style="display:block"></svg>
+            <svg id="cost-month-chart" viewBox="0 0 960 190" height="190" style="display:block"></svg>
           </div>
           <div class="legend">
             <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Total cost</div>
@@ -2646,7 +2650,10 @@
     chart.style.width = width + "px";
     chart.innerHTML = buildChartSvg(range.times, series.actualUsage, series.hedgeVolume, series.uncovered, width,
       { hasUsage: range.hasUsage, offerVolume: range.offerVolume });
-    costChart.setAttribute("viewBox", "0 0 " + width + " 260");
+    // Cost chart is deliberately shorter (190 vs. usage's 260, design's
+    // subordinate-not-peer treatment) — only the viewBox HEIGHT differs;
+    // width tracks the usage chart's exactly, same as every other x-value.
+    costChart.setAttribute("viewBox", "0 0 " + width + " 190");
     costChart.style.width = width + "px";
     costChart.innerHTML = buildCostChartSvg(range.times, series.hedgeCost, series.deltaCost, series.totalCost, width,
       { hasUsage: range.hasUsage, offerCost: range.offerCost });
@@ -3153,7 +3160,12 @@
   function buildCostChartSvg(times, hedgeCost, deltaCost, totalCost, width, opts) {
     var n = times.length;
     width = width || 960;
-    var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
+    // Shorter than the usage chart's 260 (design: the cost chart should
+    // read as visibly subordinate/derived, not just carry a subtitle saying
+    // so) — height is the ONLY dimension that differs. padLeft/width/plotW/
+    // barW/stepX all stay byte-identical to the usage chart's so the shared
+    // crosshair's x-geometry is untouched; see range-alignment-audit.js.
+    var height = 190, padLeft = 40, padBottom = 24, padTop = 10;
     var plotW = width - padLeft - 10, plotH = height - padTop - padBottom;
     var barW = plotW / n;
     var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, barW, barW, barW / 2, 2, opts);
@@ -3181,7 +3193,10 @@
     var n = times.length;
     var pxPerInterval = 4;
     var width = Math.max(960, n * pxPerInterval);
-    var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
+    // Shorter than the usage range chart's 260 — see buildCostChartSvg's
+    // comment. width/plotW/stepX/barW stay identical to buildMonthChartSvg's
+    // so the two range charts keep pixel-identical x-geometry.
+    var height = 190, padLeft = 40, padBottom = 24, padTop = 10;
     var plotW = width - padLeft - 10;
     var plotH = height - padTop - padBottom;
     var stepX = n > 1 ? plotW / (n - 1) : 0;
@@ -3386,7 +3401,8 @@
 
       var costMonthOpts = { hasUsage: range.hasUsage, offerCost: range.offerCost };
       var costMarkup = buildMonthCostChartSvg(range.dates, range.times, series.hedgeCost, series.deltaCost, series.totalCost, costMonthOpts);
-      costMonthChart.setAttribute("viewBox", "0 0 " + lastMonthCostChartGeom.width + " 260");
+      // Shorter than the usage range chart's 260 — width still tracks it exactly.
+      costMonthChart.setAttribute("viewBox", "0 0 " + lastMonthCostChartGeom.width + " 190");
       costMonthChart.style.width = lastMonthCostChartGeom.width + "px";
       costMonthChart.innerHTML = costMarkup;
     }
