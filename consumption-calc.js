@@ -253,6 +253,49 @@
     return sign + intPart + (decPart ? "," + decPart : "");
   }
 
+  // Presentation-only abbreviation for the Consumption stat cards' iPad
+  // tier — never used by the table, CSV export, or tooltips, which stay
+  // full precision so a number can always be audited exactly. Two
+  // decimals for EUR, matching the existing "€ 1,84 M" / "€ 8,42 M"
+  // convention already shipped on the Back Office Invoicing/Wallets
+  // screens (back-office-screens-data.js) — this reuses that convention
+  // rather than inventing a new one.
+  //
+  // Threshold is 100,000, not the round 1,000,000 the two worked examples
+  // this was first speced against would suggest — rendering the real page
+  // at iPad landscape (1024px) showed that a plain 1,000,000 cutoff still
+  // let mid-size 6-digit figures ("€ 932.147,88", "418.890,3 kWh") overflow
+  // their card, the same failure the large figures had, just one digit
+  // shorter. 100,000 is where that stopped happening at every width this
+  // was actually tested against. A single day's totals (thousands, not
+  // hundreds of thousands) stay untouched either way — this is a
+  // threshold, not a blanket transform.
+  var ABBREVIATE_ABOVE = 100000;
+
+  // "M" means millions. Six-figure sums take "k" instead, because dividing
+  // them by a million reads worse than the number it replaced: € 932.147,88
+  // became "0,93 M" and € 100.000 became "0,10 M" — a leading "0," costs
+  // both precision and legibility, and the convention this borrows from
+  // (Back Office's "€ 1,84 M", "€ 8,42 M") only ever abbreviates genuine
+  // millions.
+  function formatEurAbbr(value) {
+    var abs = Math.abs(value);
+    if (abs < ABBREVIATE_ABOVE) { return null; }
+    // Decide the unit on the ROUNDED thousands, not the raw value: 999.999
+    // rounds to 1.000 k, which reads as a million while claiming not to be
+    // one. Anything that would print as 1.000 k belongs in millions.
+    if (Math.round(abs / 1000) < 1000) { return formatNL(value / 1000, 0) + " k"; }
+    return formatNL(value / 1000000, 2) + " M";
+  }
+
+  // kWh → MWh is a unit change, not just fewer digits — the caller must
+  // append " MWh", not reuse whatever unit string it was already using,
+  // or the number becomes a thousand-fold lie.
+  function formatKwhAbbr(value) {
+    if (Math.abs(value) < ABBREVIATE_ABOVE) { return null; }
+    return formatNL(value / 1000, 1) + " MWh";
+  }
+
   var api = {
     // Exported so a caller pricing a forward interval can pick peak vs base by
     // exactly this rule rather than re-deriving it — the 08:00/08:15 boundary
@@ -262,7 +305,9 @@
     computeIntervalRow: computeIntervalRow,
     computeIntervalSeries: computeIntervalSeries,
     computeDayStats: computeDayStats,
-    formatNL: formatNL
+    formatNL: formatNL,
+    formatEurAbbr: formatEurAbbr,
+    formatKwhAbbr: formatKwhAbbr
   };
 
   if (typeof module !== "undefined" && module.exports) {

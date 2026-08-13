@@ -219,4 +219,42 @@ var MONDAY = "2026-01-05";
   assert.strictEqual(ConsumptionCalc.formatNL(0, 1), "0,0");
 })();
 
+// formatEurAbbr / formatKwhAbbr: the Consumption stat cards' iPad-tier
+// abbreviation, a threshold not a blanket transform — null below 100,000
+// so the caller falls back to full precision. The threshold sits at
+// 100,000 rather than the round "1 M" the worked examples suggested,
+// because rendering the real page at iPad landscape (1024px) showed
+// 6-digit figures like "€ 932.147,88" and "418.890,3 kWh" ALSO overflow
+// their card at that width even at the smallest legible font — abbreviate
+// too late and the mid-size figures break the same way the large ones did.
+(function () {
+  assert.strictEqual(ConsumptionCalc.formatEurAbbr(1412678.48), "1,41 M");
+  // Six-digit figures get "k", not "M" — "€ 0,93 M" reads worse than the
+  // number it replaced (a leading "0," costs both precision and legibility,
+  // and diverges from the Back Office convention this borrows, which only
+  // ever shows "M" for a genuine million).
+  assert.strictEqual(ConsumptionCalc.formatEurAbbr(-932147.88), "-932 k"); // above the 100,000 threshold, below 1 M
+  assert.strictEqual(ConsumptionCalc.formatEurAbbr(4788.62), null); // single-day range — stays exact
+  assert.strictEqual(ConsumptionCalc.formatEurAbbr(-1500000), "-1,50 M"); // sign preserved, genuine million
+  assert.strictEqual(ConsumptionCalc.formatEurAbbr(99999.99), null); // just under the threshold
+  // Rounds up into the M tier rather than printing "1.000 k", which would
+  // read as a million while claiming not to be one.
+  assert.strictEqual(ConsumptionCalc.formatEurAbbr(999999.99), "1,00 M");
+
+  assert.strictEqual(ConsumptionCalc.formatKwhAbbr(18803000), "18.803,0 MWh");
+  assert.strictEqual(ConsumptionCalc.formatKwhAbbr(8490285.4), "8.490,3 MWh");
+  assert.strictEqual(ConsumptionCalc.formatKwhAbbr(418890.3), "418,9 MWh"); // above the 100,000 threshold too
+  assert.strictEqual(ConsumptionCalc.formatKwhAbbr(57273.375), null); // single-day range — stays exact
+
+  // The one failure worse than a cramped layout (per explicit review
+  // note): kWh->MWh is a unit change, not just fewer digits, so the
+  // number and the "MWh" label must always travel together. Assert this
+  // directly rather than trusting the string-equality checks above to
+  // catch a regression by accident — a caller could change the divisor
+  // without touching the suffix and every assertion above would still
+  // read as "close enough" at a glance.
+  assert.ok(/ MWh$/.test(ConsumptionCalc.formatKwhAbbr(18803000)), "abbreviated kWh must carry the MWh label, not the original kWh one");
+  assert.strictEqual(ConsumptionCalc.formatKwhAbbr(18803000).indexOf("kWh"), -1, "must not contain a stray kWh label after converting to MWh");
+})();
+
 console.log("consumption-calc.test.js: all assertions passed");
