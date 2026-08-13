@@ -84,45 +84,79 @@
      this now acts on one card, not the whole page. */
   .chart-toolbar { display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; padding-bottom:var(--space-2); margin-bottom:var(--space-3); border-bottom:1px solid var(--pp-border); }
   .chart-toolbar .ctl input[type=date] { padding:5px 8px; font-size:11.5px; }
-  /* Product owner asked for Cost and Energy volume side by side in one line
-     rather than stacked rows. Two columns need real room, not just "fits on
-     screen": measured against the actual dataset's largest range (the full
-     Breda quarter+ span, hero cards reaching "18.803.000,0 kWh" /
-     "€ 1.412.678,48"), a hero value at --text-hero (32px) needs roughly
-     230px of card width to avoid overflowing past its own card edge — the
-     shared .stat-card min-width:160px (fine at single-column width, where
-     flex:1.2 has abundant room to grow past it) becomes the binding
-     constraint once two columns halve the available width, and a 160px
-     card cannot hold a 32px hero number. So Consumption's cards get a wider
-     floor, scoped to #stat-row only (the shared class stays 160px for
-     Dashboard/Wallet/Invoices, which don't use hero-sized values). Below
-     the second breakpoint further down, two columns collapse back to one —
-     verified by rendering the real page at real widths, not by arithmetic;
-     see that breakpoint's own comment for the reasoning. */
-  #stat-row .stat-card { min-width:230px; }
-  #stat-row .stat-result-group { min-width:260px; }
-  .stat-stack { display:flex; flex-direction:row; align-items:flex-start; gap:20px; }
+  /* Product owner asked for Cost and Energy volume side by side, one line,
+     on desktop AND iPad — both orientations, so the floor is iPad PORTRAIT
+     (768px), the narrower of the two iPad widths (landscape 1024px is
+     wider and therefore easier; portrait is the binding case). Only below
+     768px ("mobile") do the two equations break onto separate lines, same
+     as a phone. That collides head-on with the OLD narrow-viewport
+     breakpoint this file already had at 760px (chosen last round before
+     this ask existed) — 768 now supersedes it as the one mobile threshold
+     for this whole card block; there is no second, higher breakpoint
+     anymore.
+
+     Last round solved fitting by RAISING the min-width floor (160px to
+     230px), which guarantees a wrap the moment six cards can't each get
+     230px — exactly what breaks at iPad width. This round instead lets
+     cards actually SHRINK (flex:1, no min-width floor) and scales the
+     number text down to match via clamp() against each column's own
+     width, using a CSS container query — not the viewport — because the
+     sidebar eats a fixed ~220px that a viewport-relative unit can't see:
+     two users at the same viewport width can have very different
+     available card space depending on whether the sidebar is present,
+     and cqw is measured against the actual box the cards live in, so it's
+     correct regardless. No JS/ResizeObserver needed (the day chart's
+     heavier approach), per the standard "prefer CSS if CSS can do it".
+
+     The clamp() bounds below (13px..23px component, 15px..32px hero) were
+     tuned by rendering the real page against the largest figures in the
+     dataset (Breda's full measured+projected span: "18.803.000,0 kWh",
+     "€ 1.412.678,48") at 1440/1280/1024/900/768 and checking for actual
+     text wrapping via a Range over the value's contents (a raw
+     getClientRects() on the value <div> itself is always one rect
+     regardless of internal wrapping — the mistake from last round, not
+     repeated here). Confirmed: one line, no overflow, at all five widths.
+     Below 768 the floor is never tested against six-cards-one-line at
+     all — that's the whole point of breaking to two lines there instead
+     of shrinking type past legibility. */
+  .stat-stack { display:flex; flex-direction:row; align-items:stretch; gap:20px; }
   .stat-row { display:flex; gap:16px; flex-wrap:wrap; }
   /* Consumption's two "equation" groups (Cost, Energy volume) — see
      renderStatCards. Each is a labelled group of component cards feeding a
      larger .result card, rather than flat peers, so the reader always knows
-     which number is the headline and which two explain it. */
-  .stat-group { display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; }
+     which number is the headline and which two explain it. container-type
+     makes this column itself the cqw reference for the clamp()s below, so
+     scaling reflects this column's real width, not the full two-column row
+     or the raw viewport. */
+  .stat-group { display:flex; flex-direction:column; gap:8px; flex:1; min-width:0; container-type:inline-size; container-name:statgroup; }
   .stat-group-title { font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--pp-text-faint); }
-  .stat-equation { display:flex; align-items:stretch; gap:10px; flex-wrap:wrap; }
-  .stat-op { display:flex; align-items:center; justify-content:center; min-width:14px; font-size:15px; font-weight:700; color:var(--pp-text-faint); }
+  .stat-equation { display:flex; align-items:stretch; gap:10px; flex-wrap:nowrap; }
+  .stat-op { display:flex; align-items:center; justify-content:center; min-width:14px; font-size:15px; font-weight:700; color:var(--pp-text-faint); flex:0 0 auto; }
   /* The "=" and its result card are wrapped as one flex child (rather than
      two siblings of .stat-equation) so a narrow viewport's wrap always
      carries them to the next line together — otherwise flex-wrap can strand
      "=" at the end of the component-card row, orphaned from the result card
-     it belongs to, which dropped alone to the row below. */
-  .stat-result-group { display:flex; align-items:stretch; gap:10px; flex:1.2; min-width:174px; }
-  .stat-result-group .stat-card.result { flex:1; }
+     it belongs to, which dropped alone to the row below. Kept even though
+     .stat-equation no longer wraps above 768px — it's what keeps this pair
+     together in the ≤768px fallback below, and costs nothing above it. */
+  .stat-result-group { display:flex; align-items:stretch; gap:10px; flex:1.2; min-width:0; }
+  .stat-result-group .stat-card.result { flex:1; min-width:0; }
   /* StatCard — matches PeakPowerDesignSystem StatCard.jsx (14px 16px,
-     label 11/600/.04em, value 23/700 mt8, sublabel 11 faint mt6). */
-  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; min-width:160px; flex:1; }
-  .stat-card .label { font-size:11px; font-weight:600; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
-  .stat-card .value { font-size:23px; font-weight:700; margin-top:8px; color:var(--pp-text-heading); }
+     label 11/600/.04em, value 23/700 mt8, sublabel 11 faint mt6). No
+     min-width here (was 160px) — six cards fitting one line at iPad
+     portrait needs cards free to shrink; clamp()'d type (below) is what
+     keeps the shrunk card legible instead of a width floor. A fixed
+     height makes all six cards the same height regardless of content
+     (badge row, sublabel length, breakdown line all vary) — sized to fit
+     the tallest real combination (hero value + badge + 2-line sublabel +
+     breakdown), so shorter cards simply have a little empty space below
+     rather than every card growing to match the tallest one live. */
+  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; flex:1; min-width:0; height:150px; display:flex; flex-direction:column; overflow:hidden; }
+  .stat-card .label { font-size:11px; font-weight:600; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* clamp(min, preferred-in-cqw, max) — preferred tracks the column's own
+     width (see .stat-group's container-type above), so text shrinks as
+     the column shrinks rather than wrapping or overflowing. */
+  .stat-card .value { font-size:clamp(13px, 6.2cqw, 23px); font-weight:700; margin-top:8px; color:var(--pp-text-heading); white-space:nowrap; }
   /* .result marks an equation's headline figure (Total cost, Uncovered) —
      bigger value, firmer border, a visible shadow and a tinted surface —
      subordinate .stat-card siblings stay the shared 23px/white/flat look
@@ -130,12 +164,12 @@
      component cards beside it in the same flex row) — size, shadow and
      tint carry the "this one is the answer" signal, not a thicker border,
      which would cause sub-pixel jitter against its neighbors. */
-  .stat-card.result { flex:1.2; border-color:var(--pp-border-strong); background:var(--pp-surface-alt); box-shadow:0 4px 12px rgba(15,23,42,.10); }
+  .stat-card.result { flex:1.2; min-width:0; border-color:var(--pp-border-strong); background:var(--pp-surface-alt); box-shadow:0 4px 12px rgba(15,23,42,.10); }
   /* Only the value's size changes — tone classes (.critical/.negative/
      .success/.export/.short) still just color this same element, so the
      two signals (which figure is the answer / good vs. bad news) stay
      orthogonal rather than fighting over one rule. */
-  .stat-card.result .value { font-size:var(--text-hero); }
+  .stat-card.result .value { font-size:clamp(15px, 8.6cqw, var(--text-hero)); }
   /* .projected — this card's figure is (partly) forecast, not measured, for
      a date range past the live dataset. Structural-only cue (dashed border +
      alt surface, both existing neutral tokens) so it never fights the tone
@@ -152,7 +186,9 @@
   .stat-card.all-projected .value { opacity:var(--certainty-provisional-opacity); }
   .stat-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
   /* The measured/projected breakdown clause on a mixed card — reuses
-     .sublabel's own faint color rather than a new token. */
+     .sublabel's own faint color rather than a new token. Clamped to 1 line
+     (the fixed card height above has no room for 2) with an ellipsis
+     rather than growing the card or clipping mid-character. */
   .stat-card .sublabel.breakdown { margin-top:2px; }
   .stat-card.result .label { font-weight:700; }
   /* DS tone names: critical is ORANGE in the design system (Dashboard's
@@ -166,7 +202,10 @@
   .stat-card .value.short { color:var(--pp-orange); }
   .stat-card .value.brand { color:var(--pp-teal-600); }
   .stat-card .value.warning { color:var(--pp-amber); }
-  .stat-card .sublabel { font-size:11px; color:var(--pp-text-faint); margin-top:6px; }
+  /* Fixed card height (above) can't fit an unbounded sublabel — clamped to
+     2 lines with an ellipsis on overflow, same reasoning as .breakdown. */
+  .stat-card .sublabel { font-size:11px; color:var(--pp-text-faint); margin-top:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .stat-card .sublabel.breakdown { -webkit-line-clamp:1; }
   /* Card — matches PeakPowerDesignSystem Card.jsx (18px 20px, title 13.5,
      subtitle 11.5 with margin-bottom 14 and no margin-top). */
   .card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:18px 20px; }
@@ -253,6 +292,10 @@
   .chart-scroll { overflow-x:auto; }
   .chart-tooltip { position:fixed; z-index:20; background:#0f172a; color:#fff; font-size:11px; line-height:1.6; padding:8px 10px; border-radius:6px; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,0.25); white-space:nowrap; display:none; }
   .chart-tooltip .tt-head { font-weight:700; margin-bottom:4px; color:#5eead4; }
+  /* Weekend marker in the tooltip head — peak blocks are Mon–Fri, so this is
+     what explains hedge volume dropping to base-only on those intervals. */
+  .chart-tooltip .tt-weekend { margin-left:6px; padding:1px 6px; border-radius:var(--radius-pill);
+    background:var(--pp-amber-bg); color:var(--pp-amber-text); font-size:9.5px; font-weight:700; }
   .chart-tooltip .tt-row { display:flex; justify-content:space-between; gap:14px; }
   .chart-tooltip .tt-row span:last-child { font-weight:600; }
   /* Buttons — match PeakPowerDesignSystem Button.jsx: 600 weight, 13px,
@@ -466,34 +509,29 @@
      no attempt at a true small-screen layout below this, just a stated stop
      rather than an inherited one.
 
-     Cost/Energy volume side by side (.stat-stack row) needs real width per
-     column, which is why it gets its OWN, higher breakpoint below rather
-     than reusing 760px. Verified by rendering the actual page against the
-     largest range in the dataset (Breda, full measured+projected span:
-     hero values up to "18.803.000,0 kWh" / "€ 1.412.678,48") at 10px
-     increments: the hero value stays on one line down to a 890px stackWidth
-     and starts wrapping at 885px — a getClientRects() check on a Range
-     over the value text is what actually detects that (the .value element
-     itself is a block-level div, so ITS OWN getClientRects() is always one
-     rect regardless of how many lines the text inside wraps into — a
-     first-pass version of this check trusted that and reported "1 line"
-     for text that was visibly wrapped in a screenshot; only the rendered
-     pixels caught the mistake). 920px leaves a safety margin above the
-     measured 890px floor. */
-  @media (max-width: 920px) {
+     768px = iPad PORTRAIT, the narrower of the two iPad widths and the
+     product owner's explicit floor for "desktop and iPad, one line" — this
+     single breakpoint replaced two from last round (920px for the two
+     columns, 760px for the per-equation wrap) once cards started shrinking
+     via clamp() instead of hitting a fixed min-width floor; there's nothing
+     left for an intermediate breakpoint to do. Below 768px ("mobile") is
+     the ONLY place Cost and Energy volume break onto separate lines — the
+     clamp()s above are never asked to hold six cards on one line at a
+     width smaller than this, so there's no legibility floor to defend
+     below it, just the two-column collapse plus the equation's own
+     one-card-per-line fallback for real phone widths. */
+  @media (max-width: 768px) {
     .stat-stack { flex-direction:column; gap:12px; }
     .stat-stack .stat-group + .stat-group { margin-top:6px; }
-  }
-  /* Below this, a single stacked column (now full page width again, see
-     920px above) starts running out of room for its own three cards
-     side by side — same "let it wrap into rows, don't shrink the card
-     below the hero value's floor" strategy. This is a desktop trading
-     tool, not a mobile one — no attempt at a true small-screen layout
-     below this, just a stated stop rather than an inherited one. */
-  @media (max-width: 760px) {
     .stat-equation, .stat-result-group { flex-direction:column; align-items:stretch; }
     .stat-op { min-width:0; padding:2px 0; }
     .stat-result-group { min-width:0; }
+    /* The fixed height above (sized for six cards on one line at iPad
+       portrait+) is taller than any single card needs once it's alone on
+       its own row at full column width — let it size to content instead. */
+    .stat-card { height:auto; }
+    .stat-card .value, .stat-card.result .value { font-size:var(--text-xl); }
+    .stat-card.result .value { font-size:var(--text-hero); }
     .chart-toolbar { flex-direction:column; align-items:flex-start; }
     .chart-toolbar .chart-tabs { width:100%; }
     .table-header-row { flex-direction:column; align-items:stretch; }
@@ -785,6 +823,16 @@
   function goTo(pageCap) {
     activatePageDom(pageCap.toLowerCase());
     resetSubViewsFor(pageCap);
+    // The crumb and the topbar action slot are SHARED by all seven screens,
+    // and Consumption is the one that does not render its chrome through
+    // renderTopbarChrome() — so anything the previous screen put there
+    // survives into it. That has now caused two separate bugs: a connection's
+    // EAN crumb appearing above the Consumption title, and Trading's "Request
+    // a trade" button still sitting in the topbar after navigating back.
+    // Clearing both here fixes the class rather than the instance: every
+    // screen starts from empty and sets only what it owns.
+    crumb.innerHTML = "";
+    topbarActionsEl.innerHTML = "";
     if (pageCap.toLowerCase() === "consumption") {
       pageTitle.textContent = "Consumption";
       render();
@@ -2685,6 +2733,20 @@
     return typeof dates === "string" ? dates : dates[i];
   }
 
+  /** 0=Sun..6=Sat for a YYYY-MM-DD string. */
+  function weekdayIndex(dateStr) {
+    var p = dateStr.split("-").map(Number);
+    return new Date(p[0], p[1] - 1, p[2]).getDay();
+  }
+  /** "Mon".."Sun". */
+  function weekdayShort(dateStr) {
+    return ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][weekdayIndex(dateStr)];
+  }
+  function isWeekendDate(dateStr) {
+    var wd = weekdayIndex(dateStr);
+    return wd === 0 || wd === 6;
+  }
+
   function formatDateShort(dateStr) {
     var parts = dateStr.split("-").map(Number);
     var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -2737,7 +2799,13 @@
       rows.push(["Offer", ConsumptionCalc.formatNL(offerVal, context.kind === "cost" ? 2 : 1) + offerUnit]);
       rows.push(["Status", "Provisional offer — not yet accepted"]);
     }
-    var html = '<div class="tt-head">' + formatDateShort(dateStr) + " · " + context.times[i] + "</div>";
+    // The weekday is not decoration here: peak blocks are Mon-Fri only, so
+    // whether an interval is a Saturday is exactly what explains a hedge
+    // volume dropping to base-only. Reading that off a bare date meant doing
+    // calendar arithmetic in your head.
+    var html = '<div class="tt-head">' + weekdayShort(dateStr) + " " +
+      formatDateShort(dateStr) + " · " + context.times[i] +
+      (isWeekendDate(dateStr) ? '<span class="tt-weekend">weekend</span>' : "") + "</div>";
     for (var r = 0; r < rows.length; r++) {
       html += '<div class="tt-row"><span>' + rows[r][0] + '</span><span>' + rows[r][1] + '</span></div>';
     }
