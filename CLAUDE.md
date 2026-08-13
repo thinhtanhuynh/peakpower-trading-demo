@@ -60,6 +60,7 @@ page through that server's URL.
 | `hedge_blocks_2026.json` | ~16 KB | Test hedge/trade block data (Base & Peak shapes) per EAN — backs the hedge cost/coverage figures on the Consumption (Live Data) page (see below) and a future *Trading* screen — see "Hedge block test data" below. Hand-edited (no generator script); fetched directly by the Live Data page at load time. |
 | `consumption-calc.js` | ~8 KB | Pure JS stat/formatting module used by the Consumption (Live Data) page (dual Node/browser module). Unit tested via `consumption-calc.test.js`. |
 | `consumption-data-loader.js` | ~6 KB | Pure JS module that groups the two source JSON files above into the page's `{sites, byDate, bySite, hedge}` shape, plus a `fetch()`-based loader that runs the whole thing client-side on page load (dual Node/browser module). Unit tested via `consumption-data-loader.test.js`. |
+| `usage-projection.js` | ~4 KB | Pure JS module (dual Node/browser) that projects a site's usage forward past the dataset's coverage, by averaging its own real consumption/production per time-of-day, weekday vs weekend, across all 217 measured days. Deliberately **not** seasonally adjusted — the data stops in August, so a November date has no same-month history; that limit is surfaced in the UI label, not just a comment. Unit tested via `usage-projection.test.js`. |
 | `portal-seed-data.js` | ~28 KB | Pure JS module (dual Node/browser) holding static seed/mock data ported from `Customer Portal - Preview.html` for the screens that have no live data source in this POC — Connections' descriptive metadata, Dashboard tiles/activity, Wallet ledger/top-ups (plus a `simulateTopup()` pure function), and Invoices. Not unit tested (no calculation logic, just data + one small formatter/simulator). |
 | `portal-trade-link.js` | ~16 KB | Pure JS module (dual Node/browser) carrying trades both ways between the Customer Portal and the Back Office Trade desk over `localStorage` — request out, priced offer back — see "Cross-portal trade requests" below. Unit tested via `portal-trade-link.test.js`. |
 | `back-office-desk-data.js` | ~6 KB | Pure JS module (dual Node/browser): the Back Office mockup's own seeded `TRADES`/`QUEUE_META` ported verbatim, plus `buildQueues()`, which merges live Customer Portal requests into the seeded columns. |
@@ -690,11 +691,37 @@ then everything below follows the sample column-for-column:
 Cost); Delta Cost still measures the position against EPEX spot alone.
 Numbers display NL-style (comma decimal, period thousands separator).
 
-**Stat cards:** deliberately trimmed to the trading-desk figures rather than
-every column, and split across **two rows** — four volume figures (Actual
-Usage, Long, Short, Hedge Volume) on the first, the three cost figures
-(Delta Cost, Hedge Cost, Total Cost) grouped together on their own line
-below. All are totals over the selected date range.
+**Stat cards: two equations, not a row of peers.** Seven flat cards gave no
+sense of which figure mattered or how they related, even though the
+relationships are exact arithmetic. They are now two labelled groups, each
+running `component op component = result`, with the result card larger and
+heavier (`.stat-card.result`):
+
+```
+Cost           Hedge cost  +  Delta cost   =  Total cost
+Energy volume  Actual usage −  Hedge volume =  Uncovered
+```
+
+Cost sits above volume because Total cost is the headline and the volume row
+explains the gap beneath it. **Long and Short merged into one Uncovered card**
+that switches label and tone by sign — they are mutually exclusive, so one was
+permanently displaying zero. Seven cards became six.
+
+Two things to preserve if you touch this:
+
+- **`Total cost` is displayed as literally `hedgeCostEur + deltaCostEur`**, not
+  a separately-summed field. On a mixed range the summed field only covers
+  cost-computable intervals and silently drops the projected days' hedge cost,
+  while the Hedge cost card beside it always shows the full period — so the
+  equation would visibly stop adding up, which is the one thing this layout
+  exists to prevent. It is a no-op (~2e-10) on a fully-measured range.
+- `statCardHtml(label, value, tone, sublabel, opts)`'s 5th argument is an
+  options object (`{result, projected, breakdown}`). It defaults to falsy, so
+  Dashboard, Wallet and Invoices — which call it with four arguments — render
+  exactly as before. `.stat-group`/`.stat-equation`/`.stat-op`/`.result` are
+  Consumption-only; the shared `.stat-card`/`.stat-row` rules are untouched.
+
+All are totals over the selected date range.
 
 Card tones deliberately mirror the chart's own colors so the two read as
 one system: **Long** uses the `.export` tone (`--pp-cyan`) and **Short**
@@ -754,26 +781,39 @@ ranges where a fixed 2px would leave a sliver. Shared so the two charts' bars
 stay aligned under the synced crosshair — **don't** hardcode a width in one
 builder.
 
-It mirrors the usage chart's structure exactly: a fixed-width single-day
+It mirrors the usage chart's structure exactly: a container-width single-day
 version (`#cost-chart`, time-of-day labels) and a scrollable multi-day one
 (`#cost-month-chart`, per-day gridlines), switched by the same day-count test,
 with its own crosshair ids and geometry. `costChartBody()` holds the shared
 bar/line maths so the two only differ in sizing and axis labels.
 
-**Hover vs. click:** hovering **either** chart points **both** at the same
-interval — both crosshairs move together and **both tooltips show at once**,
-so one hover answers "what happened here, and what did it cost". Every chart
-variant registers itself in `CHARTS`; `syncHover()` computes the index from
-the hovered chart's geometry and then applies it to every *active* chart.
-"Active" is simply having a non-null geometry **and** context — `render()`
-nulls those on the hidden variant, so no separate visibility test is needed.
-`clearHover()` runs on mouseleave and at the top of `render()`, since the
-hidden variant keeps its old markup and would otherwise strand a crosshair.
+### Single-day charts size to their container
 
-There are two tooltip elements (`#chart-tooltip`, `#cost-chart-tooltip`) so
-both can be visible simultaneously. The hovered chart's tooltip follows the
-cursor; the other is pinned to the same x but to its own chart's vertical
-position, so they never overlap.
+`buildChartSvg`/`buildCostChartSvg` take a trailing `width` and derive all
+their geometry from it; `dayChartWidth()` measures `#day-chart-wrap`, and
+`drawDayCharts()` sets the SVG's `viewBox` **and** `style.width` to that same
+pixel value, so the scale is exactly 1:1.
+
+That 1:1 is the whole point, and the reason not to "simplify" this to
+`viewBox` + `width:100%`. The original bug was not the hardcoded `960`: with a
+`viewBox` set and the height pinned at 260px, the browser's default
+`xMidYMid meet` scaled to the *shorter* axis and letterboxed the sides. Going
+to `width:100%` would have filled the space but scaled stroke widths and label
+text with it — blurry, oversized type at wide viewports. Rebuilding the
+geometry at the measured width keeps strokes at 1–2px and labels at 9–10px at
+every size. A `ResizeObserver` redraws through `requestAnimationFrame`, guarded
+on `lastDrawnDayWidth` so a resize storm collapses to one redraw per frame and
+an unchanged width does nothing.
+
+**Hover marks one chart only.** Hovering a chart shows that chart's crosshair
+and tooltip and clears the other's. This deliberately reverses an earlier
+design where both moved together and both tooltips showed at once — the
+product owner found the dual crosshair too noisy. `CHARTS` and `clearHover()`
+survive because `render()` still has to clear a stranded crosshair on the
+hidden variant, and because the shared click-to-highlight-table-row path runs
+through the same registry for all four variants; `activeCharts()` is gone.
+There are still two tooltip elements (`#chart-tooltip`, `#cost-chart-tooltip`),
+now because each chart owns one, not so both can show together.
 
 **The two range charts must keep identical geometry** (`pxPerInterval = 4`,
 same `width`/`plotW`/`stepX`/`barW` derivation) — they sit one above the other
@@ -852,6 +892,61 @@ detects the encoding. `CSV_COLUMNS` in the page is the single list
 driving the export, so a new table column means adding one entry there
 (the `<thead>` markup is still separate — keep the two in sync). The
 button is disabled whenever the range is empty.
+
+### Looking past the end of the data (forward ranges)
+
+The From/To range extends to the furthest hedge block's `periodEnd`
+(`MAX_SELECTABLE_DATE`, currently 2026-12-31), not the dataset's coverage.
+Three different things are known past 2026-08-05, and the whole design turns
+on keeping them apart rather than flattening them into one "future" idea:
+
+| | Source | Certainty |
+|---|---|---|
+| **Hedge volume & hedge cost** | the blocks + the calendar | **Real.** Never marked projected — they depend on the contract price, never on metering or spot. This is why "the block for a period is automatically calculated" falls out for free at any date. |
+| **Usage, Uncovered, Long/Short** | `usage-projection.js` | **Projected** from that site's own history. Marked everywhere. |
+| **Delta & total cost** | `indicativeEpexFor()` | **Indicative** — priced off the portal's own quoted forward curve. |
+
+`computeIntervalRow` nulls each field **independently**, not all-or-nothing:
+usage-derived columns compute whenever consumption/production are known
+(measured *or* projected), while cost columns stay null whenever EPEX is
+unknown. `computeDayStats` carries `intervalsWithUsage` / `intervalsWithCost` /
+`intervalsTotal` to match.
+
+**A trap in those counters:** `intervalsWithUsage` counts *projected* usage
+too — it means "has usage numbers", not "was measured". Measured-ness has to
+come from the day counts (`realDayCount`/`totalDayCount`); only priced-ness
+can be read off the interval counters. Conflating them made a wholly-projected
+September look wholly measured.
+
+**Forward pricing, and the assumption in it.** `indicativeEpexFor(date, time)`
+reads `PortalSeedData.WIZARD_PERIODS` (month rows, then quarter) and
+`WIZARD_YEAR` — the same quoted curve behind the Prices and Trading screens —
+and picks base vs peak through `ConsumptionCalc.isPeakInterval()` rather than a
+second copy of that 08:00/08:15 rule. A forward curve is the market's
+expectation of spot but **embeds a risk premium**, so it is not the same claim
+as realised spot; every figure priced this way is labelled *indicative*. The
+alternative, withholding forward cost, was tried and rejected: it emptied Total
+cost, the headline figure, on exactly the ranges this view exists to show.
+
+**Known gap: August 2026 has no quote.** The seeded month rows start at Sep
+2026 and the year row is Cal *2027*, so 2026-08-06..08-31 has projected usage
+but no forward price. Those intervals are excluded from cost and the card says
+so ("excludes 26 days with no quoted price"). This is missing demo data, not a
+code defect — adding an Aug 2026 row to `WIZARD_PERIODS` fixes it. **Do not**
+paper over it by extrapolating a neighbouring month's price.
+
+Cost labels must describe what the calculation *did*, not what was intended. An
+earlier version read "26 of 31 days indicative" for a range whose 26 forward
+days were in fact unpriced and silently dropped from the total — a figure that
+omits most of its own range while implying it covers it is worse than a blank.
+
+**A pending offer** is drawn as a stacked *provisional* layer on top of the
+confirmed hedge, so the gap between the two lines is what accepting it would
+add, and accepting collapses one onto the other. `findOfferForRange()` turns
+the live cross-portal record into a one-block synthetic `hedgeBlocks` array and
+runs it through the same `computeIntervalHedgeVolumes` — no parallel
+implementation of the base/peak calendar maths. Use `effectiveStatus()` to
+decide liveness; an offer expires on a clock, so a stored status goes stale.
 
 ### Regenerating `consumption_compact_2026.json`
 
