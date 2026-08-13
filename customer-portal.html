@@ -25,7 +25,7 @@
     --certainty-provisional-opacity:0.55;
     --font-sans:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
     --font-mono:'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
-    --text-2xs:10px; --text-xs:11px; --text-sm:12.5px; --text-base:13.5px; --text-md:15px; --text-lg:17px; --text-xl:23px; --text-display:44px;
+    --text-2xs:10px; --text-xs:11px; --text-sm:12.5px; --text-base:13.5px; --text-md:15px; --text-lg:17px; --text-xl:23px; --text-hero:32px; --text-display:44px;
     --weight-regular:400; --weight-medium:500; --weight-semibold:600; --weight-bold:700;
     --tracking-eyebrow:0.05em;
     --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px; --space-10:40px;
@@ -71,7 +71,7 @@
   #dashboard-body { gap:20px; }
   .page.active { display:flex; animation:pp-fade-in .18s ease; }
   @keyframes pp-fade-in { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:translateY(0); } }
-  .controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .controls { display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; }
   select, input[type=date], input[type=text], input[type=number], textarea { border:1px solid var(--pp-border-strong); border-radius:7px; padding:7px 10px; font-size:12.5px; color:var(--pp-text-heading); background:#fff; font-family:var(--font-sans); transition:border-color .15s ease, box-shadow .15s ease; }
   textarea { width:100%; resize:vertical; min-height:56px; }
   select:disabled, input[type=date]:disabled { opacity:.5; cursor:not-allowed; }
@@ -82,7 +82,7 @@
      controls — deliberately lighter than the page-level .controls bar
      (smaller gap, a rule underneath instead of living in the flow), since
      this now acts on one card, not the whole page. */
-  .chart-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding-bottom:10px; margin-bottom:14px; border-bottom:1px solid var(--pp-border); }
+  .chart-toolbar { display:flex; align-items:center; gap:var(--space-2); flex-wrap:wrap; padding-bottom:var(--space-2); margin-bottom:var(--space-3); border-bottom:1px solid var(--pp-border); }
   .chart-toolbar .ctl input[type=date] { padding:5px 8px; font-size:11.5px; }
   .stat-stack { display:flex; flex-direction:column; gap:12px; }
   .stat-row { display:flex; gap:16px; flex-wrap:wrap; }
@@ -95,15 +95,31 @@
   .stat-group-title { font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--pp-text-faint); }
   .stat-equation { display:flex; align-items:stretch; gap:10px; flex-wrap:wrap; }
   .stat-op { display:flex; align-items:center; justify-content:center; min-width:14px; font-size:15px; font-weight:700; color:var(--pp-text-faint); }
+  /* The "=" and its result card are wrapped as one flex child (rather than
+     two siblings of .stat-equation) so a narrow viewport's wrap always
+     carries them to the next line together — otherwise flex-wrap can strand
+     "=" at the end of the component-card row, orphaned from the result card
+     it belongs to, which dropped alone to the row below. */
+  .stat-result-group { display:flex; align-items:stretch; gap:10px; flex:1.2; min-width:174px; }
+  .stat-result-group .stat-card.result { flex:1; }
   /* StatCard — matches PeakPowerDesignSystem StatCard.jsx (14px 16px,
      label 11/600/.04em, value 23/700 mt8, sublabel 11 faint mt6). */
   .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; min-width:160px; flex:1; }
   .stat-card .label { font-size:11px; font-weight:600; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
   .stat-card .value { font-size:23px; font-weight:700; margin-top:8px; color:var(--pp-text-heading); }
   /* .result marks an equation's headline figure (Total cost, Uncovered) —
-     bigger value, firmer border — subordinate .stat-card siblings stay the
-     shared 23px/thin-border look everywhere else in the app. */
-  .stat-card.result { flex:1.2; border-color:var(--pp-border-strong); box-shadow:0 1px 3px rgba(15,23,42,.06); }
+     bigger value, firmer border, a visible shadow and a tinted surface —
+     subordinate .stat-card siblings stay the shared 23px/white/flat look
+     everywhere else in the app. Border-width stays 1px (matching the
+     component cards beside it in the same flex row) — size, shadow and
+     tint carry the "this one is the answer" signal, not a thicker border,
+     which would cause sub-pixel jitter against its neighbors. */
+  .stat-card.result { flex:1.2; border-color:var(--pp-border-strong); background:var(--pp-surface-alt); box-shadow:0 4px 12px rgba(15,23,42,.10); }
+  /* Only the value's size changes — tone classes (.critical/.negative/
+     .success/.export/.short) still just color this same element, so the
+     two signals (which figure is the answer / good vs. bad news) stay
+     orthogonal rather than fighting over one rule. */
+  .stat-card.result .value { font-size:var(--text-hero); }
   /* .projected — this card's figure is (partly) forecast, not measured, for
      a date range past the live dataset. Structural-only cue (dashed border +
      alt surface, both existing neutral tokens) so it never fights the tone
@@ -123,7 +139,6 @@
      .sublabel's own faint color rather than a new token. */
   .stat-card .sublabel.breakdown { margin-top:2px; }
   .stat-card.result .label { font-weight:700; }
-  .stat-card.result .value { font-size:28px; }
   /* DS tone names: critical is ORANGE in the design system (Dashboard's
      "Uncovered volume"). Consumption's cost cards use .negative for red,
      so they keep their own red/green cost semantics. */
@@ -159,7 +174,7 @@
      (see the HTML comment above it) — align-items:flex-start keeps the
      button pinned to the summary's row instead of stretching/centering
      against the full expanded table height when open. */
-  .table-header-row { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  .table-header-row { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-3); }
   .table-header-row details { flex:1; min-width:0; }
   .table-wrap { max-height:420px; overflow:auto; border:1px solid var(--pp-border); border-radius:8px; }
   table { width:100%; border-collapse:collapse; font-size:12px; }
@@ -1886,6 +1901,16 @@
     return '<div class="stat-op">' + symbol + '</div>';
   }
 
+  /**
+   * The "=" and the result card it introduces, as one flex child — see
+   * .stat-result-group. Keeps the operator attached to its result when the
+   * row wraps at a narrow viewport, instead of stranding "=" at the end of
+   * the component-card line above.
+   */
+  function statResultGroupHtml(resultCardHtml) {
+    return '<div class="stat-result-group">' + statOpHtml("=") + resultCardHtml + '</div>';
+  }
+
   function statGroupHtml(title, equationHtml) {
     var titleHtml = title ? '<div class="stat-group-title">' + title + '</div>' : "";
     return '<div class="stat-group">' + titleHtml + '<div class="stat-equation">' + equationHtml + '</div></div>';
@@ -2023,14 +2048,21 @@
     var totalCostEur = stats.hedgeCostEur + stats.deltaCostEur;
     var totalCostTone = totalCostEur > 0 ? "negative" : (totalCostEur < 0 ? "success" : "");
 
+    // The `projected` flag has to reach statCardHtml, not just the sublabel:
+    // the certainty vocabulary requires the badge as a second cue, so a
+    // sublabel alone would leave an indicative figure looking measured to
+    // anyone who reads the number and not the small print. Dropping these
+    // opts is what made the badge silently absent.
     var deltaCostHtml = deltaCostOpts.unavailable
       ? statCardHtml("Delta cost", "€ —", "", deltaCostOpts.sublabel, {})
       : statCardHtml("Delta cost", (stats.deltaCostEur >= 0 ? "+ " : "− ") + eurValue(stats.deltaCostEur), deltaCostTone,
-          deltaCostOpts.sublabel || (stats.deltaCostEur >= 0 ? "additional cost vs. hedge" : "savings / revenue vs. hedge"), {});
+          deltaCostOpts.sublabel || (stats.deltaCostEur >= 0 ? "additional cost vs. hedge" : "savings / revenue vs. hedge"),
+          { projected: !!deltaCostOpts.projected });
     var totalCostHtml = totalCostOpts.unavailable
       ? statCardHtml("Total cost", "€ —", "", totalCostOpts.sublabel, { result: true })
       : statCardHtml("Total cost", (totalCostEur >= 0 ? "+ " : "− ") + eurValue(totalCostEur), totalCostTone,
-          totalCostOpts.sublabel || "hedge + delta cost", { result: true });
+          totalCostOpts.sublabel || "hedge + delta cost",
+          { result: true, projected: !!totalCostOpts.projected });
 
     var costEquation =
       // Hedge cost is priced at the block's own contract price, not spot —
@@ -2038,8 +2070,7 @@
       statCardHtml("Hedge cost", eurValue(stats.hedgeCostEur), "", "hedge volume at block price", {}) +
       statOpHtml("+") +
       deltaCostHtml +
-      statOpHtml("=") +
-      totalCostHtml;
+      statResultGroupHtml(totalCostHtml);
 
     var volumeEquation =
       statCardHtml("Actual usage", kwhValue(stats.actualUsageKwh), actualUsageTone, stats.actualUsageKwh < 0 ? "net exporter" : "net importer",
@@ -2048,9 +2079,8 @@
       // Hedge volume is a real booked position regardless of date — never
       // gets the projected treatment, even on an otherwise-projected row.
       statCardHtml("Hedge volume", kwhValue(stats.hedgeVolumeKwh), "", "base + peak, locked in") +
-      statOpHtml("=") +
-      statCardHtml(uncoveredLabel, kwhValue(uncoveredValueKwh), uncoveredTone, uncoveredSublabel,
-        mergeOpts({ result: true }, volumeCertaintyOpts(realDayCount, totalDayCount, projectedUncoveredKwh, kwhValue)));
+      statResultGroupHtml(statCardHtml(uncoveredLabel, kwhValue(uncoveredValueKwh), uncoveredTone, uncoveredSublabel,
+        mergeOpts({ result: true }, volumeCertaintyOpts(realDayCount, totalDayCount, projectedUncoveredKwh, kwhValue))));
 
     statRow.innerHTML =
       statGroupHtml("Cost", costEquation) +
