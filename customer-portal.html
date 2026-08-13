@@ -398,6 +398,26 @@
   .demo-footer { margin-top:24px; padding-top:14px; border-top:1px solid var(--pp-border);
                  font-size:11.5px; line-height:1.55; color:var(--pp-text-faint); }
   .demo-footer b { color:var(--pp-text-body); font-weight:700; }
+
+  /* This page has no other @media query — every other responsive behaviour
+     on it is emergent (flex-wrap + min-width + flex:1), which is fine right
+     up until wrap position carries meaning, which it now does in three
+     places this round introduced: the equation ("Hedge cost + Delta cost =
+     Total cost" stops being an equation if its parts wrap wherever flex
+     happens to break), the chart toolbar, and the table summary row. Rather
+     than let the browser choose those break points, one breakpoint decides
+     them deliberately. This is a desktop trading tool, not a mobile one —
+     no attempt at a true small-screen layout below this, just a stated stop
+     rather than an inherited one. */
+  @media (max-width: 760px) {
+    .stat-equation, .stat-result-group { flex-direction:column; align-items:stretch; }
+    .stat-op { min-width:0; padding:2px 0; }
+    .stat-result-group { min-width:0; }
+    .chart-toolbar { flex-direction:column; align-items:flex-start; }
+    .chart-toolbar .chart-tabs { width:100%; }
+    .table-header-row { flex-direction:column; align-items:stretch; }
+    .table-header-row #export-csv { align-self:flex-start; }
+  }
 </style>
 </head>
 <body>
@@ -2170,25 +2190,68 @@
     return "#" + hx(r) + hx(g) + hx(b);
   }
 
-  function hatchId(hue) { return "hatch-" + hue.replace("#", ""); }
+  /**
+   * A fixed 6px hatch pitch reads fine on the single-day chart's ~9-10px
+   * bars, but on the multi-day range chart (pxPerInterval=4, rendered bar
+   * width often 3-4px, see barWidthFor) it never completes even one full
+   * diagonal cycle and disappears into a flat wash under antialiasing —
+   * confirmed by actually rendering it (Playwright + pixel-level crop), not
+   * just by reasoning about it. Scaling the pitch down to the bar's own
+   * rendered width (floored at 2px, the practical minimum for a visible
+   * diagonal in SVG) keeps at least ~1 stripe cycle inside every bar,
+   * however narrow, while leaving the wider single-day/offer-band case
+   * (already legible) at its original 6px.
+   */
+  function hatchPitchFor(barWidthPx) {
+    return Math.max(2, Math.min(6, barWidthPx));
+  }
+
+  // Below this, even a pitch scaled to the bar's own width antialiases into
+  // a flat wash rather than a legible diagonal — confirmed by actually
+  // rendering the multi-day range chart's ~3px offer/projected bars
+  // (Playwright screenshot, pixel-level crop) and finding no stripe visible
+  // at all, not just "faint." There's no smaller pitch that fixes this: the
+  // tile itself becomes sub-resolution. Below the threshold, fall back to a
+  // plain flat fill at the provisional opacity only — texture is one of
+  // several redundant certainty cues (with opacity, the mandatory boundary
+  // marker, and the tooltip's "Projected"/"Provisional offer" wording), not
+  // the only one, so dropping it here still leaves the mark legible as
+  // "not yet real" via the other three.
+  var HATCH_MIN_BAR_WIDTH = 5;
+
+  /** A hatch fill url for this hue/width, or null if the bar is too narrow to render one legibly (see HATCH_MIN_BAR_WIDTH). */
+  function provisionalFillUrl(hue, barWidthPx) {
+    if (barWidthPx < HATCH_MIN_BAR_WIDTH) { return null; }
+    return "url(#" + hatchId(hue, hatchPitchFor(barWidthPx)) + ")";
+  }
+
+  function hatchId(hue, pitch) { return "hatch-" + hue.replace("#", "") + "-" + pitch; }
 
   /**
-   * One <pattern> per distinct hue used this render — 45°, 6px pitch hairline
-   * hatch, inked in the fill's own hue one step darker (never a new hue).
-   * This is the dataviz "Lines" texture spec, triggered unconditionally here
-   * (primary channel for "not yet real", not opt-in redundant decoration).
+   * One <pattern> per distinct hue+pitch pair used this render — 45°
+   * hairline hatch, inked in the fill's own hue one step darker (never a
+   * new hue). This is the dataviz "Lines" texture spec, triggered
+   * unconditionally here (primary channel for "not yet real", not opt-in
+   * redundant decoration).
    */
-  function hatchDefs(hues) {
+  function hatchDefs(entries) {
     var seen = {}, defs = "";
-    hues.forEach(function (hue) {
-      if (seen[hue]) { return; }
-      seen[hue] = true;
-      defs += '<pattern id="' + hatchId(hue) + '" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
-        '<rect width="6" height="6" fill="' + hue + '"></rect>' +
-        '<line x1="0" y1="0" x2="0" y2="6" stroke="' + darkenHex(hue, CERTAINTY_HATCH_DARKEN) + '" stroke-width="1"></line>' +
+    entries.forEach(function (e) {
+      var id = hatchId(e.hue, e.pitch);
+      if (seen[id]) { return; }
+      seen[id] = true;
+      defs += '<pattern id="' + id + '" width="' + e.pitch + '" height="' + e.pitch + '" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+        '<rect width="' + e.pitch + '" height="' + e.pitch + '" fill="' + e.hue + '"></rect>' +
+        '<line x1="0" y1="0" x2="0" y2="' + e.pitch + '" stroke="' + darkenHex(e.hue, CERTAINTY_HATCH_DARKEN) + '" stroke-width="1"></line>' +
         '</pattern>';
     });
     return defs;
+  }
+
+  /** The 4 hues the usage/covered/short/long/offer bars hatch with, all at the one pitch this chart's bars actually render at. */
+  function usageChartHatchEntries(rbw) {
+    var pitch = hatchPitchFor(rbw);
+    return ["#4338ca", "#e8590c", "#0891b2", "#facc15"].map(function (hue) { return { hue: hue, pitch: pitch }; });
   }
 
   /**
@@ -2210,9 +2273,10 @@
    * the hatch texture AND drops to 55% of that opacity (certainty-layer #1
    * + #2 together, never just one).
    */
-  function barFillAttrs(hue, baseOpacity, measured) {
+  function barFillAttrs(hue, baseOpacity, measured, barWidthPx) {
     if (measured) { return { fill: hue, opacity: String(baseOpacity) }; }
-    return { fill: "url(#" + hatchId(hue) + ")", opacity: String(baseOpacity * CERTAINTY_PROVISIONAL_OPACITY) };
+    var url = provisionalFillUrl(hue, barWidthPx);
+    return { fill: url || hue, opacity: String(baseOpacity * CERTAINTY_PROVISIONAL_OPACITY) };
   }
 
   /**
@@ -2299,6 +2363,8 @@
     var zeroY = yFor(0);
     var barW = plotW / n;
     function barX(idx) { return padLeft + idx * barW; }
+    var rbw = barWidthFor(barW); // rendered bar width — also the hatch's own pitch basis, see hatchPitchFor
+    var offerFill = provisionalFillUrl("#4338ca", rbw) || "#4338ca";
     var coveredBars = "", bars = "", offerBars = "";
     for (i = 0; i < n; i++) {
       var bx = barX(i);
@@ -2307,17 +2373,17 @@
       var yHedge = yFor(hedgeVolume[i]);
       var barTop = Math.min(yNet, yHedge);
       var barH = Math.abs(yNet - yHedge);
-      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#e8590c" : "#0891b2", uncovered[i] >= 0 ? 0.55 : 0.3, measured);
+      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#e8590c" : "#0891b2", uncovered[i] >= 0 ? 0.55 : 0.3, measured, rbw);
 
       var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      var covAttrs = barFillAttrs("#facc15", 0.2, measured);
-      coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+      var covAttrs = barFillAttrs("#facc15", 0.2, measured, rbw);
+      coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
 
-      bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+      bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + barH.toFixed(1) + '" fill="' + slAttrs.fill + '" opacity="' + slAttrs.opacity + '"></rect>';
 
       // Provisional offer: an additional hatched area stacked on top of the
@@ -2325,8 +2391,8 @@
       if (offerVolume && offerVolume[i] > 0) {
         var yBase = yFor(hedgeVolume[i]);
         var yTop = yFor(hedgeVolume[i] + offerVolume[i]);
-        offerBars += '<rect x="' + bx.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
-          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="url(#' + hatchId("#4338ca") + ')" opacity="' +
+        offerBars += '<rect x="' + bx.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + rbw.toFixed(1) +
+          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="' + offerFill + '" opacity="' +
           CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
       }
     }
@@ -2370,7 +2436,7 @@
       return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
     }).join("");
     lastChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
-    return '<defs>' + hatchDefs(["#4338ca", "#e8590c", "#0891b2", "#facc15"]) + '</defs>' +
+    return '<defs>' + hatchDefs(usageChartHatchEntries(rbw)) + '</defs>' +
       '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
       '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
       coveredBars +
@@ -2882,6 +2948,8 @@
     var barW = n > 1 ? stepX : plotW;
     function barX(idx) { return padLeft + idx * stepX - barW / 2; }
 
+    var rbw = barWidthFor(barW); // rendered bar width — also the hatch's own pitch basis, see hatchPitchFor
+    var offerFill = provisionalFillUrl("#4338ca", rbw) || "#4338ca";
     var coveredBars = "", bars = "", offerBars = "";
     for (i = 0; i < n; i++) {
       var bx = barX(i);
@@ -2890,24 +2958,24 @@
       var yHedge = yFor(hedgeVolume[i]);
       var barTop = Math.min(yNet, yHedge);
       var barH = Math.abs(yNet - yHedge);
-      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#e8590c" : "#0891b2", uncovered[i] >= 0 ? 0.55 : 0.3, measured);
+      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#e8590c" : "#0891b2", uncovered[i] >= 0 ? 0.55 : 0.3, measured, rbw);
 
       var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      var covAttrs = barFillAttrs("#facc15", 0.2, measured);
-      coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+      var covAttrs = barFillAttrs("#facc15", 0.2, measured, rbw);
+      coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
 
-      bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+      bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + barH.toFixed(1) + '" fill="' + slAttrs.fill + '" opacity="' + slAttrs.opacity + '"></rect>';
 
       if (offerVolume && offerVolume[i] > 0) {
         var yBase = yFor(hedgeVolume[i]);
         var yTop = yFor(hedgeVolume[i] + offerVolume[i]);
-        offerBars += '<rect x="' + bx.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
-          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="url(#' + hatchId("#4338ca") + ')" opacity="' +
+        offerBars += '<rect x="' + bx.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + rbw.toFixed(1) +
+          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="' + offerFill + '" opacity="' +
           CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
       }
     }
@@ -2954,7 +3022,7 @@
 
     lastMonthChartGeom = { padLeft: padLeft, spacing: stepX, offset: 0, n: n, width: width };
 
-    return '<defs>' + hatchDefs(["#4338ca", "#e8590c", "#0891b2", "#facc15"]) + '</defs>' +
+    return '<defs>' + hatchDefs(usageChartHatchEntries(rbw)) + '</defs>' +
       dayGridlines +
       '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
       coveredBars +
@@ -3029,6 +3097,7 @@
     // Same bar geometry as the usage chart's, so the two align pixel-for-pixel
     // under the shared crosshair.
     var w = barWidthFor(barW);
+    var offerFill = provisionalFillUrl(COST_HEDGE_LINE, w) || COST_HEDGE_LINE;
     for (i = 0; i < n; i++) {
       var anchor = padLeft + i * stepX + anchorOffset;
       var x = anchor - barW / 2;
@@ -3050,7 +3119,7 @@
       if (offerCost && offerCost[i] > 0) {
         var yBase = yH, yTop = yFor(hedgeCost[i] + offerCost[i]);
         offerBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + w.toFixed(1) +
-          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="url(#' + hatchId(COST_HEDGE_LINE) + ')" opacity="' +
+          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="' + offerFill + '" opacity="' +
           CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
       }
       hedgePoints += anchor.toFixed(1) + "," + yH.toFixed(1) + " ";
@@ -3064,7 +3133,7 @@
     }).join("");
     return {
       zeroY: zeroY,
-      markup: '<defs>' + hatchDefs([COST_HEDGE_LINE]) + '</defs>' +
+      markup: '<defs>' + hatchDefs([{ hue: COST_HEDGE_LINE, pitch: hatchPitchFor(w) }]) + '</defs>' +
         '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
         '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
         deltaBars +
