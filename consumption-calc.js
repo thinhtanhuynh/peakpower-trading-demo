@@ -48,6 +48,18 @@
   }
 
   /**
+   * Whether a date+time falls in a "peak" hedge block's active window
+   * (Mon-Fri, 08:15-20:00 inclusive) — exported so any caller needing the
+   * same base-vs-peak distinction (e.g. picking which indicative forward
+   * price applies to a projected interval) reuses this exact convention
+   * rather than re-deriving it. computeIntervalHedgeVolumes uses the same
+   * two private functions internally.
+   */
+  function isPeakInterval(dateStr, timeStr) {
+    return isWeekday(dateStr) && isPeakWindow(timeStr);
+  }
+
+  /**
    * Splits a date+time's active hedge blocks into Base Volume vs Peak Volume
    * (kWh), and prices each block's own volume at its own contract price to
    * give the interval's Hedge Cost (€).
@@ -242,6 +254,10 @@
   }
 
   var api = {
+    // Exported so a caller pricing a forward interval can pick peak vs base by
+    // exactly this rule rather than re-deriving it — the 08:00/08:15 boundary
+    // is subtle enough that a second implementation would drift.
+    isPeakInterval: isPeakInterval,
     computeIntervalHedgeVolumes: computeIntervalHedgeVolumes,
     computeIntervalRow: computeIntervalRow,
     computeIntervalSeries: computeIntervalSeries,

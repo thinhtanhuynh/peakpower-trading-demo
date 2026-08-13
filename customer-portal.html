@@ -18,6 +18,11 @@
     --pp-amber:#d97706; --pp-amber-bg:#fef3c7; --pp-amber-border:#fcd34d; --pp-amber-text:#92400e;
     --pp-green:#15803d; --pp-green-bg:#dcfce7; --pp-green-border:#86efac; --pp-green-text:#166534;
     --pp-red:#dc2626; --pp-red-bg:#fee2e2; --pp-red-border:#fca5a5; --pp-red-text:#991b1b;
+    /* Shared certainty-layer token (CLAUDE.md) — same value the chart's
+       provisional/projected treatment uses; declared here too since a
+       fully-projected stat card needs it and nothing else in this file
+       defined it yet. */
+    --certainty-provisional-opacity:0.55;
     --font-sans:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
     --font-mono:'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
     --text-2xs:10px; --text-xs:11px; --text-sm:12.5px; --text-base:13.5px; --text-md:15px; --text-lg:17px; --text-xl:23px; --text-display:44px;
@@ -102,6 +107,11 @@
      "Projected" badge in .stat-card-head and, for a mixed card, the faint
      breakdown line below the value. */
   .stat-card.projected { border-style:dashed; border-color:var(--pp-border-strong); background:var(--pp-surface-alt); }
+  /* .all-projected — the degenerate case of a mixed card: zero measured
+     portion, so there's no confirmed value to anchor a bold primary against
+     and no breakdown line to add. The value itself takes the certainty
+     opacity instead (CLAUDE.md "Resolving the bold-value question"). */
+  .stat-card.all-projected .value { opacity:var(--certainty-provisional-opacity); }
   .stat-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
   /* The measured/projected breakdown clause on a mixed card — reuses
      .sublabel's own faint color rather than a new token. */
@@ -139,6 +149,15 @@
   tbody tr:nth-child(even) { background:var(--pp-surface-zebra); }
   tbody tr.clickable { cursor:pointer; }
   td.net-export { color:var(--pp-cyan); font-weight:600; }
+  /* Certainty-layer text treatment for the table (see customer-portal.html's
+     renderTable) — a projected row's numbers are real (historical-profile
+     estimate) but must never read like a measurement. Placeholder-neutral
+     (reuses existing muted/italic text tokens, no new colour) pending
+     design's pass over the exact visual language. */
+  td.provenance { font-size:10.5px; color:var(--pp-text-faint); }
+  td.provenance.projected { font-style:italic; }
+  tr.row-projected td { color:var(--pp-text-body); }
+  tr.row-projected td.provenance.projected { color:var(--pp-text-faint); }
   tbody tr.hovered { background:var(--pp-teal-100) !important; }
   .chart-tabs { display:flex; gap:4px; background:var(--pp-surface-alt); border-radius:8px; padding:3px; }
   .chart-tab { border:none; background:transparent; padding:6px 14px; border-radius:6px; font-size:12.5px; font-weight:600; color:var(--pp-text-body); cursor:pointer; font-family:var(--font-sans); transition:background-color .15s ease, color .15s ease, box-shadow .15s ease; }
@@ -443,7 +462,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>Date</th><th>Time</th><th class="num">Consumption (kWh)</th><th class="num">Production (kWh)</th><th class="num">EPEX (€/kWh)</th><th class="num">Usage Cost (€)</th><th class="num">Actual Usage (kWh)</th><th class="num">Base Volume (kWh)</th><th class="num">Peak Volume (kWh)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Uncovered (kWh)</th><th class="num">Long (kWh)</th><th class="num">Short (kWh)</th><th class="num">Delta Cost (€)</th><th class="num">Hedge Cost (€)</th><th class="num">Total Cost (€)</th></tr>
+                <tr><th>Date</th><th>Time</th><th>Data</th><th class="num">Consumption (kWh)</th><th class="num">Production (kWh)</th><th class="num">EPEX (€/kWh)</th><th class="num">Usage Cost (€)</th><th class="num">Actual Usage (kWh)</th><th class="num">Base Volume (kWh)</th><th class="num">Peak Volume (kWh)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Uncovered (kWh)</th><th class="num">Long (kWh)</th><th class="num">Short (kWh)</th><th class="num">Delta Cost (€)</th><th class="num">Hedge Cost (€)</th><th class="num">Total Cost (€)</th></tr>
               </thead>
               <tbody id="table-body"></tbody>
             </table>
@@ -1773,7 +1792,8 @@
   function statCardHtml(label, value, tone, sublabel, opts) {
     opts = opts || {};
     var toneClass = tone ? " " + tone : "";
-    var cardClass = "stat-card" + (opts.result ? " result" : "") + (opts.projected ? " projected" : "");
+    var cardClass = "stat-card" + (opts.result ? " result" : "") + (opts.projected ? " projected" : "") +
+      (opts.projected && !opts.breakdown ? " all-projected" : "");
     var headHtml = opts.projected
       ? '<div class="stat-card-head"><div class="label">' + label + '</div>' + badge("Projected", "neutral") + '</div>'
       : '<div class="label">' + label + '</div>';
@@ -1815,20 +1835,34 @@
   }
 
   /**
-   * Certainty opts for a COST card that can be WITHHELD (Delta cost, Total
-   * cost) — forward's spot price is genuinely unknown, so unlike the volume
-   * cards there is no projected number to show once a range runs past the
-   * measured data, per forward's decision: cost stays real for measured
-   * days, and is explicitly marked unavailable rather than guessed for the
-   * rest. Returns { unavailable, sublabel } — `unavailable` swaps the
-   * card's value for an em dash (see caller), never a fabricated total.
+   * Certainty opts for a COST card (Delta cost, Total cost) on a range that
+   * runs past the measured data.
+   *
+   * Forward days are priced from the portal's own quoted forward curve (see
+   * indicativeEpexFor) rather than left blank: withholding them would empty
+   * the headline figure on exactly the ranges this view exists to show, and
+   * these are the same prices the user is quoted on the Prices and Trading
+   * screens. That is an assumption worth stating rather than hiding — a
+   * forward curve is the market's expectation of spot but embeds a risk
+   * premium — so the number is shown and labelled *indicative*.
+   *
+   * `unavailable` survives for the one genuinely unknowable case: a date no
+   * period row covers, where indicativeEpexFor returns null and the summed
+   * cost is therefore null. Never a fabricated total.
    */
-  function costCertaintyOpts(realDayCount, totalDayCount) {
-    if (realDayCount == null || realDayCount === totalDayCount) { return {}; }
-    if (realDayCount === 0) {
-      return { unavailable: true, sublabel: "forward price unknown" };
+  function costCertaintyOpts(realDayCount, totalDayCount, costValue) {
+    if (costValue == null || isNaN(costValue)) {
+      return { unavailable: true, sublabel: "no forward price quoted for this period" };
     }
-    return { unavailable: false, sublabel: "excludes " + (totalDayCount - realDayCount) + " projected day(s) — forward price unknown" };
+    if (realDayCount == null || realDayCount === totalDayCount) { return {}; }
+    var fwd = totalDayCount - realDayCount;
+    return {
+      unavailable: false,
+      projected: true,
+      sublabel: realDayCount === 0
+        ? "indicative — priced at the forward curve"
+        : fwd + " of " + totalDayCount + " days indicative — forward curve"
+    };
   }
 
   /**
@@ -1860,7 +1894,6 @@
     // reads as red here, while the design system reserves critical/orange for
     // Dashboard's "Uncovered volume".
     var deltaCostTone = stats.deltaCostEur > 0 ? "negative" : (stats.deltaCostEur < 0 ? "success" : "");
-    var totalCostTone = stats.totalCostEur > 0 ? "negative" : (stats.totalCostEur < 0 ? "success" : "");
 
     var uncoveredLabel = stats.shortKwh > 0 ? "Short" : (stats.longKwh > 0 ? "Long" : "Uncovered");
     var uncoveredValueKwh = stats.shortKwh > 0 ? stats.shortKwh : stats.longKwh;
@@ -1876,8 +1909,22 @@
     function eurValue(v) { return "€ " + ConsumptionCalc.formatNL(Math.abs(v), 2); }
     function kwhValue(v) { return ConsumptionCalc.formatNL(v, 1) + " kWh"; }
 
-    var deltaCostOpts = costCertaintyOpts(realDayCount, totalDayCount);
-    var totalCostOpts = mergeOpts({ result: true }, costCertaintyOpts(realDayCount, totalDayCount));
+    var deltaCostOpts = costCertaintyOpts(realDayCount, totalDayCount, stats.deltaCostEur);
+    var totalCostOpts = mergeOpts({ result: true },
+      costCertaintyOpts(realDayCount, totalDayCount,
+        stats.deltaCostEur == null ? null : stats.hedgeCostEur + stats.deltaCostEur));
+    // On a mixed range, stats.totalCostEur (summed only over intervals with
+    // a known EPEX) silently drops the projected days' hedge cost too, even
+    // though the Hedge cost card beside it always shows the FULL period
+    // (never withheld — locked-in contract price, no spot needed). Left
+    // alone, "Hedge cost + Delta cost = Total cost" would stop adding up on
+    // screen. So Total here is always literally hedgeCostEur + deltaCostEur
+    // — the two numbers actually shown — not a separately-summed field;
+    // for a fully-measured range the two are equal anyway (see
+    // consumption-calc.js's own Total Cost definition), so this is a no-op
+    // there.
+    var totalCostEur = stats.hedgeCostEur + stats.deltaCostEur;
+    var totalCostTone = totalCostEur > 0 ? "negative" : (totalCostEur < 0 ? "success" : "");
 
     var deltaCostHtml = deltaCostOpts.unavailable
       ? statCardHtml("Delta cost", "€ —", "", deltaCostOpts.sublabel, {})
@@ -1885,7 +1932,7 @@
           deltaCostOpts.sublabel || (stats.deltaCostEur >= 0 ? "additional cost vs. hedge" : "savings / revenue vs. hedge"), {});
     var totalCostHtml = totalCostOpts.unavailable
       ? statCardHtml("Total cost", "€ —", "", totalCostOpts.sublabel, { result: true })
-      : statCardHtml("Total cost", (stats.totalCostEur >= 0 ? "+ " : "− ") + eurValue(stats.totalCostEur), totalCostTone,
+      : statCardHtml("Total cost", (totalCostEur >= 0 ? "+ " : "− ") + eurValue(totalCostEur), totalCostTone,
           totalCostOpts.sublabel || "hedge + delta cost", { result: true });
 
     var costEquation =
@@ -1930,11 +1977,20 @@
     return value == null ? "—" : ConsumptionCalc.formatNL(value, decimals);
   }
 
-  function renderTable(dates, times, prices, series) {
+  // Per design's certainty-layer spec: a projected number must be labelled
+  // as such everywhere it feeds a figure — the table gets its own "Data"
+  // column rather than relying on the dashed chart line or a stat-card note
+  // alone, since a table row can be read (and exported) independent of the
+  // chart above it. `hasUsage` is optional so a caller with a purely
+  // measured range (or an older call site) renders identically to before.
+  function renderTable(dates, times, prices, series, hasUsage) {
     var rows = "";
     for (var i = 0; i < times.length; i++) {
       var dateStr = resolveDate(dates, i);
-      rows += '<tr data-idx="' + i + '"><td>' + formatDateShort(dateStr) + "</td><td>" + times[i] + "</td>" +
+      var measured = !hasUsage || hasUsage[i];
+      var provenanceHtml = measured ? '<td class="provenance">Measured</td>' : '<td class="provenance projected">Projected</td>';
+      rows += '<tr data-idx="' + i + '"' + (measured ? "" : ' class="row-projected"') + '>' +
+        '<td>' + formatDateShort(dateStr) + "</td><td>" + times[i] + "</td>" + provenanceHtml +
         '<td class="num">' + formatNLOrDash(series.consumptionKwh[i], 1) + "</td>" +
         '<td class="num">' + formatNLOrDash(series.productionKwh[i], 1) + "</td>" +
         '<td class="num">' + formatNLOrDash(prices[i], 4) + "</td>" +
@@ -2022,6 +2078,17 @@
   }
 
   /**
+   * A bar's fill attributes for a given certainty state — Actual draws in
+   * the plain hue at its normal opacity; Provisional (projected/offer) gets
+   * the hatch texture AND drops to 55% of that opacity (certainty-layer #1
+   * + #2 together, never just one).
+   */
+  function barFillAttrs(hue, baseOpacity, measured) {
+    if (measured) { return { fill: hue, opacity: String(baseOpacity) }; }
+    return { fill: "url(#" + hatchId(hue) + ")", opacity: String(baseOpacity * CERTAINTY_PROVISIONAL_OPACITY) };
+  }
+
+  /**
    * Every boundary this chart needs to mark: the Measured/Projected data-
    * coverage edge (from `hasUsage`) plus the pending-offer window's rising
    * and falling edges (from `offerVolume`). `barX(i)` is each chart's own
@@ -2057,11 +2124,12 @@
     var plotH = height - padTop - padBottom;
     var minVal = 0, maxVal = 0;
     var i;
+    // actualUsage is always a real number now — measured or (per forward's
+    // historical-profile forecast) projected — so it always participates in
+    // the range, unlike offerVolume which is only nonzero in its own window.
     for (i = 0; i < n; i++) {
-      if (!hasUsage || hasUsage[i]) {
-        minVal = Math.min(minVal, actualUsage[i]);
-        maxVal = Math.max(maxVal, actualUsage[i]);
-      }
+      minVal = Math.min(minVal, actualUsage[i]);
+      maxVal = Math.max(maxVal, actualUsage[i]);
       minVal = Math.min(minVal, hedgeVolume[i]);
       maxVal = Math.max(maxVal, hedgeVolume[i] + (offerVolume ? offerVolume[i] : 0));
     }
@@ -2074,24 +2142,24 @@
     var coveredBars = "", bars = "", offerBars = "";
     for (i = 0; i < n; i++) {
       var bx = barX(i);
-      if (!hasUsage || hasUsage[i]) {
-        var yNet = yFor(actualUsage[i]);
-        var yHedge = yFor(hedgeVolume[i]);
-        var barTop = Math.min(yNet, yHedge);
-        var barH = Math.abs(yNet - yHedge);
-        var barFill = uncovered[i] >= 0 ? "#e8590c" : "#0891b2";
-        var barOpacity = uncovered[i] >= 0 ? "0.55" : "0.3";
+      var measured = !hasUsage || hasUsage[i];
+      var yNet = yFor(actualUsage[i]);
+      var yHedge = yFor(hedgeVolume[i]);
+      var barTop = Math.min(yNet, yHedge);
+      var barH = Math.abs(yNet - yHedge);
+      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#e8590c" : "#0891b2", uncovered[i] >= 0 ? 0.55 : 0.3, measured);
 
-        var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
-        var yCovered = yFor(coveredVal);
-        var covTop = Math.min(zeroY, yCovered);
-        var covH = Math.abs(zeroY - yCovered);
-        coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
-          '" height="' + covH.toFixed(1) + '" fill="#facc15" opacity="0.2"></rect>';
+      var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
+      var yCovered = yFor(coveredVal);
+      var covTop = Math.min(zeroY, yCovered);
+      var covH = Math.abs(zeroY - yCovered);
+      var covAttrs = barFillAttrs("#facc15", 0.2, measured);
+      coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+        '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
 
-        bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
-          '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
-      }
+      bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+        '" height="' + barH.toFixed(1) + '" fill="' + slAttrs.fill + '" opacity="' + slAttrs.opacity + '"></rect>';
+
       // Provisional offer: an additional hatched area stacked on top of the
       // confirmed hedge line, only across the offer's own delivery window.
       if (offerVolume && offerVolume[i] > 0) {
@@ -2102,23 +2170,33 @@
           CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
       }
     }
-    // The Actual-Usage line only exists where hasUsage is true — break it
-    // into one <polyline> per contiguous measured run rather than drawing
-    // through null gaps (there is no forecast to show, unlike the offer
-    // overlay: past the data boundary the line simply stops).
-    var netSegments = [], seg = null, hedgePoints = "";
+    // The Actual-Usage line is drawn through its whole range now that
+    // projected values are real forecasts, not gaps — solid while measured,
+    // switching to a fine dot (certainty-layer #3) once projected. Segments
+    // share their boundary point with the neighbour so the style change
+    // reads as one continuous line, not a break.
+    var netSegments = [], seg = null, segMeasured = null, hedgePoints = "";
     for (i = 0; i < n; i++) {
       var px = padLeft + i * barW + barW / 2;
-      if (!hasUsage || hasUsage[i]) {
-        if (!seg) { seg = []; netSegments.push(seg); }
-        seg.push(px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1));
+      var measured2 = !hasUsage || hasUsage[i];
+      var ptStr = px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1);
+      if (seg === null) {
+        segMeasured = measured2;
+        seg = [ptStr];
+        netSegments.push({ measured: measured2, pts: seg });
+      } else if (measured2 !== segMeasured) {
+        seg.push(ptStr);
+        segMeasured = measured2;
+        seg = [ptStr];
+        netSegments.push({ measured: measured2, pts: seg });
       } else {
-        seg = null;
+        seg.push(ptStr);
       }
       hedgePoints += px.toFixed(1) + "," + yFor(hedgeVolume[i]).toFixed(1) + " ";
     }
-    var netLines = netSegments.map(function (pts) {
-      return '<polyline points="' + pts.join(" ") + '" fill="none" stroke="#059f8f" stroke-width="2"></polyline>';
+    var netLines = netSegments.map(function (s) {
+      return '<polyline points="' + s.pts.join(" ") + '" fill="none" stroke="#059f8f" stroke-width="2"' +
+        (s.measured ? "" : ' stroke-dasharray="1,3"') + '></polyline>';
     }).join("");
     var axisLabels = "";
     for (i = 0; i < n; i++) {
@@ -2132,7 +2210,7 @@
       return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
     }).join("");
     lastChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
-    return '<defs>' + hatchDefs(["#4338ca"]) + '</defs>' +
+    return '<defs>' + hatchDefs(["#4338ca", "#e8590c", "#0891b2", "#facc15"]) + '</defs>' +
       '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
       '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
       coveredBars +
@@ -2177,19 +2255,24 @@
         rows.push(["Total", ConsumptionCalc.formatNL(s.totalCost[i], 2) + " €"]);
       }
     } else {
-      rows = [["Hedge", ConsumptionCalc.formatNL(s.hedgeVolume[i], 1) + " kWh"]];
-      if (hasUsage) {
-        rows.push(["Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"]);
-        // Long and Short are mutually exclusive per interval — only ever one
-        // of the two is non-zero, so hide whichever is 0 rather than showing
-        // a permanently-empty row.
-        if (s.short[i] !== 0) { rows.push(["Short", ConsumptionCalc.formatNL(s.short[i], 1) + " kWh"]); }
-        if (s.long[i] !== 0) { rows.push(["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"]); }
-      }
+      // Usage/Short/Long are real numbers on both sides of the boundary now
+      // (measured, or forward's own historical-profile projection) — always
+      // shown; only the "Status" row below distinguishes the two.
+      rows = [
+        ["Hedge", ConsumptionCalc.formatNL(s.hedgeVolume[i], 1) + " kWh"],
+        ["Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"]
+      ];
+      // Long and Short are mutually exclusive per interval — only ever one
+      // of the two is non-zero, so hide whichever is 0 rather than showing
+      // a permanently-empty row.
+      if (s.short[i] !== 0) { rows.push(["Short", ConsumptionCalc.formatNL(s.short[i], 1) + " kWh"]); }
+      if (s.long[i] !== 0) { rows.push(["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"]); }
     }
     // Certainty layer #6: state it in words, never rely on the visual alone.
+    // Cost stays genuinely unknown past the boundary (see consumption-calc.js
+    // computeIntervalRow); volume is a stated forecast, not an absence.
     if (!hasUsage) {
-      rows.push(["Status", "Projected — no usage data yet"]);
+      rows.push(["Status", context.kind === "cost" ? "Cost unknown — forward price not available" : "Projected — historical-profile forecast"]);
     }
     if (context.offerVolume && context.offerVolume[i] > 0) {
       var offerUnit = context.kind === "cost" ? " €" : " kWh";
@@ -2452,8 +2535,13 @@
         periodEnd: req.periodEnd,
         powerKw: (line && line.powerMw || 0) * 1000,
         // No firm price until "Offer received" or later — until then, price
-        // the volume at the request's own indicative quote (clearly not a
-        // contract price) so a cost figure exists rather than showing 0.
+        // the volume at the request's own indicative quote (the same
+        // WIZARD_PERIODS/WIZARD_YEAR forward curve indicativeEpexFor() below
+        // draws from, quoted back to the customer at wizard time) rather than
+        // showing 0. Same assumption as indicativeEpexFor: a forward quote is
+        // the market's expectation of spot for that period, not spot itself —
+        // it embeds a risk premium, so `firm:false` below is what marks it as
+        // indicative, not a contract price, everywhere this block feeds a card.
         priceKwh: (req.offer ? req.offer.priceMwh : req.indicativePrice) != null
           ? (req.offer ? req.offer.priceMwh : req.indicativePrice) / 1000 : 0,
         firm: !!req.offer
@@ -2469,10 +2557,21 @@
   /**
    * Walks every calendar date in [from, to] — real or future — and returns
    * one row per interval. Real dates (within the dataset, MIN_DATE..MAX_DATE)
-   * carry actual consumption/production/EPEX, exactly as before. Dates past
-   * the dataset carry `hasUsage:false` and null consumption/production/price
-   * rather than a fabricated 0 — there is genuinely no usage to report yet,
-   * only a calculable hedge position (and, if one exists, a pending offer).
+   * carry actual consumption/production/EPEX, exactly as before — byte-
+   * identical to pre-projection behaviour (see consumption-calc.test.js).
+   *
+   * Dates past the dataset carry `hasUsage:false` (kept as this name/boolean
+   * so the chart code that already reads it doesn't need to change shape —
+   * `true` = measured, `false` = projected) plus a PROJECTED consumption/
+   * production from this site's own historical time-of-day profile
+   * (UsageProjection — see that module for the method and its documented
+   * simplifications) rather than null. EPEX stays null for those dates —
+   * forward spot price is genuinely unknown, and consumption-calc.js's
+   * per-field null propagation means Actual Usage/Uncovered/Long/Short still
+   * compute from the projected volumes (they don't need EPEX), while
+   * usageCost/deltaCost/totalCost correctly stay null (withheld, not
+   * guessed) — only hedgeCost, priced at the hedge's own contract rate,
+   * keeps a real number regardless.
    *
    * The real hedge position (base + peak blocks) needs no separate array
    * here — `ConsumptionCalc.computeIntervalRow`'s hedge computation runs
@@ -2483,6 +2582,40 @@
    * the single live cross-portal trade touching this connection, if any — an
    * additional, clearly-separate layer on top of the real position.
    */
+  /**
+   * The indicative forward price (EUR/kWh) for an interval with no metered
+   * EPEX, taken from the portal's OWN quoted forward curve — the same
+   * WIZARD_PERIODS / WIZARD_YEAR rows that back the Prices screen and the
+   * trading wizard. Peak vs base is decided by ConsumptionCalc's own rule, not
+   * a second copy of it.
+   *
+   * This is an assumption, and worth naming: a forward curve is the market's
+   * expectation of spot for that delivery period, but it embeds a risk premium,
+   * so it is NOT the same claim as realised spot. It is used here because the
+   * alternative — leaving forward cost blank — hides the headline figure on
+   * exactly the ranges this view exists to show, and because these are the very
+   * prices the user is quoted elsewhere in this app. Everything priced this way
+   * is labelled indicative; see the certainty layer in CLAUDE.md.
+   *
+   * Returns null when no period row covers the date, which is a genuine
+   * unknowable rather than something to paper over.
+   */
+  function indicativeEpexFor(dateStr, timeStr) {
+    var P = PortalSeedData.WIZARD_PERIODS || {};
+    var rows = (P.month || []).concat(P.quarter || []);
+    var row = null, i;
+    for (i = 0; i < rows.length; i++) {
+      if (dateStr >= rows[i].start && dateStr <= rows[i].end) { row = rows[i]; break; }
+    }
+    if (!row) {
+      var y = PortalSeedData.WIZARD_YEAR;
+      if (y && dateStr >= y.start && dateStr <= y.end) { row = y; }
+    }
+    if (!row) { return null; }
+    var perMwh = ConsumptionCalc.isPeakInterval(dateStr, timeStr) ? row.peak : row.base;
+    return perMwh == null ? null : perMwh / 1000;
+  }
+
   function concatRangeData(from, to) {
     var dates = allCalendarDatesInRange(from, to);
     var allTimes = [], allDatesPerIndex = [], allPrices = [], allC = [], allG = [], hasUsage = [];
@@ -2490,6 +2623,7 @@
     var siteId = siteSelect.value;
     var offer = findOfferForRange(siteId, from, to);
     var offerBlocks = offer ? [offer.block] : null;
+    var profile = null; // built lazily, only if this range actually needs a projection
     dates.forEach(function (d) {
       var ds = DATA.byDate[d];
       var ss = DATA.bySite[siteId] && DATA.bySite[siteId][d];
@@ -2499,10 +2633,21 @@
         var t = times[i];
         allTimes.push(t);
         allDatesPerIndex.push(d);
-        allPrices.push(real ? ds.p[i] : null);
-        allC.push(real ? ss.c[i] : null);
-        allG.push(real ? ss.g[i] : null);
         hasUsage.push(real);
+        if (real) {
+          allPrices.push(ds.p[i]);
+          allC.push(ss.c[i]);
+          allG.push(ss.g[i]);
+        } else {
+          if (!profile) { profile = getUsageProfile(siteId); }
+          var projected = UsageProjection.projectInterval(profile, d, t);
+          // Forward spot is unknown, so this is the quoted forward curve for
+          // the delivery period, not a guess and not a measurement — see
+          // indicativeEpexFor(). Null where no period covers the date.
+          allPrices.push(indicativeEpexFor(d, t));
+          allC.push(projected.consumption);
+          allG.push(projected.production);
+        }
         if (offerBlocks) {
           var off = ConsumptionCalc.computeIntervalHedgeVolumes(d, t, offerBlocks);
           offerVolume.push(off.hedgeVolumeKwh);
@@ -2535,10 +2680,8 @@
     var minVal = 0, maxVal = 0;
     var i;
     for (i = 0; i < n; i++) {
-      if (!hasUsage || hasUsage[i]) {
-        minVal = Math.min(minVal, actualUsage[i]);
-        maxVal = Math.max(maxVal, actualUsage[i]);
-      }
+      minVal = Math.min(minVal, actualUsage[i]);
+      maxVal = Math.max(maxVal, actualUsage[i]);
       minVal = Math.min(minVal, hedgeVolume[i]);
       maxVal = Math.max(maxVal, hedgeVolume[i] + (offerVolume ? offerVolume[i] : 0));
     }
@@ -2553,24 +2696,24 @@
     var coveredBars = "", bars = "", offerBars = "";
     for (i = 0; i < n; i++) {
       var bx = barX(i);
-      if (!hasUsage || hasUsage[i]) {
-        var yNet = yFor(actualUsage[i]);
-        var yHedge = yFor(hedgeVolume[i]);
-        var barTop = Math.min(yNet, yHedge);
-        var barH = Math.abs(yNet - yHedge);
-        var barFill = uncovered[i] >= 0 ? "#e8590c" : "#0891b2";
-        var barOpacity = uncovered[i] >= 0 ? "0.55" : "0.3";
+      var measured = !hasUsage || hasUsage[i];
+      var yNet = yFor(actualUsage[i]);
+      var yHedge = yFor(hedgeVolume[i]);
+      var barTop = Math.min(yNet, yHedge);
+      var barH = Math.abs(yNet - yHedge);
+      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#e8590c" : "#0891b2", uncovered[i] >= 0 ? 0.55 : 0.3, measured);
 
-        var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
-        var yCovered = yFor(coveredVal);
-        var covTop = Math.min(zeroY, yCovered);
-        var covH = Math.abs(zeroY - yCovered);
-        coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
-          '" height="' + covH.toFixed(1) + '" fill="#facc15" opacity="0.2"></rect>';
+      var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
+      var yCovered = yFor(coveredVal);
+      var covTop = Math.min(zeroY, yCovered);
+      var covH = Math.abs(zeroY - yCovered);
+      var covAttrs = barFillAttrs("#facc15", 0.2, measured);
+      coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+        '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
 
-        bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
-          '" height="' + barH.toFixed(1) + '" fill="' + barFill + '" opacity="' + barOpacity + '"></rect>';
-      }
+      bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + barWidthFor(barW).toFixed(1) +
+        '" height="' + barH.toFixed(1) + '" fill="' + slAttrs.fill + '" opacity="' + slAttrs.opacity + '"></rect>';
+
       if (offerVolume && offerVolume[i] > 0) {
         var yBase = yFor(hedgeVolume[i]);
         var yTop = yFor(hedgeVolume[i] + offerVolume[i]);
@@ -2580,19 +2723,28 @@
       }
     }
 
-    var netSegments = [], seg = null, hedgePoints = "";
+    var netSegments = [], seg = null, segMeasured = null, hedgePoints = "";
     for (i = 0; i < n; i++) {
       var px = padLeft + i * stepX;
-      if (!hasUsage || hasUsage[i]) {
-        if (!seg) { seg = []; netSegments.push(seg); }
-        seg.push(px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1));
+      var measured2 = !hasUsage || hasUsage[i];
+      var ptStr = px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1);
+      if (seg === null) {
+        segMeasured = measured2;
+        seg = [ptStr];
+        netSegments.push({ measured: measured2, pts: seg });
+      } else if (measured2 !== segMeasured) {
+        seg.push(ptStr);
+        segMeasured = measured2;
+        seg = [ptStr];
+        netSegments.push({ measured: measured2, pts: seg });
       } else {
-        seg = null;
+        seg.push(ptStr);
       }
       hedgePoints += px.toFixed(1) + "," + yFor(hedgeVolume[i]).toFixed(1) + " ";
     }
-    var netLines = netSegments.map(function (pts) {
-      return '<polyline points="' + pts.join(" ") + '" fill="none" stroke="#059f8f" stroke-width="1.5"></polyline>';
+    var netLines = netSegments.map(function (s) {
+      return '<polyline points="' + s.pts.join(" ") + '" fill="none" stroke="#059f8f" stroke-width="1.5"' +
+        (s.measured ? "" : ' stroke-dasharray="1,3"') + '></polyline>';
     }).join("");
 
     var dayGridlines = "";
@@ -2613,7 +2765,7 @@
 
     lastMonthChartGeom = { padLeft: padLeft, spacing: stepX, offset: 0, n: n, width: width };
 
-    return '<defs>' + hatchDefs(["#4338ca"]) + '</defs>' +
+    return '<defs>' + hatchDefs(["#4338ca", "#e8590c", "#0891b2", "#facc15"]) + '</defs>' +
       dayGridlines +
       '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
       coveredBars +
@@ -2867,28 +3019,51 @@
       return;
     }
 
-    // Null consumption/production/price entries (future, data-less dates) are
-    // handled inside consumption-calc.js itself: usage-derived figures come
-    // back null/skipped for those intervals rather than reading as zero,
-    // while hedge volume/cost — knowable without usage — still totals the
-    // full range. See computeIntervalRow's `hasUsage` branch.
+    // Forward dates carry a PROJECTED consumption/production (historical
+    // profile, see UsageProjection) but a null EPEX — handled inside
+    // consumption-calc.js's per-field null propagation: Actual Usage/
+    // Uncovered/Long/Short compute from the projected volumes, while
+    // usageCost/deltaCost/totalCost stay null (forward price unknown) and
+    // hedgeVolume/hedgeCost — knowable without usage or spot price — total
+    // the full range regardless. See computeIntervalRow in consumption-calc.js.
     var stats = ConsumptionCalc.computeDayStats(range.times, range.prices, range.consumption, range.production, range.dates, hedgeBlocks);
     var series = ConsumptionCalc.computeIntervalSeries(range.times, range.prices, range.consumption, range.production, range.dates, hedgeBlocks);
 
-    var dayCount = allCalendarDatesInRange(from, to).length;
+    // Measured/projected provenance must survive as far as cards and CSV, not
+    // collapse into one blended number — so the same computeDayStats is
+    // called again over each half of the SAME arrays (range.hasUsage marks
+    // which index belongs to which half), giving cards both the headline sum
+    // (stats, above) and the two components to disclose in-card.
+    function filterRangeByUsage(wantMeasured) {
+      var times = [], prices = [], consumption = [], production = [], dates = [];
+      for (var i = 0; i < range.times.length; i++) {
+        if (range.hasUsage[i] !== wantMeasured) { continue; }
+        times.push(range.times[i]); prices.push(range.prices[i]);
+        consumption.push(range.consumption[i]); production.push(range.production[i]);
+        dates.push(range.dates[i]);
+      }
+      return ConsumptionCalc.computeDayStats(times, prices, consumption, production, dates, hedgeBlocks);
+    }
+    var realDayCount = datesInRange(from, to).length;
+    var totalDayCount = allCalendarDatesInRange(from, to).length;
+    var measuredStats = realDayCount === totalDayCount ? stats : filterRangeByUsage(true);
+    var projectedStats = realDayCount === totalDayCount ? null : filterRangeByUsage(false);
+
+    var dayCount = totalDayCount;
     crumb.textContent = site.name + " · " + rangeLabel(from, to);
     // Honest about what part of the range is real: usage data currently ends
-    // at MAX_DATE, so a range reaching past it is shown as position-only
-    // beyond that point rather than silently implying full coverage.
+    // at MAX_DATE, so a range reaching past it is labelled as projected
+    // (from this site's own historical profile) rather than silently implying
+    // measured coverage. Cost stays withheld there regardless (see above).
     var futureNote = to > MAX_DATE
       ? (from > MAX_DATE
-        ? " · position only — no usage data yet"
-        : " · usage data ends " + formatDateShort(MAX_DATE) + ", position only after that")
+        ? " · projected — no measured usage yet"
+        : " · measured usage ends " + formatDateShort(MAX_DATE) + ", projected after that")
       : "";
     chartSubtitle.textContent = range.times.length + " intervals · " +
       dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam" + futureNote;
 
-    renderStatCards(stats);
+    renderStatCards(stats, { realDayCount: realDayCount, totalDayCount: totalDayCount, measuredStats: measuredStats, projectedStats: projectedStats });
 
     // A single day gets the fixed-width chart with time-of-day labels; any
     // multi-day range gets the horizontally-scrollable one labelled per day.
@@ -2932,14 +3107,15 @@
       costMonthChart.innerHTML = costMarkup;
     }
 
-    renderTable(range.dates, range.times, range.prices, series);
+    renderTable(range.dates, range.times, range.prices, series, range.hasUsage);
 
     lastRender = {
       site: site, from: from, to: to, range: range, series: series, stats: stats,
+      measuredStats: measuredStats, projectedStats: projectedStats,
       // "N of M days have data" — for cards/any other screen that wants to
       // say a range is partly or wholly forward-looking without redoing this
       // date math itself.
-      realDayCount: datesInRange(from, to).length, totalDayCount: dayCount
+      realDayCount: realDayCount, totalDayCount: totalDayCount
     };
     exportBtn.disabled = false;
   }
@@ -2952,6 +3128,10 @@
   var CSV_COLUMNS = [
     { header: "Date", get: function (r, i) { return r.range.dates[i]; } },
     { header: "Time", get: function (r, i) { return r.range.times[i]; } },
+    // Per design's certainty-layer spec, provenance must be labelled
+    // everywhere a number is fed — including the exported file, not just
+    // the on-screen table/chart.
+    { header: "Data", get: function (r, i) { return (r.range.hasUsage[i]) ? "Measured" : "Projected"; } },
     { header: "Consumption (kWh)", get: function (r, i) { return r.series.consumptionKwh[i]; } },
     { header: "Production (kWh)", get: function (r, i) { return r.series.productionKwh[i]; } },
     { header: "EPEX (EUR/kWh)", get: function (r, i) { return r.range.prices[i]; } },
