@@ -1850,19 +1850,37 @@
    * period row covers, where indicativeEpexFor returns null and the summed
    * cost is therefore null. Never a fabricated total.
    */
-  function costCertaintyOpts(realDayCount, totalDayCount, costValue) {
-    if (costValue == null || isNaN(costValue)) {
+  function costCertaintyOpts(stats, costValue, realDayCount, totalDayCount) {
+    var total = stats.intervalsTotal, priced = stats.intervalsWithCost;
+    // NB `intervalsWithUsage` counts PROJECTED usage too — it means "has usage
+    // numbers", not "was measured". Measured-ness has to come from the day
+    // counts; only priced-ness comes from the interval counters.
+    var allMeasured = realDayCount != null && realDayCount === totalDayCount;
+    if (total == null) { return {}; }                    // older call site
+    if (priced === total && allMeasured) { return {}; }  // wholly measured and priced
+    if (priced === 0 || costValue == null || isNaN(costValue)) {
       return { unavailable: true, sublabel: "no forward price quoted for this period" };
     }
-    if (realDayCount == null || realDayCount === totalDayCount) { return {}; }
-    var fwd = totalDayCount - realDayCount;
-    return {
-      unavailable: false,
-      projected: true,
-      sublabel: realDayCount === 0
-        ? "indicative — priced at the forward curve"
-        : fwd + " of " + totalDayCount + " days indicative — forward curve"
-    };
+    // Say what actually happened, not what was intended. Three things can be
+    // true at once: some intervals are measured, some are priced off the
+    // forward curve, and some have no quote at all and are simply absent from
+    // this figure. The label that matters most is the last one — a total that
+    // silently omits part of its own range is the one that misleads.
+    var unpriced = total - priced;
+    // Priced intervals that were not measured are the indicative ones.
+    var measuredIntervals = totalDayCount ? Math.round(total * (realDayCount / totalDayCount)) : 0;
+    var indicative = Math.max(0, priced - measuredIntervals);
+    var parts = [];
+    if (indicative > 0) { parts.push("indicative for " + intervalDayish(indicative, total) + " of the range"); }
+    if (unpriced > 0) { parts.push("excludes " + intervalDayish(unpriced, total) + " with no quoted price"); }
+    return { unavailable: false, projected: indicative > 0, sublabel: parts.join(" · ") };
+  }
+
+  /** "12 days" / "38 %" — whichever reads more honestly at this granularity. */
+  function intervalDayish(intervals, total) {
+    var days = intervals / 96;
+    if (days >= 1) { return Math.round(days) + " day" + (Math.round(days) === 1 ? "" : "s"); }
+    return Math.round((intervals / total) * 100) + " %";
   }
 
   /**
@@ -1909,10 +1927,10 @@
     function eurValue(v) { return "€ " + ConsumptionCalc.formatNL(Math.abs(v), 2); }
     function kwhValue(v) { return ConsumptionCalc.formatNL(v, 1) + " kWh"; }
 
-    var deltaCostOpts = costCertaintyOpts(realDayCount, totalDayCount, stats.deltaCostEur);
+    var deltaCostOpts = costCertaintyOpts(stats, stats.deltaCostEur, realDayCount, totalDayCount);
     var totalCostOpts = mergeOpts({ result: true },
-      costCertaintyOpts(realDayCount, totalDayCount,
-        stats.deltaCostEur == null ? null : stats.hedgeCostEur + stats.deltaCostEur));
+      costCertaintyOpts(stats,
+        stats.deltaCostEur == null ? null : stats.hedgeCostEur + stats.deltaCostEur, realDayCount, totalDayCount));
     // On a mixed range, stats.totalCostEur (summed only over intervals with
     // a known EPEX) silently drops the projected days' hedge cost too, even
     // though the Hedge cost card beside it always shows the FULL period
