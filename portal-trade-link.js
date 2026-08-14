@@ -153,6 +153,12 @@
   var STATUS_ACCEPTED = "Accepted · awaiting execution";
   var STATUS_REJECTED = "Offer rejected";
   var STATUS_CONFIRMED = "Confirmed";
+  // Customer-facing wording is an outcome ("Execution failed"); the desk's own
+  // button (built by `cards`, not this module) reads "Mark failed" — the desk
+  // performs an action, the customer reads what happened. Kept as one shared
+  // status string here since both portals derive their copy from it via
+  // toDeskCard/toCustomerTrade rather than hardcoding it twice.
+  var STATUS_FAILED = "Execution failed";
   var DEFAULT_REACTION_MINUTES = 30;
 
   // Anything before this is not a plausible "now" for this app.
@@ -226,9 +232,16 @@
    *
    * Once the customer has responded, that decision is final and outranks the
    * clock — an accepted trade must not later read as "expired" just because
-   * its reaction window has since elapsed.
+   * its reaction window has since elapsed. Confirmed and failed are the two
+   * terminal desk outcomes for an accepted trade, checked before the
+   * response itself so either one wins over "Accepted · awaiting execution"
+   * once the desk has acted — confirmTrade/failTrade guard against setting
+   * both, but effectiveStatus doesn't rely on that; it just checks failed
+   * first (a decision is a decision, order between the two never matters
+   * since they're mutually exclusive by construction).
    */
   function effectiveStatus(req, now) {
+    if (isFailed(req)) { return STATUS_FAILED; }
     if (isConfirmed(req)) { return STATUS_CONFIRMED; }
     if (isResolved(req)) {
       return req.response.action === "accept" ? STATUS_ACCEPTED : STATUS_REJECTED;
@@ -264,17 +277,18 @@
   function rejectOffer(req, opts) { return respondToOffer(req, "reject", opts); }
 
   function isConfirmed(req) { return !!(req && req.confirmation); }
+  function isFailed(req) { return !!(req && req.failure); }
 
   /**
    * The desk confirms execution of an accepted trade. Pure; returns a new
    * record, or null if the trade isn't in a confirmable state (only an
-   * *accepted* offer can be confirmed — not an unpriced, unanswered, rejected
-   * or already-confirmed one).
+   * *accepted* offer can be confirmed — not an unpriced, unanswered, rejected,
+   * already-confirmed, or already-failed one).
    */
   function confirmTrade(req, opts) {
     opts = opts || {};
     if (!isResolved(req) || req.response.action !== "accept") { return null; }
-    if (isConfirmed(req)) { return null; }
+    if (isConfirmed(req) || isFailed(req)) { return null; }
     var out = {};
     for (var k in req) { out[k] = req[k]; }
     out.status = STATUS_CONFIRMED;
@@ -282,6 +296,31 @@
       by: opts.by || "PeakPower Trading",
       at: new Date(nowMs(opts.now)).toISOString(),
       reference: opts.reference || null
+    };
+    return out;
+  }
+
+  /**
+   * The desk marks an accepted trade as failed to execute — a real terminal
+   * outcome distinct from every other state: the desk accepted it, then
+   * could not execute, so the customer's reservation must not stand. Pure;
+   * mirrors confirmTrade exactly, including its guard (only an *accepted*
+   * offer can fail — not an unpriced, unanswered, rejected, already-
+   * confirmed, or already-failed one) rather than inventing a second rule.
+   * `opts.reason` is carried through to the customer's timeline — a failure
+   * whose cause the customer can't see is worse than useless.
+   */
+  function failTrade(req, opts) {
+    opts = opts || {};
+    if (!isResolved(req) || req.response.action !== "accept") { return null; }
+    if (isConfirmed(req) || isFailed(req)) { return null; }
+    var out = {};
+    for (var k in req) { out[k] = req[k]; }
+    out.status = STATUS_FAILED;
+    out.failure = {
+      by: opts.by || "PeakPower Trading",
+      at: new Date(nowMs(opts.now)).toISOString(),
+      reason: opts.reason || null
     };
     return out;
   }
@@ -324,8 +363,9 @@
     }
 
     // An answered offer leaves the countdown queue: accepted trades go to
-    // "To confirm" for execution; rejected and confirmed ones use the sentinel
-    // column "done", which no queue matches, so they drop off the desk.
+    // "To confirm" for execution; rejected, confirmed and failed ones use the
+    // sentinel column "done", which no queue matches, so they drop off the
+    // desk once the desk has acted on them one way or the other.
     if (isConfirmed(req)) {
       base.column = "done";
       base.urgent = false;
@@ -333,6 +373,15 @@
       base.tagTone = "neutral";
       base.valueLabel = "€ " + formatNL(req.offer.valueEur, 0);
       base.actionLabel = "executed";
+      return base;
+    }
+    if (isFailed(req)) {
+      base.column = "done";
+      base.urgent = false;
+      base.tag = "failed";
+      base.tagTone = "critical";
+      base.valueLabel = "€ " + formatNL(req.offer.valueEur, 0);
+      base.actionLabel = "execution failed";
       return base;
     }
     if (isResolved(req)) {
@@ -368,6 +417,7 @@
     var priced = isPriced(req);
     var resolved = isResolved(req);
     var confirmed = isConfirmed(req);
+    var failed = isFailed(req);
     var left = priced ? secondsRemaining(req, now) : 0;
     // Only an unanswered, unexpired offer is still actionable.
     var pending = priced && !resolved && left > 0;
@@ -421,6 +471,19 @@
           facts.push(["Confirmed by", c.by]);
           if (c.reference) { facts.push(["Market reference", c.reference]); }
         }
+        if (failed) {
+          var f = req.failure;
+          events.push({
+            title: "Execution failed",
+            actor: f.by,
+            ts: formatStamp(f.at),
+            body: (f.reason ? f.reason + " " : "") +
+              "The reservation has been released — no charge was made for this trade.",
+            tone: "red"
+          });
+          facts.push(["Failed by", f.by]);
+          if (f.reason) { facts.push(["Reason", f.reason]); }
+        }
       } else if (!pending) {
         events.push({
           title: "Offer expired",
@@ -444,12 +507,17 @@
       price: priced ? "€ " + formatNL(req.offer.priceMwh, 4) : null,
       value: priced ? "€ " + formatNL(req.offer.valueEur, 2) : null,
       status: status,
-      statusTone: confirmed ? "success"
-        : (resolved
-            ? (req.response.action === "accept" ? "warning" : "critical")
-            : (pending ? "warning" : (priced ? "critical" : "info"))),
+      // Failed is bad news, not a pending state — critical (red), not the
+      // amber "warning" tone accepted-and-awaiting-execution uses. Checked
+      // before confirmed/resolved since it's a terminal outcome like they are.
+      statusTone: failed ? "critical"
+        : (confirmed ? "success"
+          : (resolved
+              ? (req.response.action === "accept" ? "warning" : "critical")
+              : (pending ? "warning" : (priced ? "critical" : "info")))),
       resolved: resolved,
       confirmed: confirmed,
+      failed: failed,
       responseAction: resolved ? req.response.action : null,
       pending: pending,
       expiresAt: priced ? req.offer.expiresAt : null,
@@ -540,8 +608,11 @@
     STATUS_ACCEPTED: STATUS_ACCEPTED,
     STATUS_REJECTED: STATUS_REJECTED,
     STATUS_CONFIRMED: STATUS_CONFIRMED,
+    STATUS_FAILED: STATUS_FAILED,
     confirmTrade: confirmTrade,
     isConfirmed: isConfirmed,
+    failTrade: failTrade,
+    isFailed: isFailed,
     DEFAULT_REACTION_MINUTES: DEFAULT_REACTION_MINUTES,
     priceRequest: priceRequest,
     respondToOffer: respondToOffer,

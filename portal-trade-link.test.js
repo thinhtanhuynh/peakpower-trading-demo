@@ -471,6 +471,68 @@ function pricedFixture(extra) {
   assert.strictEqual(Link.toCustomerTrade(back, T0).status, "Confirmed");
 })();
 
+// --- fail (mirrors the confirm block above) ----------------------------------
+(function () {
+  var priced = pricedFixture();
+  var acc = Link.acceptOffer(priced, { now: T0 });
+  var rej = Link.rejectOffer(priced, { now: T0 });
+
+  var failed = Link.failTrade(acc, { by: "M. Bakker · Trading", reason: "Market moved before execution.", now: T0 });
+  assert.strictEqual(acc.failure, undefined, "failTrade does not mutate its input");
+  assert.strictEqual(Link.isFailed(failed), true);
+  assert.strictEqual(failed.status, "Execution failed");
+  assert.strictEqual(Link.effectiveStatus(failed, T0), "Execution failed");
+  assert.strictEqual(failed.failure.by, "M. Bakker · Trading");
+  assert.strictEqual(failed.failure.reason, "Market moved before execution.");
+
+  // Failure outranks the clock too — a failed trade never later reads as expired.
+  assert.strictEqual(Link.effectiveStatus(failed, "2026-08-11T11:00:00.000Z"), "Execution failed");
+
+  // Only an accepted trade can fail — exactly confirmTrade's guard, mirrored.
+  assert.strictEqual(Link.failTrade(priced, { now: T0 }), null, "cannot fail an unanswered offer");
+  assert.strictEqual(Link.failTrade(rej, { now: T0 }), null, "cannot fail a rejected offer");
+  assert.strictEqual(Link.failTrade(Link.buildRequest(WIZ, opts()), { now: T0 }), null,
+    "cannot fail an unpriced request");
+  assert.strictEqual(Link.failTrade(failed, { now: T0 }), null, "cannot fail twice");
+
+  // Confirm and fail are mutually exclusive terminal outcomes.
+  var conf = Link.confirmTrade(acc, { now: T0 });
+  assert.strictEqual(Link.failTrade(conf, { now: T0 }), null, "cannot fail an already-confirmed trade");
+  assert.strictEqual(Link.confirmTrade(failed, { now: T0 }), null, "cannot confirm an already-failed trade");
+
+  // Desk: a failed trade leaves every queue, same as confirmed/rejected.
+  var failCard = Link.toDeskCard(failed, T0);
+  assert.strictEqual(failCard.column, "done", "a failed trade clears out of To confirm");
+  assert.strictEqual(failCard.tag, "failed");
+  assert.strictEqual(failCard.tagTone, "critical");
+
+  // Customer: status "Execution failed", critical tone (bad news, not the
+  // accepted-pending amber), with the failure and its reason on the timeline.
+  var ft = Link.toCustomerTrade(failed, T0);
+  assert.strictEqual(ft.status, "Execution failed");
+  assert.strictEqual(ft.failed, true);
+  assert.strictEqual(ft.confirmed, false);
+  assert.strictEqual(ft.statusTone, "critical");
+  assert.strictEqual(ft.pending, false);
+  assert.strictEqual(ft.events.length, 4, "submitted + offered + accepted + failed");
+  assert.strictEqual(ft.events[3].title, "Execution failed");
+  assert.ok(/Market moved before execution\./.test(ft.events[3].body), "the reason is on the timeline");
+  assert.ok(ft.facts.some(function (f) { return f[0] === "Failed by"; }));
+  assert.ok(ft.facts.some(function (f) { return f[0] === "Reason"; }));
+  // A reason is optional — the timeline still reads cleanly without one.
+  var noReason = Link.failTrade(acc, { now: T0 });
+  var noReasonT = Link.toCustomerTrade(noReason, T0);
+  assert.ok(!noReasonT.facts.some(function (f) { return f[0] === "Reason"; }), "no Reason fact when none was given");
+  assert.ok(/reservation has been released/.test(noReasonT.events[3].body));
+
+  // Round-trips through storage.
+  var s = fakeStorage();
+  Link.publish(s, failed);
+  var back = Link.read(s)[0];
+  assert.strictEqual(Link.isFailed(back), true);
+  assert.strictEqual(Link.toCustomerTrade(back, T0).status, "Execution failed");
+})();
+
 // --- formatStamp ------------------------------------------------------------
 (function () {
   // Local-time formatting, so assert against a locally-constructed date rather
