@@ -101,6 +101,21 @@
   .btn-secondary:hover:not(:disabled) { background:var(--pp-surface-alt); }
   .btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
   .btn-sm { padding:7px 14px; font-size:12px; }
+  /* No danger variant existed before "Mark failed"/"Withdraw offer" needed
+     one — matches .btn-primary's shape exactly (same padding/border/radius),
+     built off the existing --pp-red-* tokens rather than a new hex. */
+  .btn-danger { background:var(--pp-red); border-color:var(--pp-red); color:#fff; }
+  .btn-danger:hover:not(:disabled) { background:var(--pp-red-text); border-color:var(--pp-red-text); }
+  .btn-danger:disabled { opacity:.5; cursor:not-allowed; }
+  /* Timeline — matches PeakPowerDesignSystem Timeline.jsx (6px dot, 13px 0
+     row padding, top rule between entries, title 12.5/600, subtitle 10.5/
+     faint mt2). tradeDetail()'s entries never carry a timestamp, so that
+     slot (10px/faint, DS-supported but unused here) is simply omitted. */
+  .timeline-item { display:flex; gap:12px; padding:13px 0; border-top:1px solid var(--pp-border); }
+  .timeline-item:first-child { border-top:none; }
+  .timeline-dot { width:6px; height:6px; border-radius:50%; margin-top:6px; flex-shrink:0; }
+  .timeline-title { font-size:12.5px; font-weight:600; color:var(--pp-text-heading); }
+  .timeline-subtitle { font-size:10.5px; color:var(--pp-text-body); margin-top:2px; }
   
 .banner { display:flex; align-items:center; gap:12px; border-radius:var(--radius-lg); padding:12px 16px; font-size:12.5px; }
   .banner-amber { background:var(--pp-amber-bg); border:1px solid var(--pp-amber-border); color:var(--pp-amber-text); }
@@ -144,8 +159,8 @@
   .desk-card .dc-meta { font-size:11px; color:var(--pp-text-body); }
   .desk-card .dc-value { font-size:12px; font-weight:700; color:var(--pp-text-heading); }
   .desk-card .dc-action { font-size:10px; font-weight:600; color:var(--pp-teal-600); margin-top:10px; }
-  .desk-card .dc-confirm { margin-top:10px; }
-  .desk-card .dc-confirm button { width:100%; justify-content:center; }
+  .desk-card .dc-confirm { display:flex; gap:8px; margin-top:10px; }
+  .desk-card .dc-confirm button { flex:1; justify-content:center; }
 
   .desk-note { background:var(--pp-surface-alt); border:1px solid var(--pp-border-strong); border-radius:8px; padding:12px 16px; font-size:12px; color:var(--pp-text-body); }
 
@@ -214,6 +229,7 @@
 </div>
 
 <script src="portal-trade-link.js"></script>
+<script src="portal-seed-data.js"></script>
 <script src="back-office-desk-data.js"></script>
 <script src="back-office-screens-data.js"></script>
 <script>
@@ -222,6 +238,11 @@
 
   var D = BackOfficeDeskData;
   var Link = PortalTradeLink;
+  // The forward curve (WIZARD_PERIODS/WIZARD_YEAR) — same rows that already
+  // drive the Customer Portal's Prices screen and trading wizard, reused
+  // here rather than a private copy, so a desk market-reference figure can
+  // never drift from what the customer is quoted elsewhere in the product.
+  var Seed = PortalSeedData;
 
   var S = BackOfficeScreensData;
 
@@ -356,13 +377,17 @@
       '<div class="dc-customer">' + esc(t.customer) + "</div>" +
       '<div class="dc-line"><span class="dc-meta">' + esc(t.meta) + '</span>' +
         '<span class="dc-value">' + esc(t.valueLabel) + "</span></div>" +
-      // Everything in "To confirm" gets a Confirm action that executes the
-      // trade and clears it out of the column. stopPropagation keeps the click
-      // off the card's own open-detail handler.
+      // Everything in "To confirm" gets Confirm AND Mark failed — the mockup's
+      // own two actions for this column (tradeDetail's confirm branch) — so
+      // the card's "confirm or fail →" label actually matches what's here.
+      // stopPropagation on both keeps the click off the card's own
+      // open-detail handler.
       (t.column === "confirm"
         ? '<div class="dc-confirm">' +
             '<button type="button" class="btn-primary btn-sm" ' +
             'onclick="event.stopPropagation(); BO.confirmTrade(\'' + esc(t.id) + '\')">Confirm</button>' +
+            '<button type="button" class="btn-danger btn-sm" ' +
+            'onclick="event.stopPropagation(); BO.failTrade(\'' + esc(t.id) + '\')">Mark failed</button>' +
           "</div>"
         : '<div class="dc-action">' + esc(t.actionLabel) + "</div>") +
       "</div>";
@@ -412,17 +437,20 @@
 
     var req = t.request;
     if (!req) {
-      // Seeded mockup rows carry no underlying request payload.
-      deskBody.innerHTML = cardHtml(t.id + " · " + t.customer, t.meta,
-        '<div class="empty-note">This is one of the desk\'s seeded example trades, so it has no ' +
-        'underlying request detail. Submit a trade from the Customer Portal to see a fully ' +
-        'populated request here.</div>');
+      // Seeded mockup rows carry no underlying request payload — but the
+      // mockup itself has real detail for every one of these (tradeDetail(),
+      // plus TRD-1058's own richer panel), which an apology was standing in
+      // for. TRD-1058 is the one row the mockup gives the full rich detail
+      // (connection table, market/wallet reference, chart, offer form) —
+      // everything else gets the compact timeline+summary view.
+      deskBody.innerHTML = t.id === "TRD-1058" ? renderRichSeedDetail(t) : renderCompactSeedDetail(t);
       return;
     }
 
     var priced = Link.isPriced(req);
     var resolved = Link.isResolved(req);
     var confirmed = Link.isConfirmed(req);
+    var failed = Link.isFailed(req);
     var accepted = resolved && req.response.action === "accept";
     var left = Link.secondsRemaining(req);
     var facts = [
@@ -486,7 +514,7 @@
             esc(Link.formatStamp(req.response.at)) + "</span></div>"
         : '<div class="kv-row"><span class="k">' + (left > 0 ? "Expires in" : "Expired") + '</span>' +
             '<span class="v mono" id="detail-countdown">' + (left > 0 ? Link.mmss(left) : "—") + "</span></div>";
-      pricePanel = cardHtml(confirmed ? "Trade confirmed" : (resolved ? (accepted ? "Offer accepted" : "Offer rejected") : "Offer sent"),
+      pricePanel = cardHtml(confirmed ? "Trade confirmed" : (failed ? "Execution failed" : (resolved ? (accepted ? "Offer accepted" : "Offer rejected") : "Offer sent")),
         req.offer.pricedBy + " · " + Link.formatStamp(req.offer.pricedAt), offerRows);
     }
 
@@ -494,11 +522,21 @@
     if (confirmed) {
       banner = '<div class="banner banner-teal">Executed and confirmed' +
         (req.confirmation.reference ? " — reference <strong>" + esc(req.confirmation.reference) + "</strong>" : "") + ".</div>";
+    } else if (failed) {
+      banner = '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">Marked as execution failed' +
+        (req.failure && req.failure.reason ? " — " + esc(req.failure.reason) : "") +
+        ". The customer's reservation has been released.</div></div>";
     } else if (!priced) {
       banner = '<div class="banner banner-teal">Live request received from the Customer Portal — awaiting a price from the desk.</div>';
     } else if (resolved && accepted) {
+      // Confirm AND Mark failed, side by side — the same pair the "To confirm"
+      // queue card offers, so a desk user isn't stuck choosing between the
+      // list and the detail view for which action is available where.
       banner = '<div class="banner banner-teal">Accepted by the customer — confirm to execute and clear it from <strong>To confirm</strong>.' +
-        '<span style="margin-left:auto"><button type="button" class="btn-primary btn-sm" onclick="BO.confirmTrade(\'' + esc(req.id) + '\')">Confirm</button></span></div>';
+        '<span style="margin-left:auto;display:flex;gap:8px">' +
+        '<button type="button" class="btn-primary btn-sm" onclick="BO.confirmTrade(\'' + esc(req.id) + '\')">Confirm</button>' +
+        '<button type="button" class="btn-danger btn-sm" onclick="BO.failTrade(\'' + esc(req.id) + '\')">Mark failed</button>' +
+        "</span></div>";
     } else if (resolved) {
       banner = '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">The customer rejected this offer. No volume was contracted.</div></div>';
     } else if (left > 0) {
@@ -514,10 +552,476 @@
           cardHtml("The request", req.direction + " " + req.shape + " · " + req.period, connTable) +
           (req.note ? cardHtml("Customer note", "", '<div class="empty-note">' + esc(req.note) + "</div>") : "") +
         "</div>" +
-        '<div class="detail-side">' + pricePanel + cardHtml("Request details", "", factsHtml) + "</div>" +
+        // Wallet check only when this customer has a real row on the
+        // Wallets screen — omitted, not guessed, for anyone else (a
+        // freshly-submitted live request's customer may not be seeded
+        // there at all, and this page has no live wallet API to fall
+        // back on).
+        '<div class="detail-side">' + pricePanel +
+          liveMarketReferenceCardHtml(req) +
+          walletCheckHtml(walletFor(req.customer), priced ? req.offer.valueEur : null) +
+          cardHtml("Request details", "", factsHtml) +
+        "</div>" +
       "</div>";
 
     if (!priced) { updatePriceTotal(); }
+  }
+
+  /**
+   * The mockup's Timeline.jsx, ported verbatim (6px dot per tone, top rule
+   * between entries, no timestamp column — tradeDetail()'s entries never
+   * populate one). `entries` is D.tradeDetail(t).timeline.
+   */
+  function timelineHtml(entries) {
+    var dot = {
+      success: "var(--pp-green)", critical: "var(--pp-red)", warning: "var(--pp-amber)",
+      info: "var(--pp-indigo)", neutral: "var(--pp-text-faint)"
+    };
+    return entries.map(function (e) {
+      return '<div class="timeline-item">' +
+        '<div class="timeline-dot" style="background:' + (dot[e.tone] || dot.neutral) + '"></div>' +
+        '<div style="flex:1"><div class="timeline-title">' + esc(e.title) + "</div>" +
+        (e.subtitle ? '<div class="timeline-subtitle">' + esc(e.subtitle) + "</div>" : "") +
+        "</div></div>";
+    }).join("");
+  }
+
+  /**
+   * A seeded trade card's own customer record and wallet, looked up by name
+   * from the SAME seed data the Customers/Wallets screens render — so
+   * anything derived from them can never disagree with what those screens
+   * show, because it's the identical row, not a second copy of the number.
+   * Prefix match handles CUSTOMER_LIST's "… B.V." suffix some rows carry
+   * and the desk's own trade rows never do; WALLETS' names already match
+   * t.customer exactly.
+   */
+  /**
+   * The desk's own compact period labels ("Cal-27", "Q4-26", "Sep-26") to
+   * an ISO date range — the inverse of Link.toDeskPeriod, needed so a
+   * seeded trade's volume can be derived the same real way a live one's
+   * is (Link.hoursInPeriod), rather than a second, parallel volume model.
+   * 2-digit years are read as 20YY, matching every date in this dataset.
+   */
+  var DESK_MONTHS = { Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6, Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12 };
+  function deskPeriodRange(label) {
+    var m = /^(Cal|Q[1-4]|[A-Z][a-z]{2})-(\d{2})$/.exec(String(label || "").trim());
+    if (!m) { return null; }
+    var year = 2000 + parseInt(m[2], 10);
+    if (m[1] === "Cal") { return { start: year + "-01-01", end: year + "-12-31" }; }
+    if (m[1].charAt(0) === "Q") {
+      var q = parseInt(m[1].charAt(1), 10);
+      var qStartMonth = (q - 1) * 3 + 1;
+      var qEndMonth = qStartMonth + 2;
+      var qEndDay = new Date(Date.UTC(year, qEndMonth, 0)).getUTCDate();
+      return { start: year + "-" + pad2(qStartMonth) + "-01", end: year + "-" + pad2(qEndMonth) + "-" + pad2(qEndDay) };
+    }
+    var month = DESK_MONTHS[m[1]];
+    if (!month) { return null; }
+    var lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return { start: year + "-" + pad2(month) + "-01", end: year + "-" + pad2(month) + "-" + pad2(lastDay) };
+  }
+  function pad2(n) { return n < 10 ? "0" + n : String(n); }
+
+  /**
+   * The desk's compact period label ("Q1-27", "Cal-27", "Sep-26") back to
+   * the Customer Portal's own label format ("Q1 2027", "Cal 2027",
+   * "Sep 2026") — the exact mirror of Link.toDeskPeriod(), which only goes
+   * the other way. Needed to look a period up in PortalSeedData.WIZARD_*,
+   * which is keyed on the portal's own labels.
+   */
+  function fromDeskPeriod(label) {
+    var m = /^(Q[1-4]|Cal|[A-Z][a-z]{2})-(\d{2})$/.exec(String(label || "").trim());
+    if (!m) { return String(label || ""); }
+    return m[1] + " 20" + m[2];
+  }
+
+  /** The forward-curve row for a desk trade's own period, or null if it
+   * falls outside PortalSeedData's quoted range (this seed data only
+   * carries a handful of periods, same as the portal's own Prices screen). */
+  function wizardRowFor(t) {
+    var portalPeriod = fromDeskPeriod(t.period);
+    if (Seed.WIZARD_YEAR && Seed.WIZARD_YEAR.period === portalPeriod) { return Seed.WIZARD_YEAR; }
+    var lists = (Seed.WIZARD_PERIODS && [Seed.WIZARD_PERIODS.month, Seed.WIZARD_PERIODS.quarter]) || [];
+    for (var i = 0; i < lists.length; i++) {
+      var found = (lists[i] || []).filter(function (r) { return r.period === portalPeriod; })[0];
+      if (found) { return found; }
+    }
+    return null;
+  }
+
+  /**
+   * The seeded trade's "Market reference" card — the one section from
+   * TRD_1058_RICH that first looked like it needed fabricated numbers, and
+   * doesn't: the indicative price is real product data (WIZARD_PERIODS/
+   * WIZARD_YEAR, the same rows the Prices screen and trading wizard quote),
+   * and the spread against the desk's own offered price is arithmetic on
+   * two real numbers, not a third invented one. Returns "" when the period
+   * isn't in the quoted set, rather than guessing an indication.
+   */
+  /**
+   * A seeded trade's Market reference — volume (real, Link.hoursInPeriod)
+   * and the indicative price for that period+shape (real, WIZARD_PERIODS/
+   * WIZARD_YEAR). Deliberately does NOT divide the card's own decorative
+   * `valueLabel` by that volume to get a "price": that value was never
+   * authored to equal price × volume (it's a plausible-looking demo
+   * number, not a real trade value), so a price derived from it reads as
+   * "the desk sold at 44% of market" — arithmetically correct on a
+   * meaningless input, which is a fabrication with better production
+   * values, not a fix. Caught only after computing it and checking every
+   * Q4-26 trade landed at the same ~45% ratio — a single spot-check would
+   * have looked like a real number. Only the two things with a genuine
+   * source are shown; no spread, because there is no real price on this
+   * side to spread against.
+   */
+  function marketReferenceCardHtml(t) {
+    var row = wizardRowFor(t);
+    var volumeMwh = deriveVolumeMwh(t);
+    if (!row && volumeMwh == null) { return ""; }
+    var rows = [];
+    if (volumeMwh != null) { rows.push({ label: "Volume (derived)", value: Link.formatNL(volumeMwh, 2) + " MWh", weight: 600 }); }
+    if (row) {
+      var indicative = t.shape === "Peak" ? row.peak : row.base;
+      rows.push({ label: "Indicative (" + row.period + ", quoted " + row.observed + ")", value: "€ " + Link.formatNL(indicative, 2) + " / MWh", weight: 600 });
+    }
+    var rowsHtml = rows.map(function (r, i) {
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:9px 0;border-top:' + (i === 0 ? "none" : "1px solid var(--pp-border)") + ';color:var(--pp-text-body)">' +
+        "<span>" + esc(r.label) + '</span><span style="font-weight:' + r.weight + ';color:var(--pp-text-heading)">' + esc(r.value) + "</span></div>";
+    }).join("");
+    return cardHtml("Market reference", "the trade's own € value is decorative demo data, not price × volume, so no price is computed from it", rowsHtml);
+  }
+
+  /**
+   * A LIVE request's market reference — here the price is real
+   * (req.offer.priceMwh, a quoted offer, not a decorative demo number), so
+   * the spread against the indication is a true statement and worth
+   * showing. Shows the indication alone before the desk has priced it.
+   */
+  function liveMarketReferenceCardHtml(req) {
+    var portalRow = null;
+    if (Seed.WIZARD_YEAR && Seed.WIZARD_YEAR.period === req.period) { portalRow = Seed.WIZARD_YEAR; }
+    if (!portalRow) {
+      var lists = (Seed.WIZARD_PERIODS && [Seed.WIZARD_PERIODS.month, Seed.WIZARD_PERIODS.quarter]) || [];
+      for (var i = 0; i < lists.length && !portalRow; i++) {
+        portalRow = (lists[i] || []).filter(function (r) { return r.period === req.period; })[0] || null;
+      }
+    }
+    if (!portalRow) { return ""; }
+    var indicative = req.shape === "Peak" ? portalRow.peak : portalRow.base;
+    var rows = [{ label: "Indicative (" + portalRow.period + ", quoted " + portalRow.observed + ")", value: "€ " + Link.formatNL(indicative, 2) + " / MWh", weight: 600 }];
+    if (Link.isPriced(req)) {
+      var offered = req.offer.priceMwh;
+      var spread = Math.round((offered - indicative) * 10000) / 10000;
+      var spreadWord = spread === 0 ? "exactly at" : (spread > 0 ? "above" : "below");
+      rows.push({ label: "Offered price", value: "€ " + Link.formatNL(offered, 4) + " / MWh", weight: 700 });
+      rows.push({ label: "Priced " + spreadWord + " the indication", value: "€ " + Link.formatNL(Math.abs(spread), 2) + " / MWh", weight: 700 });
+    }
+    var rowsHtml = rows.map(function (r, i) {
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:9px 0;border-top:' + (i === 0 ? "none" : "1px solid var(--pp-border)") + ';color:var(--pp-text-body)">' +
+        "<span>" + esc(r.label) + '</span><span style="font-weight:' + r.weight + ';color:var(--pp-text-heading)">' + esc(r.value) + "</span></div>";
+    }).join("");
+    return cardHtml("Market reference", "", rowsHtml);
+  }
+
+  /**
+   * Parses one of this app's own NL-formatted amounts ("41.200", "0,500",
+   * "17.520,00") back into a number — period is ALWAYS thousands grouping,
+   * comma is ALWAYS the decimal point, matching Link.formatNL's own output
+   * exactly. Deliberately separate from parsePrice() below: that one
+   * parses free-typed user input in the price field ("94,75" or "94.75",
+   * either convention, no thousands grouping expected), and reusing it
+   * here silently corrupted whole-euro labels with no comma — "41.200"
+   * parsed as 41.2, not 41200, because parsePrice only strips "." when a
+   * "," is also present. Caught by rendering: a "€ 0,0373 / MWh" derived
+   * price is obviously wrong for an energy trade.
+   */
+  function parseNlAmount(raw) {
+    var s = String(raw == null ? "" : raw).trim().replace(/\s/g, "");
+    if (!s) { return NaN; }
+    return parseFloat(s.replace(/\./g, "").replace(",", "."));
+  }
+
+  /**
+   * A seeded trade's own volume, derived the exact way a live one's is —
+   * Link.hoursInPeriod(start, end, shape) × the trade's own power — not a
+   * second volume model. Returns null if the period label doesn't parse
+   * (never guesses a volume from nothing).
+   */
+  function deriveVolumeMwh(t) {
+    var range = deskPeriodRange(t.period);
+    if (!range) { return null; }
+    var powerMw = parseNlAmount(String(t.power).replace(/[^\d.,]/g, ""));
+    if (isNaN(powerMw)) { return null; }
+    return powerMw * Link.hoursInPeriod(range.start, range.end, t.shape);
+  }
+
+  function customerRecordFor(name) {
+    return (S.CUSTOMER_LIST || []).filter(function (c) { return c.name.indexOf(name) === 0; })[0] || null;
+  }
+  function walletFor(name) {
+    return (S.WALLETS || []).filter(function (w) { return w.name === name; })[0] || null;
+  }
+
+  /**
+   * Splits a seeded trade's own contracted power across a small number of
+   * synthetic connections — deterministic (no Math.random, so the same
+   * trade always reads the same way) and internally consistent BY
+   * CONSTRUCTION: the last row absorbs the rounding remainder, so the
+   * column always sums to exactly t.power, never a number that disagrees
+   * with the card above it. Connection count comes from the customer's own
+   * CUSTOMER_LIST.connections (capped at 3, matching TRD_1058_RICH's own
+   * row count) when known, else a plain default of 2.
+   *
+   * What's deliberately NOT included: a forecast-volume column and an
+   * existing-cover column, both present on TRD_1058_RICH — neither has a
+   * real number behind it for an arbitrary trade (no metering series or
+   * hedge-position lookup by connection exists in this seed data), and
+   * fabricating one risks exactly the "looks authoritative but disagrees
+   * with reality" failure this was built to avoid. Requested power is the
+   * one figure with a real, exact source (the trade's own).
+   */
+  function deriveConnRows(t, customerRec) {
+    var totalMw = parseNlAmount(String(t.power).replace(/[^\d.,]/g, ""));
+    var n = customerRec ? Math.min(parseInt(customerRec.connections, 10) || 1, 3) : 2;
+    var kvkTail = customerRec ? parseInt(String(customerRec.kvk).slice(-4), 10) : 1000;
+    var cityOrName = customerRec ? customerRec.city : t.customer;
+    var rows = [], used = 0;
+    for (var i = 0; i < n; i++) {
+      var isLast = i === n - 1;
+      // Round to 3 decimals (the app's own MW precision) at every step so
+      // the running total and the final remainder both stay exact.
+      var mw = isLast ? Math.round((totalMw - used) * 1000) / 1000 : Math.round((totalMw / n) * 1000) / 1000;
+      used += mw;
+      rows.push({ name: cityOrName + " site " + (i + 1), ean: "…" + (kvkTail + i), requested: Link.formatNL(mw, 3) });
+    }
+    return rows;
+  }
+
+  function connRowsTableHtml(rows, totalPowerLabel) {
+    var cols = "1.6fr 1fr 1fr";
+    var body = rows.map(function (c) {
+      return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
+        "<div>" + esc(c.name) + "</div>" +
+        '<div style="font-family:var(--font-mono)">' + esc(c.ean) + "</div>" +
+        '<div class="gt-num" style="font-weight:700;color:var(--pp-text-heading)">' + esc(c.requested) + "</div>" +
+      "</div>";
+    }).join("");
+    return '<div class="grid-table">' +
+      '<div class="gt-head" style="grid-template-columns:' + cols + '">' +
+        "<div>CONNECTION (illustrative)</div><div>EAN</div><div class=\"gt-num\">REQUESTED (MW)</div>" +
+      "</div>" + body +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-top:2px solid var(--pp-border-strong)">' +
+        '<span style="font-size:12.5px;font-weight:700;color:var(--pp-text-heading)">Total</span>' +
+        '<span style="font-size:13px;font-weight:700;color:var(--pp-text-heading)">' + esc(totalPowerLabel) + "</span>" +
+      "</div></div>";
+  }
+
+  /**
+   * The wallet check for a seeded trade — real WALLETS figures (never
+   * derived/fabricated), so this can't disagree with the Wallets screen.
+   * `compareEur` is the trade's own € value when the card has one (awaiting/
+   * confirm); a toPrice trade has only an MWh estimate, nothing to compare
+   * a balance against yet, so the badge is omitted rather than guessed.
+   */
+  function walletCheckHtml(wallet, compareEur) {
+    if (!wallet) { return ""; }
+    var rows = [
+      { label: "Settled balance", value: wallet.settled, weight: 600 },
+      { label: "Reserved", value: wallet.reserved, weight: 600 },
+      { label: "Available", value: wallet.available, weight: 700 }
+    ].map(function (r, i) {
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:9px 0;border-top:' + (i === 0 ? "none" : "1px solid var(--pp-border)") + ';color:var(--pp-text-body)">' +
+        "<span>" + esc(r.label) + '</span><span style="font-weight:' + r.weight + ";color:" + esc(wallet.availableColor && r.label === "Available" ? wallet.availableColor : "var(--pp-text-heading)") + '">' + esc(r.value) + "</span></div>";
+    }).join("");
+    var badgeHtml = "";
+    if (compareEur != null && !isNaN(compareEur)) {
+      var availableEur = parseNlAmount(String(wallet.available).replace(/[^\d.,\-−]/g, "").replace("−", "-"));
+      var sufficient = !isNaN(availableEur) && availableEur >= compareEur;
+      badgeHtml = '<div style="margin-top:8px">' + badge(sufficient ? "SUFFICIENT FOR THIS TRADE" : "BELOW THE TRADE'S VALUE", sufficient ? "success" : "critical") + "</div>";
+    }
+    return cardHtml("Wallet check", "", rows + badgeHtml);
+  }
+
+  /**
+   * A seeded trade's "Pricing" card. Volume is real (Link.hoursInPeriod ×
+   * the card's own power, the same formula a live request's volume uses).
+   * There is deliberately NO derived €/MWh here anymore — an earlier
+   * version divided the card's own `valueLabel` by this volume, which
+   * LOOKED like a real price (arithmetically it was) but wasn't: the
+   * mockup's valueLabel figures were never authored to equal price ×
+   * volume, they're plausible-looking demo numbers. Every Q4-26 seeded
+   * trade run through that division landed at roughly the same ~44% of
+   * the real market indication — a consistent, confident-looking number
+   * that was still false. Caught only by cross-checking several trades
+   * against Market reference, not by any single card looking wrong on its
+   * own. Total value is shown as what it is — the card's own figure — with
+   * no price computed from it. Folded into marketReferenceCardHtml (Volume
+   * + Indicative price together) rather than kept as its own card — a
+   * separate "Pricing" card whose only content was Volume + the card's own
+   * already-shown Total value was pure redundancy with the StatCards/Trade
+   * summary above it, and sitting a bare € figure right next to nothing
+   * invites exactly the mental division this whole fix exists to stop.
+   */
+
+  /**
+   * The compact seeded-trade detail — StatCards + Trade summary + Timeline
+   * are a verbatim port of the mockup's isCompactDetail branch (see
+   * D.tradeDetail()'s own doc comment). The connection breakdown and
+   * wallet check below that are new — the product owner asked for every
+   * trade's detail to carry "more information", following TRD_1058_RICH's
+   * own pattern (see deriveConnRows/walletCheckHtml for exactly what's
+   * derived vs. looked up from real seed data, and what was deliberately
+   * left out rather than fabricated). No chart here — see renderRichSeedDetail's
+   * doc comment for why that stays exclusive to TRD-1058.
+   */
+  function renderCompactSeedDetail(t) {
+    var d = D.tradeDetail(t);
+    var stats = '<div class="stat-row">' +
+      statCard("Status", d.statusValue, d.statusTone) +
+      statCard("Product", d.productValue, "") +
+      statCard("Contracted power", d.power, "") +
+      statCard("Value", d.valueLabel, "brand") +
+      "</div>";
+    var summaryHtml = d.summaryRows.map(function (r) {
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:9px 0;border-top:' + r.borderTop + ';color:var(--pp-text-body)">' +
+        "<span>" + esc(r.label) + "</span><span style=\"font-weight:600;color:var(--pp-text-heading)\">" + esc(r.value) + "</span></div>";
+    }).join("");
+    // "Confirm trade"/"Mark failed" (the "confirm" column's pair) are the
+    // one case with a real handler behind them already — the same dismiss
+    // path the queue card's own buttons use. Everything else (Send offer/
+    // Decline, Extend deadline/Withdraw) has no backing implementation for
+    // a seeded row, same as this file's other unwired mockup buttons.
+    var actionsHtml = d.actions.map(function (a) {
+      var handler = a.label === "Confirm trade" ? "BO.confirmTrade('" + esc(t.id) + "')" :
+        a.label === "Mark failed" ? "BO.failTrade('" + esc(t.id) + "')" : "BO.noop()";
+      return '<button type="button" class="btn-' + a.variant + ' btn-sm" onclick="' + handler + '">' + esc(a.label) + "</button>";
+    }).join("");
+
+    var customerRec = customerRecordFor(t.customer);
+    var wallet = walletFor(t.customer);
+    // Only awaiting/confirm cards carry a € figure to check a balance
+    // against — a toPrice card's valueLabel is an MWh estimate, not money.
+    var compareEur = t.column !== "toPrice" ? parseNlAmount(String(t.valueLabel).replace(/[^\d.,]/g, "")) : null;
+    var connRows = deriveConnRows(t, customerRec);
+    var moreDetail = '<div class="detail-grid" style="margin-top:16px">' +
+        '<div class="detail-main">' + cardHtml("Connections (illustrative split)", "requested power only — no per-connection metering exists for a seeded trade", connRowsTableHtml(connRows, t.power)) + "</div>" +
+        '<div class="detail-side">' + marketReferenceCardHtml(t) + walletCheckHtml(wallet, compareEur) + "</div>" +
+      "</div>";
+
+    return stats +
+      '<div class="detail-grid" style="margin-top:16px">' +
+        '<div class="detail-main">' + cardHtml("Trade summary", "", summaryHtml) + "</div>" +
+        '<div class="detail-side">' +
+          cardHtml("Timeline", "trade history for " + t.id, '<div>' + timelineHtml(d.timeline) + "</div>") +
+        "</div>" +
+      "</div>" +
+      moreDetail +
+      '<div style="display:flex;gap:8px;margin-top:16px">' + actionsHtml + "</div>" +
+      '<div class="empty-note" style="margin-top:12px">This is one of the desk\'s seeded example trades. The connection split is illustrative (no real metering exists per connection for it); Market reference shows this trade\'s real derived volume and the real forward curve the Prices screen and trading wizard quote — deliberately not a price, since the card\'s own € value is decorative demo data, not this trade\'s actual price × volume; the wallet figures are the customer\'s real ones from the Wallets screen' +
+      (t.column === "confirm" ? " — Confirm/Mark failed still clear it from the queue like a live trade's would." : ".") +
+      " Submit a trade from the Customer Portal to see a fully live version of this view.</div>";
+  }
+
+  /**
+   * TRD-1058's full detail — a verbatim port of the mockup's isRichDetail
+   * branch (the one seeded row it gives real connection/market/wallet/chart
+   * detail rather than the compact view). D.TRD_1058_RICH carries every
+   * field; markup/values are copied from the decoded mockup source, same
+   * convention as the rest of this file's ported screens.
+   */
+  function renderRichSeedDetail(t) {
+    var r = D.TRD_1058_RICH;
+    var cols = "1.4fr 1fr 1.2fr 1.2fr 1fr";
+    var connRows = r.connRows.map(function (c) {
+      return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
+        "<div>" + esc(c.name) + "</div>" +
+        '<div style="font-family:var(--font-mono)">' + esc(c.ean) + "</div>" +
+        '<div class="gt-num">' + esc(c.forecast) + "</div>" +
+        '<div class="gt-num" style="color:' + c.coverColor + '">' + esc(c.cover) + "</div>" +
+        '<div class="gt-num" style="font-weight:700;color:var(--pp-text-heading)">' + esc(c.requested) + "</div>" +
+      "</div>";
+    }).join("");
+    var connTable = '<div class="grid-table">' +
+      '<div class="gt-head" style="grid-template-columns:' + cols + '">' +
+        "<div>CONNECTION</div><div>EAN</div><div class=\"gt-num\">CAL-27 FORECAST</div>" +
+        "<div class=\"gt-num\">EXISTING COVER</div><div class=\"gt-num\">REQUESTED</div>" +
+      "</div>" + connRows +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-top:2px solid var(--pp-border-strong)">' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+          '<span style="font-size:12.5px;font-weight:700;color:var(--pp-text-heading)">Total requested</span>' +
+          badge("WHOLE MW", "success") +
+        "</div>" +
+        '<span style="font-size:14px;font-weight:700;color:var(--pp-text-heading)">' + esc(r.totalRequested) + "</span>" +
+      "</div></div>";
+
+    var chartSvg = '<svg viewBox="296 400 624 210" width="100%" height="220" style="margin-top:6px;display:block">' +
+      r.gridLines.map(function (g) {
+        return '<line x1="308" x2="912" y1="' + g.y + '" y2="' + g.y + '" stroke="' + g.stroke + '"></line>' +
+          '<text x="300" y="' + g.ly + '" font-size="10" fill="var(--pp-text-faint)" text-anchor="end">' + esc(g.label) + "</text>";
+      }).join("") +
+      r.chartBars.map(function (b) {
+        return '<rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h + '" fill="#ea580c"></rect>';
+      }).join("") +
+      '<line x1="308" x2="912" y1="560" y2="560" stroke="#4f46e5" stroke-width="2"></line>' +
+      '<line x1="308" x2="912" y1="440" y2="440" stroke="#0d9488" stroke-width="2"></line>' +
+      r.xLabels.map(function (xl) {
+        return '<text x="' + xl.x + '" y="602" font-size="10" fill="var(--pp-text-faint)" text-anchor="' + xl.anchor + '">' + esc(xl.label) + "</text>";
+      }).join("") +
+      "</svg>";
+    var chartLegend = '<div style="display:flex;gap:22px;margin-top:10px;flex-wrap:wrap">' +
+      '<div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:10px;border-radius:2px;background:#0f766e"></div><span style="font-size:11px;color:var(--pp-text-body)">Typical day</span></div>' +
+      '<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#4f46e5"></div><span style="font-size:11px;color:var(--pp-text-body)">Existing cover 0,4 MW</span></div>' +
+      '<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#0d9488"></div><span style="font-size:11px;color:var(--pp-text-body)">After this trade 2,4 MW</span></div>' +
+    "</div>";
+
+    var marketRows = r.marketRows.map(function (row) {
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:9px 0;border-top:' + row.borderTop + ';color:var(--pp-text-body)">' +
+        "<span>" + esc(row.label) + '</span><span style="font-weight:600;color:' + row.color + '">' + esc(row.value) + "</span></div>";
+    }).join("");
+    var walletRows = r.walletRows.map(function (row) {
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:9px 0;border-top:' + row.borderTop + ';color:var(--pp-text-body)">' +
+        "<span>" + esc(row.label) + '</span><span style="font-weight:' + row.weight + ';color:var(--pp-text-heading)">' + esc(row.value) + "</span></div>";
+    }).join("");
+
+    var offerCard = '<div style="background:#fff;border:1px solid var(--pp-teal-600);border-radius:10px;padding:18px 20px">' +
+      '<div style="font-size:14px;font-weight:700;color:var(--pp-text-heading)">Make an offer</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px">' +
+        "<div><div style=\"font-size:10.5px;font-weight:600;color:var(--pp-text-body);margin-bottom:6px\">PRICE (€/MWh)</div>" +
+        '<input value="' + esc(r.offerPrice) + '" style="width:100%;padding:9px 12px;border:1px solid var(--pp-teal-600);border-radius:7px;font-size:13px;font-weight:700;font-family:var(--font-sans);color:var(--pp-text-heading)"></div>' +
+        "<div><div style=\"font-size:10.5px;font-weight:600;color:var(--pp-text-body);margin-bottom:6px\">WINDOW (MIN)</div>" +
+        '<input value="30" style="width:100%;padding:9px 12px;border:1px solid var(--pp-border-strong);border-radius:7px;font-size:13px;font-weight:700;font-family:var(--font-sans);color:var(--pp-text-heading)"></div>' +
+      "</div>" +
+      '<div style="background:var(--pp-surface-alt);border:1px solid var(--pp-border);border-radius:8px;padding:12px 14px;margin-top:16px">' +
+        '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--pp-text-body)"><span>Offer value</span><span style="font-weight:700;color:var(--pp-text-heading)">' + esc(r.offerValue) + "</span></div>" +
+        '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--pp-text-body);margin-top:6px"><span>Will be reserved on acceptance</span><span style="font-weight:600;color:var(--pp-amber)">' + esc(r.offerValue) + "</span></div>" +
+        '<div style="font-size:10px;color:var(--pp-text-faint);margin-top:8px">' + esc(r.offerExpiry) + "</div>" +
+      "</div>" +
+      '<div style="margin-top:16px"><button type="button" class="btn-primary" style="width:100%;justify-content:center" onclick="BO.noop()">Publish offer</button></div>' +
+      '<div style="font-size:10.5px;color:var(--pp-text-faint);text-align:center;margin-top:12px">Internal note (not visible to the customer)</div>' +
+    "</div>";
+
+    return '<div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">' +
+      '<div style="flex:1.55;min-width:520px;display:flex;flex-direction:column;gap:20px">' +
+        '<div style="background:#fff;border:1px solid var(--pp-border);border-radius:10px;padding:18px 20px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">' +
+            '<div><div style="font-size:13.5px;font-weight:700;color:var(--pp-text-heading)">The request</div>' +
+            '<div style="font-size:11.5px;color:var(--pp-text-body);margin-top:4px">' + esc(r.requestSubtitle) + "</div></div>" +
+            '<div style="background:var(--pp-surface-alt);border:1px solid var(--pp-border);border-radius:7px;padding:8px 14px;min-width:230px">' +
+              '<div style="font-size:9.5px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">REQUESTED BY</div>' +
+              '<div style="font-size:11px;font-weight:600;color:var(--pp-text-heading);margin-top:4px">' + esc(r.requestedBy) + "</div>" +
+            "</div>" +
+          "</div>" +
+          '<div style="border-top:1px solid var(--pp-border);margin:14px 0"></div>' +
+          connTable +
+          '<div style="font-size:11px;color:var(--pp-text-body);margin-top:14px">' + esc(r.customerNote) + "</div>" +
+        "</div>" +
+        cardHtml("Customer position — Cal 2027", "existing cover vs. forecast consumption", chartSvg + chartLegend, cardAction(r.customerName)) +
+      "</div>" +
+      '<div style="flex:1;min-width:340px;display:flex;flex-direction:column;gap:20px">' +
+        cardHtml("Market reference", "", marketRows) +
+        cardHtml("Wallet check", "", walletRows + '<div style="margin-top:8px">' + badge(r.walletBadge, "success") + "</div>") +
+        offerCard +
+      "</div>" +
+    "</div>";
   }
 
   // --- pricing --------------------------------------------------------------
@@ -1448,6 +1952,32 @@
   }
 
   /**
+   * Marks a "To confirm" trade as failed to execute and clears it out —
+   * mirrors confirmTrade() exactly, including the seeded-row shortcut
+   * (state.confirmedSeedIds also gates failed seed rows out of seedRows();
+   * "confirmed" there really means "the desk has acted on it one way or
+   * the other", not literally "confirmed", so it's reused rather than
+   * adding a second dismissal set for the same purpose).
+   */
+  function failTrade(id) {
+    var card = findCard(id);
+    if (!card) { return; }
+    if (card.request) {
+      var next = Link.failTrade(card.request, { by: D.USER_LINE });
+      if (next) {
+        try { Link.publish(window.localStorage, next); } catch (e) {
+          console.warn("Failure not published to the Customer Portal:", e);
+        }
+        state.requests = Link.read(window.localStorage);
+      }
+    } else {
+      state.confirmedSeedIds[id] = true;
+    }
+    if (state.view === "detail") { state.view = "list"; state.tradeId = null; }
+    render();
+  }
+
+  /**
    * One entry per nav screen. `gap20` marks the two screens the mockup spaces
    * at 20px rather than 16px (Home, and the Trade desk's detail view); anything
    * not listed here falls through to the mockup's placeholder, which is exactly
@@ -1504,7 +2034,7 @@
   window.BO = {
     goTo: goTo, openTrade: openTrade, backToList: backToList, clearRequests: clearRequests,
     refresh: refresh, sendOffer: sendOffer, onPriceInput: onPriceInput,
-    confirmTrade: confirmTrade, parsePrice: parsePrice, noop: noop,
+    confirmTrade: confirmTrade, failTrade: failTrade, parsePrice: parsePrice, noop: noop,
     selectCustomer: selectCustomer, closeCustomerDetail: closeCustomerDetail,
     startCommercialEdit: startCommercialEdit, cancelCommercialEdit: cancelCommercialEdit,
     saveCommercialEdit: saveCommercialEdit, updateCommercialField: updateCommercialField,
