@@ -1183,6 +1183,55 @@ naturally invisible rather than needing a special case.
 the column. Only an **accepted** trade can be confirmed — not an unpriced,
 unanswered, rejected or already-confirmed one.
 
+**Fail.** Beside Confirm sits **Mark failed** — the mockup specifies both, and
+its cards read `confirm or fail →`. `failTrade()` mirrors `confirmTrade()`
+exactly: same guard that only an accepted trade qualifies, same pure new
+record, same `"done"` column. The two are **mutually exclusive in both
+directions** — a confirmed trade cannot later be failed, nor a failed one
+confirmed — so an operator cannot flip an outcome the customer has already
+been told about. The customer reads `Execution failed` in a **critical** tone
+(not the amber of accepted-and-pending) with the reason on the timeline; with
+no reason given it still says the reservation was released and nothing
+charged, so a failure is never silent. The desk says "Mark failed" and the
+customer reads "Execution failed" — an action versus an outcome, both derived
+from `STATUS_FAILED` rather than written twice.
+
+### Derived detail must not out-claim its source
+
+Every desk trade has a full detail: summary, timeline, an illustrative
+connection split, a market reference and a wallet check. Three rules were
+learned the hard way building it, and they generalise beyond this screen.
+
+**Read the shared source, don't copy it.** The wallet check renders the *same*
+`WALLETS` row the Wallets screen does, so the two cannot disagree. The market
+reference loads `portal-seed-data.js` for the forward curve rather than
+copying the rows into the Back Office data, for the same reason. A second copy
+of a number is a number that will drift.
+
+**Consistent by construction beats consistent by inspection.** The connection
+split derives from the trade's own contracted power with the last row taking
+the rounding remainder, so the column always sums to the card's figure. It is
+labelled *illustrative*, because it is synthesised and no per-connection
+metering exists for a seeded trade.
+
+**Correct arithmetic on decorative input is still a fabrication.** A Pricing
+card once divided each trade's `valueLabel` by its real delivery volume to
+show a €/MWh and a spread against the indication. The maths was right; the
+input was not. Those seed values were authored to look plausible on a card,
+never to satisfy `value = price × volume` — so every Q4-26 trade derived
+around €37/MWh against an €84,20 indication, claiming the desk sells at 44% of
+market on all of them. **A single spot-check looks like a real number; only
+computing every row exposes it.** Seeded trades therefore show volume and the
+indication and no price at all, and the card says why. A *live* record carries
+`offer.priceMwh`, a genuinely quoted price, so there the spread is a true
+statement and is shown. Do not "fix" the seed values to make a derived figure
+come out sensibly — they are a verbatim mockup port, and editing them trades a
+visible problem for an invisible one.
+
+The mockup's chart is one static `BAR_HEIGHTS` array authored for `TRD-1058`
+and stays there. Repeated under every trade it would imply a shape each of
+them does not have.
+
 The desk's own seeded rows (`TRD-1049`, `TRD-1052`) have no record behind
 them, so confirming one just adds its id to `state.confirmedSeedIds` and
 `seedRows()` filters it out — nothing is written to the link. Note that this
