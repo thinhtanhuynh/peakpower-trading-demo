@@ -93,7 +93,7 @@
   .stat-card .value.brand { color:var(--pp-teal-600); }
   .stat-card .sublabel { font-size:11px; color:var(--pp-text-faint); margin-top:6px; }
   
-.btn-primary, .btn-secondary { display:inline-flex; align-items:center; gap:8px; border-radius:var(--radius-md); padding:10px 20px; font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans); border:1px solid; transition:background .15s ease, border-color .15s ease; }
+.btn-primary, .btn-secondary, .btn-danger { display:inline-flex; align-items:center; gap:8px; border-radius:var(--radius-md); padding:10px 20px; font-size:13px; font-weight:600; cursor:pointer; font-family:var(--font-sans); border:1px solid; transition:background .15s ease, border-color .15s ease; }
   .btn-primary { background:var(--pp-teal-600); border-color:var(--pp-teal-600); color:#fff; }
   .btn-primary:hover:not(:disabled) { background:var(--pp-teal-700); border-color:var(--pp-teal-700); }
   .btn-primary:disabled { opacity:.5; cursor:not-allowed; }
@@ -102,8 +102,13 @@
   .btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
   .btn-sm { padding:7px 14px; font-size:12px; }
   /* No danger variant existed before "Mark failed"/"Withdraw offer" needed
-     one — matches .btn-primary's shape exactly (same padding/border/radius),
-     built off the existing --pp-red-* tokens rather than a new hex. */
+     one. It is built off the existing --pp-red-* tokens rather than a new hex,
+     and it must stay in the shared shape selector above — carrying only its
+     three colour declarations, as it did originally, leaves it with the
+     browser's default button box (square corners, no border drawn since
+     border-color without border-style paints nothing, wrong font) sitting
+     beside a Confirm button that is a rounded pill. A tone variant sets
+     colour; the shape always comes from the shared rule. */
   .btn-danger { background:var(--pp-red); border-color:var(--pp-red); color:#fff; }
   .btn-danger:hover:not(:disabled) { background:var(--pp-red-text); border-color:var(--pp-red-text); }
   .btn-danger:disabled { opacity:.5; cursor:not-allowed; }
