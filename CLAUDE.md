@@ -1044,6 +1044,41 @@ runs it through the same `computeIntervalHedgeVolumes` — no parallel
 implementation of the base/peak calendar maths. Use `effectiveStatus()` to
 decide liveness; an offer expires on a clock, so a stored status goes stale.
 
+**Where a trade draws is decided by its lifecycle stage, and the three cases
+are exclusive** — a trade is in exactly one of them, never two:
+
+| stage | draws as | in |
+|---|---|---|
+| `Confirmed` | part of the **hedge** — a real position | `confirmedBlocksForRange()` |
+| anything still in flight (`Awaiting price`, `Offer received`, `Accepted · awaiting execution`) | the **provisional offer** overlay | `findOfferForRange()` |
+| `Offer rejected` / `Offer expired` / `Execution failed` | nothing at all | neither |
+
+Confirming a trade therefore *moves* it from the overlay into the hedge line,
+the Hedge volume card and the Hedge Cost — it does not add a second copy. That
+was a real bug: the overlay filter excluded only rejected and expired, so a
+confirmed trade kept drawing as still-provisional while never joining the hedge
+it had actually become, and a failed one drew as a live offer. `isPendingOffer()`
+is the single predicate; extend **it**, not a call site, when a status is added.
+
+Read the hedge through **`hedgeBlocksFor(siteId, from, to)`**, never
+`DATA.hedge[siteId]` directly — that helper is the one place the contracted
+blocks from `hedge_blocks_2026.json` and the confirmed live trades are joined,
+and going around it silently drops confirmed trades out of the line, the cost
+and the coverage. A confirmed trade is signed by direction exactly as an offer
+is (a sold block is negative) and priced at its **firm** offer price, so
+`computeIntervalHedgeVolumes` sums it alongside the contracted blocks with no
+special case. `MAX_SELECTABLE_DATE` counts live trades too, or a position past
+every contracted block would sit beyond the To input's max and be unreachable.
+
+**Testing this needs stated numbers, not pixels.** Two traps cost real time
+here: several dashed-indigo polylines are in the DOM at once and the *dashboard
+mini-chart* comes first, so "the first match" is a constant that never moves;
+and the y-axis is shared, so adding an offer line rescales it and every line
+shifts in pixels while its value is unchanged. Assert on the Hedge volume card
+instead. Note also that the baseline is not offer-free — with no live candidate
+the page falls back to the seeded `TRD-1078` offer, so *some* overlay is always
+drawn and its presence proves nothing.
+
 ### Regenerating `consumption_compact_2026.json`
 
 This is the **one** pre-computed artifact in the repo, and it exists only

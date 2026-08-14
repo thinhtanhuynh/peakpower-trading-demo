@@ -1566,7 +1566,7 @@
       var siteId = "rot", date = MAX_DATE;
       var dateSeries = DATA.byDate[date];
       var siteSeries = DATA.bySite[siteId] && DATA.bySite[siteId][date];
-      var hedgeBlocks = DATA.hedge && DATA.hedge[siteId];
+      var hedgeBlocks = hedgeBlocksFor(siteId, date, date);
       if (dateSeries && siteSeries) {
         var dSeries = ConsumptionCalc.computeIntervalSeries(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
         chartHtml = '<svg viewBox="0 0 960 220" style="width:100%;height:220px;display:block">' +
@@ -3263,16 +3263,81 @@
    *  dead and never shown; a range can straddle at most one live trade per
    *  connection under this POC's "one pending trade" model, so the most
    *  recently submitted match wins if more than one somehow qualifies. */
+  /**
+   * A trade's lifecycle splits three ways for the chart, and the split is the
+   * whole point: a **confirmed** trade is a real position and joins the hedge;
+   * anything still in flight is **provisional** and draws as an offer; a
+   * rejected, expired or failed one is neither and simply is not there.
+   *
+   * `effectiveStatus` is the authority rather than the stored string, because
+   * an offer expires on a clock.
+   */
+  /**
+   * Every trade on the link, or [] if there is no link to read. A broken or
+   * absent link must never break the chart, so every failure mode — no
+   * PortalTradeLink, no localStorage, unparseable storage — lands on the same
+   * empty result rather than throwing.
+   */
+  function liveTradeRecords() {
+    if (typeof PortalTradeLink === "undefined" || typeof window === "undefined" || !window.localStorage) { return []; }
+    try { return PortalTradeLink.read(window.localStorage) || []; } catch (e) { return []; }
+  }
+
+  function nowForLink() { return Date.now(); }
+
+  function isPendingOffer(req, now) {
+    var status = PortalTradeLink.effectiveStatus(req, now);
+    return status !== PortalTradeLink.STATUS_CONFIRMED &&
+           status !== PortalTradeLink.STATUS_REJECTED &&
+           status !== PortalTradeLink.STATUS_OFFER_EXPIRED &&
+           status !== PortalTradeLink.STATUS_FAILED;
+  }
+
+  function coversRange(req, siteId, from, to) {
+    if (!req.periodStart || !req.periodEnd || req.periodEnd < from || req.periodStart > to) { return false; }
+    return (req.connections || []).some(function (c) { return c.id === siteId; });
+  }
+
+  /**
+   * Confirmed trades as real hedge blocks, to be appended to the site's own
+   * blocks from hedge_blocks_2026.json. Same block shape and the same signing
+   * rule as an offer — a sold block is negative — so `computeIntervalHedgeVolumes`
+   * sums them alongside the contracted blocks with no special case.
+   */
+  function confirmedBlocksForRange(siteId, from, to) {
+    var now = nowForLink();
+    return liveTradeRecords().filter(function (r) {
+      return PortalTradeLink.effectiveStatus(r, now) === PortalTradeLink.STATUS_CONFIRMED &&
+        coversRange(r, siteId, from, to);
+    }).map(function (r) {
+      return blockForOffer(r, (r.connections || []).filter(function (c) { return c.id === siteId; })[0]);
+    });
+  }
+
+  /**
+   * The site's hedge for a range: its contracted blocks from
+   * hedge_blocks_2026.json plus every confirmed trade over that range. This is
+   * the single place the two are joined — read the hedge through here, never
+   * DATA.hedge directly, or confirmed trades silently drop out of the line,
+   * the Hedge Cost and the coverage figures.
+   */
+  function hedgeBlocksFor(siteId, from, to) {
+    var contracted = (DATA && DATA.hedge && DATA.hedge[siteId]) || [];
+    var confirmed = confirmedBlocksForRange(siteId, from, to);
+    return confirmed.length ? contracted.concat(confirmed) : contracted;
+  }
+
   function findOfferForRange(siteId, from, to) {
-    if (typeof PortalTradeLink === "undefined" || typeof window === "undefined" || !window.localStorage) { return null; }
-    var records;
-    try { records = PortalTradeLink.read(window.localStorage); } catch (e) { return null; }
-    var now = Date.now();
-    var candidates = (records || []).filter(function (r) {
-      var status = PortalTradeLink.effectiveStatus(r, now);
-      if (status === "Offer rejected" || status === "Offer expired") { return false; }
-      if (!r.periodStart || !r.periodEnd || r.periodEnd < from || r.periodStart > to) { return false; }
-      return (r.connections || []).some(function (c) { return c.id === siteId; });
+    var now = nowForLink();
+    var candidates = liveTradeRecords().filter(function (r) {
+      // A confirmed trade is a POSITION, not an offer — it belongs in the
+      // hedge line (see confirmedBlocksForRange), and leaving it here would
+      // both draw it as still-provisional and double-count it against the
+      // hedge it is now part of. Rejected, expired and failed trades are not
+      // positions either and are simply gone.
+      if (!isPendingOffer(r, now)) { return false; }
+      if (!coversRange(r, siteId, from, to)) { return false; }
+      return true;
     });
     // Fall back to a seeded pending offer when the link has nothing covering
     // this range. Without this the overlay is invisible until you have
@@ -3832,12 +3897,16 @@
     clearHover();
     var siteId = siteSelect.value;
     var site = DATA.sites.filter(function (s) { return s.id === siteId; })[0];
-    var hedgeBlocks = DATA.hedge && DATA.hedge[siteId];
 
     // From/To drive everything. A reversed range is treated as empty rather
     // than silently swapped, so the inputs always reflect what's rendered.
     var from = fromDate.value;
     var to = toDate.value;
+    // Contracted blocks PLUS anything confirmed on the link — a confirmed
+    // trade is a position, so it belongs in the hedge line and its cost, not
+    // in the provisional offer overlay. Declared after from/to since it needs
+    // the range.
+    var hedgeBlocks = hedgeBlocksFor(siteId, from, to);
     var range = concatRangeData(from, to);
 
     if (range.times.length === 0) {
@@ -4114,6 +4183,16 @@
       (DATA.hedge[siteId] || []).forEach(function (block) {
         if (block.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = block.periodEnd; }
       });
+    });
+    // Live trades extend that horizon too — a confirmed position or an open
+    // offer for a period beyond every contracted block is exactly what the
+    // customer wants to look at, and would otherwise be unreachable because
+    // the To input's max stopped short of it.
+    liveTradeRecords().forEach(function (r) {
+      var now = nowForLink();
+      if (!r.periodEnd) { return; }
+      if (!isPendingOffer(r, now) && PortalTradeLink.effectiveStatus(r, now) !== PortalTradeLink.STATUS_CONFIRMED) { return; }
+      if (r.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = r.periodEnd; }
     });
 
     [fromDate, toDate].forEach(function (el) {
