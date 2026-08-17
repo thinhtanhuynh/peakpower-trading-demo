@@ -1499,6 +1499,35 @@
     if (state.page === "Consumption") { render(); } else { renderApp(); }
   }
 
+  /**
+   * A hedge is a STEP function, never a ramp, and must be drawn as one.
+   *
+   * A peak block is either held for an interval or it is not: the position
+   * jumps to full at 08:00 and drops to zero at 20:00. Plotting one point per
+   * interval anchor and letting the polyline interpolate drew a diagonal
+   * across the 15 minutes either side of each boundary — a slope that claims
+   * a partial position nobody holds, and that reads as the hedge "ramping
+   * up" over a quarter of an hour.
+   *
+   * So each interval gets a flat run across its own width and the riser falls
+   * on the boundary between intervals, where the block actually starts and
+   * stops. Consecutive points sharing an x give the vertical for free.
+   *
+   * This applies to every block-shaped series — hedge volume, hedge cost, and
+   * the provisional offer line, which is a block too. It deliberately does
+   * NOT apply to actual usage or total cost: those are continuous measured
+   * quantities sampled per interval, where a connecting slope is honest.
+   */
+  function stepPoints(n, anchorAt, halfW, yAt) {
+    var pts = [], i, y;
+    for (i = 0; i < n; i++) {
+      y = yAt(i).toFixed(1);
+      pts.push((anchorAt(i) - halfW).toFixed(1) + "," + y);
+      pts.push((anchorAt(i) + halfW).toFixed(1) + "," + y);
+    }
+    return pts.join(" ");
+  }
+
   // --- Dashboard ----------------------------------------------------------
 
   function buildMiniChartSvg(times, actualUsage, hedgeVolume) {
@@ -1516,12 +1545,13 @@
     function yFor(val) { return padTop + (maxVal - val) / range * plotH; }
     var zeroY = yFor(0);
     var stepX = n > 1 ? plotW / (n - 1) : 0;
-    var netPoints = "", hedgePoints = "";
+    var netPoints = "";
     for (i = 0; i < n; i++) {
       var px = padLeft + i * stepX;
       netPoints += px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1) + " ";
-      hedgePoints += px.toFixed(1) + "," + yFor(hedgeVolume[i]).toFixed(1) + " ";
     }
+    var hedgePoints = stepPoints(n, function (k) { return padLeft + k * stepX; }, stepX / 2,
+      function (k) { return yFor(hedgeVolume[k]); });
     return '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
       '<polyline points="' + netPoints.trim() + '" fill="none" stroke="#059f8f" stroke-width="2"></polyline>' +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="2" stroke-dasharray="5,3"></polyline>';
@@ -2801,16 +2831,19 @@
    * they run close together, and 55% opacity per the certainty vocabulary —
    * three cues, none load-bearing alone.
    */
-  function provisionalOfferLine(n, base, offer, xAt, yFor) {
+  function provisionalOfferLine(n, base, offer, xAt, yFor, halfW) {
     if (!offer) { return ""; }
     var segs = [], cur = null, i;
     for (i = 0; i < n; i++) {
       // !== 0, not > 0 — see certaintyBoundaries above for why a Sell's
       // negative offer[i] must still count as "active here."
       if (offer[i] !== 0 && base[i] != null) {
-        var pt = xAt(i).toFixed(1) + "," + yFor(base[i] + offer[i]).toFixed(1);
+        // Stepped, per stepPoints: an offer is a block, so its line squares
+        // off at the boundary exactly as the hedge line it extends does.
+        var y = yFor(base[i] + offer[i]).toFixed(1);
         if (!cur) { cur = []; segs.push(cur); }
-        cur.push(pt);
+        cur.push((xAt(i) - halfW).toFixed(1) + "," + y);
+        cur.push((xAt(i) + halfW).toFixed(1) + "," + y);
       } else if (cur) {
         cur = null;
       }
@@ -2890,7 +2923,9 @@
     // switching to a fine dot (certainty-layer #3) once projected. Segments
     // share their boundary point with the neighbour so the style change
     // reads as one continuous line, not a break.
-    var netSegments = [], seg = null, segMeasured = null, hedgePoints = "";
+    var netSegments = [], seg = null, segMeasured = null;
+    var hedgePoints = stepPoints(n, function (k) { return padLeft + k * barW + barW / 2; }, barW / 2,
+      function (k) { return yFor(hedgeVolume[k]); });
     for (i = 0; i < n; i++) {
       var px = padLeft + i * barW + barW / 2;
       var measured2 = !hasUsage || hasUsage[i];
@@ -2907,7 +2942,6 @@
       } else {
         seg.push(ptStr);
       }
-      hedgePoints += px.toFixed(1) + "," + yFor(hedgeVolume[i]).toFixed(1) + " ";
     }
     var netLines = netSegments.map(function (s) {
       return '<polyline points="' + s.pts.join(" ") + '" fill="none" stroke="#059f8f" stroke-width="2"' +
@@ -2934,7 +2968,7 @@
       netLines +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="2" stroke-dasharray="5,3"></polyline>' +
       provisionalOfferLine(n, hedgeVolume, offerVolume,
-        function (i) { return padLeft + i * barW + barW / 2; }, yFor) +
+        function (i) { return padLeft + i * barW + barW / 2; }, yFor, barW / 2) +
       axisLabels +
       boundaries +
       '<line id="chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
@@ -3610,7 +3644,9 @@
       }
     }
 
-    var netSegments = [], seg = null, segMeasured = null, hedgePoints = "";
+    var netSegments = [], seg = null, segMeasured = null;
+    var hedgePoints = stepPoints(n, function (k) { return padLeft + k * stepX; }, barW / 2,
+      function (k) { return yFor(hedgeVolume[k]); });
     for (i = 0; i < n; i++) {
       var px = padLeft + i * stepX;
       var measured2 = !hasUsage || hasUsage[i];
@@ -3627,7 +3663,6 @@
       } else {
         seg.push(ptStr);
       }
-      hedgePoints += px.toFixed(1) + "," + yFor(hedgeVolume[i]).toFixed(1) + " ";
     }
     var netLines = netSegments.map(function (s) {
       return '<polyline points="' + s.pts.join(" ") + '" fill="none" stroke="#059f8f" stroke-width="1.5"' +
@@ -3660,7 +3695,7 @@
       offerBars +
       netLines +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="1.5" stroke-dasharray="5,3"></polyline>' +
-      provisionalOfferLine(n, hedgeVolume, offerVolume, function (i) { return padLeft + i * stepX; }, yFor) +
+      provisionalOfferLine(n, hedgeVolume, offerVolume, function (i) { return padLeft + i * stepX; }, yFor, barW / 2) +
       dayLabels +
       boundaries +
       '<line id="month-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
@@ -3721,7 +3756,10 @@
     var zeroY = yFor(0);
     function barX(idx) { return padLeft + idx * stepX + anchorOffset - barW / 2; }
 
-    var deltaBars = "", offerBars = "", hedgePoints = "";
+    var deltaBars = "", offerBars = "";
+    // Hedge cost is as block-shaped as hedge volume is — same step treatment.
+    var hedgePoints = stepPoints(n, function (k) { return padLeft + k * stepX + anchorOffset; }, barW / 2,
+      function (k) { return yFor(hedgeCost[k]); });
     var totalSegments = [], seg = null;
     // Same bar geometry as the usage chart's, so the two align pixel-for-pixel
     // under the shared crosshair.
@@ -3753,7 +3791,6 @@
           '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="' + offerFill + '" opacity="' +
           CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
       }
-      hedgePoints += anchor.toFixed(1) + "," + yH.toFixed(1) + " ";
     }
     var totalLines = totalSegments.map(function (pts) {
       return '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + COST_TOTAL_LINE +
@@ -3773,7 +3810,7 @@
         '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="' + COST_HEDGE_LINE +
         '" stroke-width="' + lineWidth + '" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"></polyline>' +
         provisionalOfferLine(n, hedgeCost, offerCost,
-          function (i) { return padLeft + i * stepX + anchorOffset; }, yFor) +
+          function (i) { return padLeft + i * stepX + anchorOffset; }, yFor, barW / 2) +
         boundaries
     };
   }

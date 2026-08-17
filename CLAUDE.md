@@ -775,6 +775,27 @@ Buy/Sell is encoded by **colour *and* by which side of the hedge line the bar
 sits on**, and named in the tooltip — so the orange/cyan pair is never the
 only cue (it's the weakest pair under tritanopia, ΔE 5.9).
 
+### A hedge is a step, not a ramp
+
+Every block-shaped series is drawn as a **stair** by `stepPoints()`: a flat run
+across each interval's own width, with the riser on the boundary between
+intervals. A block is either held for an interval or it is not — a peak block
+goes to full at 08:00 and to zero at 20:00, and a base block steps at the
+period boundary the same way. Plotting one point per interval anchor and
+letting the polyline interpolate drew a **diagonal across the 15 minutes either
+side of each boundary**, which claims a partial position nobody holds and reads
+as the hedge ramping up over a quarter of an hour.
+
+This covers hedge volume, hedge cost and `provisionalOfferLine()` (an offer is
+a block too), on all four chart builders plus the dashboard mini-chart. It
+deliberately does **not** cover actual usage or total cost: those are
+continuous quantities sampled per interval, where a connecting slope is honest.
+
+One consequence to expect in tests: a stepped line ends at the last interval's
+**right edge**, half a bar past the anchor a sampled line ends at — stopping at
+the centre would imply the block lapsed halfway through its final interval.
+`certainty-audit.js` carries both constants for that reason.
+
 `barWidthFor(pitch)` is shared by all four chart builders: a 2px surface gap
 between touching bars, tapering to a quarter of the pitch on dense multi-day
 ranges where a fixed 2px would leave a sliver. Shared so the two charts' bars
