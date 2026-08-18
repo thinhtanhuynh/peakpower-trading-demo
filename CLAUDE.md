@@ -439,6 +439,13 @@ see the design agent's session for the images if picking this back up.
 
 #### Certainty layer — provisional offers & projected data (vocabulary, 2026-08-13)
 
+> **Status (2026-08-18):** the *projected data* half of this vocabulary is
+> live. The *provisional offer* half is not — the offer overlay was removed
+> from the Consumption chart (see "The chart draws positions" below). The
+> spec is kept whole because the two halves were designed as one system and
+> the offer half is the reference if an overlay is ever restored; read it as
+> a design record, not as a description of what the page renders today.
+
 Two features add a second axis to the Consumption chart, orthogonal to the
 existing **category** encoding (hue = what a mark *is* — usage, hedge, buy,
 sell): a **provisional coverage overlay** (a pending offer's hedge, stacked
@@ -786,9 +793,9 @@ letting the polyline interpolate drew a **diagonal across the 15 minutes either
 side of each boundary**, which claims a partial position nobody holds and reads
 as the hedge ramping up over a quarter of an hour.
 
-This covers hedge volume, hedge cost and `provisionalOfferLine()` (an offer is
-a block too), on all four chart builders plus the dashboard mini-chart. It
-deliberately does **not** cover actual usage or total cost: those are
+This covers hedge volume and hedge cost, on all four chart builders plus the
+dashboard mini-chart. It deliberately does **not** cover actual usage or total
+cost: those are
 continuous quantities sampled per interval, where a connecting slope is honest.
 
 One consequence to expect in tests: a stepped line ends at the last interval's
@@ -1057,38 +1064,35 @@ earlier version read "26 of 31 days indicative" for a range whose 26 forward
 days were in fact unpriced and silently dropped from the total — a figure that
 omits most of its own range while implying it covers it is worse than a blank.
 
-**A pending offer** is drawn as a stacked *provisional* layer on top of the
-confirmed hedge, so the gap between the two lines is what accepting it would
-add, and accepting collapses one onto the other. `findOfferForRange()` turns
-the live cross-portal record into a one-block synthetic `hedgeBlocks` array and
-runs it through the same `computeIntervalHedgeVolumes` — no parallel
-implementation of the base/peak calendar maths. Use `effectiveStatus()` to
-decide liveness; an offer expires on a clock, so a stored status goes stale.
+**The chart draws positions, and nothing but positions** (product direction,
+2026-08-18). Only a `Confirmed` trade is drawn, as part of the hedge via
+`confirmedBlocksForRange()`; every other stage — awaiting price, offer
+received, accepted, rejected, expired, failed — draws nothing at all. There is
+no provisional-offer overlay on this chart any more.
 
-**Where a trade draws is decided by its lifecycle stage, and the three cases
-are exclusive** — a trade is in exactly one of them, never two:
+This was arrived at in three steps, and the direction of travel is the point:
+the overlay was first corrected so a confirmed trade stopped drawing as
+provisional, then accepted trades were dropped from it, then it was removed
+outright. Each step asked the same question — is this mark a position? — and
+the honest answer kept shrinking the overlay until there was nothing left of
+it. A trade the desk has not executed is not a position, and its status is
+already legible on Trading and the Dashboard, which is where a trade in flight
+belongs.
 
-| stage | draws as | in |
-|---|---|---|
-| `Confirmed` | part of the **hedge** — a real position | `confirmedBlocksForRange()` |
-| an offer still awaiting an answer (`Awaiting price`, `Offer received`) | the **provisional offer** overlay | `findOfferForRange()` |
-| `Accepted · awaiting execution` / `Offer rejected` / `Offer expired` / `Execution failed` | nothing at all | neither |
+What was removed with it: `findOfferForRange()` and its seeded-`TRD-1078`
+fallback, `provisionalOfferLine()`, `isPendingOffer()`, the `offerVolume`/
+`offerCost` series on `concatRangeData()`, the hatched indigo band on both
+charts, the Confirmed / If-accepted boundary markers, the tooltip's
+"Provisional offer" rows, and the subtitle's "dotted indigo = pending …" note.
+`blockForOffer()` stays — `confirmedBlocksForRange()` uses it to turn a
+confirmed trade into a real hedge block. The certainty vocabulary below is
+therefore now **only** about measured vs. projected data; its offer half
+documents a state this page no longer has.
 
-Confirming a trade therefore *moves* it from the overlay into the hedge line,
-the Hedge volume card and the Hedge Cost — it does not add a second copy. That
-was a real bug: the overlay filter excluded only rejected and expired, so a
-confirmed trade kept drawing as still-provisional while never joining the hedge
-it had actually become, and a failed one drew as a live offer. `isPendingOffer()`
-is the single predicate; extend **it**, not a call site, when a status is added.
-
-**Accepting a trade takes it off the chart entirely**, and that is deliberate.
-The overlay exists to answer one question — what would this position become if
-you accepted? — so once the answer is given it has nothing left to ask. An
-accepted trade is not yet a position either (only `Confirmed` joins the hedge),
-so it draws nowhere and reappears on the hedge line the moment the desk
-confirms it. Its status is still visible on Trading and the Dashboard, which is
-where a trade awaiting execution belongs; the chart is for positions and open
-questions.
+Restoring an overlay means restoring all of it, not just the line: the band,
+the boundary markers, the legend and the tooltip wording are one vocabulary
+(see the certainty layer), and shipping the line alone would leave an
+unexplained dotted stroke.
 
 Read the hedge through **`hedgeBlocksFor(siteId, from, to)`**, never
 `DATA.hedge[siteId]` directly — that helper is the one place the contracted
@@ -1097,17 +1101,17 @@ and going around it silently drops confirmed trades out of the line, the cost
 and the coverage. A confirmed trade is signed by direction exactly as an offer
 is (a sold block is negative) and priced at its **firm** offer price, so
 `computeIntervalHedgeVolumes` sums it alongside the contracted blocks with no
-special case. `MAX_SELECTABLE_DATE` counts live trades too, or a position past
-every contracted block would sit beyond the To input's max and be unreachable.
+special case. `MAX_SELECTABLE_DATE` counts confirmed trades too, or a position
+past every contracted block would sit beyond the To input's max and be
+unreachable — only confirmed ones, since nothing else reaches this chart.
 
 **Testing this needs stated numbers, not pixels.** Two traps cost real time
 here: several dashed-indigo polylines are in the DOM at once and the *dashboard
 mini-chart* comes first, so "the first match" is a constant that never moves;
-and the y-axis is shared, so adding an offer line rescales it and every line
+and the y-axis is shared, so adding a line rescales it and every other line
 shifts in pixels while its value is unchanged. Assert on the Hedge volume card
-instead. Note also that the baseline is not offer-free — with no live candidate
-the page falls back to the seeded `TRD-1078` offer, so *some* overlay is always
-drawn and its presence proves nothing.
+instead — a confirmed BUY of 1 MW over Q4 2026 moves it by exactly 2.208 MWh,
+a SELL by −2.208.
 
 ### Regenerating `consumption_compact_2026.json`
 

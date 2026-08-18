@@ -985,10 +985,11 @@
   }
 
   /**
-   * "See this offer on the chart" — from a trade's detail straight to
+   * "View on consumption chart" — from a trade's detail straight to
    * Consumption, framed on that trade's own delivery period and connection,
-   * so the provisional offer line is on screen on arrival rather than
-   * something the customer has to go and reconstruct with three controls.
+   * so the customer doesn't have to reconstruct the range with three
+   * controls. A confirmed trade shows up there as part of the hedge line;
+   * one that is not confirmed yet shows up as nothing, by design.
    *
    * Falls back gracefully: a trade with no structured period (the older
    * display-only seed rows) still lands on Consumption rather than doing
@@ -1513,10 +1514,10 @@
    * on the boundary between intervals, where the block actually starts and
    * stops. Consecutive points sharing an x give the vertical for free.
    *
-   * This applies to every block-shaped series — hedge volume, hedge cost, and
-   * the provisional offer line, which is a block too. It deliberately does
-   * NOT apply to actual usage or total cost: those are continuous measured
-   * quantities sampled per interval, where a connecting slope is honest.
+   * This applies to every block-shaped series — hedge volume and hedge cost.
+   * It deliberately does NOT apply to actual usage or total cost: those are
+   * continuous measured quantities sampled per interval, where a connecting
+   * slope is honest.
    */
   function stepPoints(n, anchorAt, halfW, yAt) {
     var pts = [], i, y;
@@ -1828,13 +1829,6 @@
             '<button type="button" class="btn-reject" onclick="PP.rejectOffer(\'' + esc(t.id) + '\')">Reject</button>'
           : '<button type="button" class="btn-accept" onclick="PP.noop()">Accept</button>' +
             '<button type="button" class="btn-reject" onclick="PP.noop()">Reject</button>') +
-        // Deciding on an offer is exactly when seeing it against your own
-        // usage matters, so the route to the chart sits in the decision row
-        // rather than somewhere the customer has to go looking for it.
-        (tradeIsChartable(t)
-          ? '<button type="button" class="btn-ghost" onclick="PP.viewTradeOnChart(\'' + esc(t.id) +
-            '\')">See it on your consumption chart</button>'
-          : '') +
         '<button type="button" class="btn-ghost" onclick="PP.noop()">Ask a question</button>' +
         '<span class="ob-countdown">' + mmss(t.secondsRemaining) + '</span>' +
         '</div></div>';
@@ -1855,8 +1849,10 @@
     var factsHtml = t.facts.map(function (f) {
       return '<div class="kv-row"><span class="k">' + esc(f[0]) + '</span><span class="v">' + esc(f[1]) + '</span></div>';
     }).join("") + (t.value ? '<div class="kv-row"><span class="k">Total value</span><span class="v">' + esc(t.value) + '</span></div>' : "");
-    // Available for any trade with a real period, not just a pending offer —
-    // a confirmed block is worth seeing against usage too.
+    // Only a confirmed trade actually appears on that chart (it joins the
+    // hedge line); a pending one is no longer drawn there at all. The button
+    // still frames the period and connection, which is worth having for any
+    // trade with a real period — but it is not a route to "see your offer".
     var chartFoot = tradeIsChartable(t)
       ? '<div class="card-foot-action"><button type="button" class="btn-secondary" onclick="PP.viewTradeOnChart(\'' +
         esc(t.id) + '\')">View on consumption chart</button></div>'
@@ -2679,8 +2675,10 @@
 
   // --- Certainty layer (Actual vs Provisional) -------------------------------
   // See CLAUDE.md "Certainty layer — provisional offers & projected data" for
-  // the full vocabulary. Shared by all four chart variants so the future-date
-  // boundary and the offer overlay look and behave identically everywhere.
+  // the full vocabulary. What remains in use here is the projected-data half:
+  // the offer overlay it also covered is gone from this chart. Shared by all
+  // four chart variants so the future-date boundary looks and behaves
+  // identically everywhere.
 
   var CERTAINTY_PROVISIONAL_OPACITY = 0.55;
   var CERTAINTY_HATCH_DARKEN = 0.22; // "one step darker" — see hatchDefs below
@@ -2703,8 +2701,8 @@
    * just by reasoning about it. Scaling the pitch down to the bar's own
    * rendered width (floored at 2px, the practical minimum for a visible
    * diagonal in SVG) keeps at least ~1 stripe cycle inside every bar,
-   * however narrow, while leaving the wider single-day/offer-band case
-   * (already legible) at its original 6px.
+   * however narrow, while leaving the wider single-day case (already
+   * legible) at its original 6px.
    */
   function hatchPitchFor(barWidthPx) {
     return Math.max(2, Math.min(6, barWidthPx));
@@ -2712,13 +2710,13 @@
 
   // Below this, even a pitch scaled to the bar's own width antialiases into
   // a flat wash rather than a legible diagonal — confirmed by actually
-  // rendering the multi-day range chart's ~3px offer/projected bars
+  // rendering the multi-day range chart's ~3px projected bars
   // (Playwright screenshot, pixel-level crop) and finding no stripe visible
   // at all, not just "faint." There's no smaller pitch that fixes this: the
   // tile itself becomes sub-resolution. Below the threshold, fall back to a
   // plain flat fill at the provisional opacity only — texture is one of
   // several redundant certainty cues (with opacity, the mandatory boundary
-  // marker, and the tooltip's "Projected"/"Provisional offer" wording), not
+  // marker, and the tooltip's "Projected" wording), not
   // the only one, so dropping it here still leaves the mark legible as
   // "not yet real" via the other three.
   var HATCH_MIN_BAR_WIDTH = 5;
@@ -2752,10 +2750,10 @@
     return defs;
   }
 
-  /** The 4 hues the usage/covered/short/long/offer bars hatch with, all at the one pitch this chart's bars actually render at. */
+  /** The 3 hues the covered/short/long bars hatch with, all at the one pitch this chart's bars actually render at. */
   function usageChartHatchEntries(rbw) {
     var pitch = hatchPitchFor(rbw);
-    return ["#4338ca", "#e8590c", "#0891b2", "#facc15"].map(function (hue) { return { hue: hue, pitch: pitch }; });
+    return ["#e8590c", "#0891b2", "#facc15"].map(function (hue) { return { hue: hue, pitch: pitch }; });
   }
 
   /**
@@ -2773,7 +2771,7 @@
 
   /**
    * A bar's fill attributes for a given certainty state — Actual draws in
-   * the plain hue at its normal opacity; Provisional (projected/offer) gets
+   * the plain hue at its normal opacity; Provisional (projected) gets
    * the hatch texture AND drops to 55% of that opacity (certainty-layer #1
    * + #2 together, never just one).
    */
@@ -2784,74 +2782,18 @@
   }
 
   /**
-   * Every boundary this chart needs to mark: the Measured/Projected data-
-   * coverage edge (from `hasUsage`) plus the pending-offer window's rising
-   * and falling edges (from `offerVolume`). `barX(i)` is each chart's own
+   * The one boundary this chart still marks: the Measured/Projected data-
+   * coverage edge (from `hasUsage`). `barX(i)` is each chart's own
    * left-edge-of-bar-i formula — day and multi-day charts anchor differently.
    */
-  function certaintyBoundaries(hasUsage, offerVolume, barX) {
+  function certaintyBoundaries(hasUsage, barX) {
     var marks = [], i;
     if (hasUsage) {
       for (i = 1; i < hasUsage.length; i++) {
         if (hasUsage[i - 1] && !hasUsage[i]) { marks.push({ x: barX(i), left: "Measured", right: "Projected" }); break; }
       }
     }
-    if (offerVolume) {
-      // !== 0, not > 0 — a Sell offer's volume is negative (see
-      // blockForOffer), and its window needs the same Confirmed/If-accepted
-      // boundary markers a Buy offer gets. Only exactly 0 means "no offer
-      // active here."
-      for (i = 0; i < offerVolume.length; i++) {
-        var on = offerVolume[i] !== 0;
-        var prevOn = i > 0 && offerVolume[i - 1] !== 0;
-        var nextOn = i < offerVolume.length - 1 && offerVolume[i + 1] !== 0;
-        if (on && !prevOn) { marks.push({ x: barX(i), left: "Confirmed", right: "If accepted" }); }
-        if (on && !nextOn) { marks.push({ x: barX(i + 1), left: "If accepted", right: "Confirmed" }); }
-      }
-    }
     return marks;
-  }
-
-  /**
-   * The "if you accepted this offer" line: base + offer, drawn at the edge of
-   * the provisional band so the gap between it and the confirmed hedge line
-   * IS what the offer would add — a Buy widens that gap upward, a Sell
-   * (negative offer, see blockForOffer) pulls it downward, since selling
-   * reduces the hedged position. The line is whichever edge `base + offer`
-   * lands on for that interval's sign, not always the top — draw it as "the
-   * level the position would move to," not "the top of the band."
-   *
-   * The band alone was not enough — a hatched area reads as shading, and the
-   * thing being asked of this chart is a comparison between two levels, which
-   * wants an edge you can actually trace. Only drawn across the offer's own
-   * delivery window, in segments, so it never implies coverage outside it.
-   *
-   * Indigo, because it belongs to the same category as the hedge it extends;
-   * `2,2` rather than the hedge's `5,3` so the two are distinguishable when
-   * they run close together, and 55% opacity per the certainty vocabulary —
-   * three cues, none load-bearing alone.
-   */
-  function provisionalOfferLine(n, base, offer, xAt, yFor, halfW) {
-    if (!offer) { return ""; }
-    var segs = [], cur = null, i;
-    for (i = 0; i < n; i++) {
-      // !== 0, not > 0 — see certaintyBoundaries above for why a Sell's
-      // negative offer[i] must still count as "active here."
-      if (offer[i] !== 0 && base[i] != null) {
-        // Stepped, per stepPoints: an offer is a block, so its line squares
-        // off at the boundary exactly as the hedge line it extends does.
-        var y = yFor(base[i] + offer[i]).toFixed(1);
-        if (!cur) { cur = []; segs.push(cur); }
-        cur.push((xAt(i) - halfW).toFixed(1) + "," + y);
-        cur.push((xAt(i) + halfW).toFixed(1) + "," + y);
-      } else if (cur) {
-        cur = null;
-      }
-    }
-    return segs.filter(function (s) { return s.length > 1; }).map(function (s) {
-      return '<polyline class="offer-line" points="' + s.join(" ") + '" fill="none" stroke="#4338ca"' +
-        ' stroke-width="2" stroke-dasharray="2,2" stroke-opacity="0.55"></polyline>';
-    }).join("");
   }
 
   function buildChartSvg(times, actualUsage, hedgeVolume, uncovered, width, opts) {
@@ -2859,7 +2801,6 @@
     width = width || 960;
     opts = opts || {};
     var hasUsage = opts.hasUsage || null;
-    var offerVolume = opts.offerVolume || null;
     var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
     var plotW = width - padLeft - 10;
     var plotH = height - padTop - padBottom;
@@ -2867,12 +2808,12 @@
     var i;
     // actualUsage is always a real number now — measured or (per forward's
     // historical-profile forecast) projected — so it always participates in
-    // the range, unlike offerVolume which is only nonzero in its own window.
+    // the range.
     for (i = 0; i < n; i++) {
       minVal = Math.min(minVal, actualUsage[i]);
       maxVal = Math.max(maxVal, actualUsage[i]);
       minVal = Math.min(minVal, hedgeVolume[i]);
-      maxVal = Math.max(maxVal, hedgeVolume[i] + (offerVolume ? offerVolume[i] : 0));
+      maxVal = Math.max(maxVal, hedgeVolume[i]);
     }
     if (minVal === maxVal) { maxVal = minVal + 1; }
     var range = maxVal - minVal;
@@ -2881,8 +2822,7 @@
     var barW = plotW / n;
     function barX(idx) { return padLeft + idx * barW; }
     var rbw = barWidthFor(barW); // rendered bar width — also the hatch's own pitch basis, see hatchPitchFor
-    var offerFill = provisionalFillUrl("#4338ca", rbw) || "#4338ca";
-    var coveredBars = "", bars = "", offerBars = "";
+    var coveredBars = "", bars = "";
     for (i = 0; i < n; i++) {
       var bx = barX(i);
       var measured = !hasUsage || hasUsage[i];
@@ -2903,20 +2843,6 @@
       bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + barH.toFixed(1) + '" fill="' + slAttrs.fill + '" opacity="' + slAttrs.opacity + '"></rect>';
 
-      // Provisional offer: an additional hatched area stacked on the
-      // confirmed hedge line, only across the offer's own delivery window.
-      // !== 0, not > 0 — a Sell's negative offerVolume must still draw; the
-      // band then hangs BELOW the hedge line (accepting would lower the
-      // position). Math.min/Math.abs already handle either sign correctly
-      // (yTop lands above or below yBase depending on which way the value
-      // moves), so only this gate needed to change, not the geometry.
-      if (offerVolume && offerVolume[i] !== 0) {
-        var yBase = yFor(hedgeVolume[i]);
-        var yTop = yFor(hedgeVolume[i] + offerVolume[i]);
-        offerBars += '<rect x="' + bx.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + rbw.toFixed(1) +
-          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="' + offerFill + '" opacity="' +
-          CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
-      }
     }
     // The Actual-Usage line is drawn through its whole range now that
     // projected values are real forecasts, not gaps — solid while measured,
@@ -2955,7 +2881,7 @@
           '" font-size="10" fill="#64748b">' + times[i] + '</text>';
       }
     }
-    var boundaries = certaintyBoundaries(hasUsage, offerVolume, barX).map(function (m) {
+    var boundaries = certaintyBoundaries(hasUsage, barX).map(function (m) {
       return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
     }).join("");
     lastChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
@@ -2964,11 +2890,8 @@
       '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
       coveredBars +
       bars +
-      offerBars +
       netLines +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="2" stroke-dasharray="5,3"></polyline>' +
-      provisionalOfferLine(n, hedgeVolume, offerVolume,
-        function (i) { return padLeft + i * barW + barW / 2; }, yFor, barW / 2) +
       axisLabels +
       boundaries +
       '<line id="chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
@@ -3038,20 +2961,6 @@
     // computeIntervalRow); volume is a stated forecast, not an absence.
     if (!hasUsage) {
       rows.push(["Status", context.kind === "cost" ? "Cost unknown — forward price not available" : "Projected — historical-profile forecast"]);
-    }
-    // !== 0, not > 0 — a Sell offer draws negative (see blockForOffer), and
-    // still needs its own tooltip row; the direction word is what stops a
-    // negative "Offer" number from reading as a bug rather than a sale.
-    if (context.offerVolume && context.offerVolume[i] !== 0) {
-      var offerUnit = context.kind === "cost" ? " €" : " kWh";
-      var offerVal = context.kind === "cost" ? context.offerCost[i] : context.offerVolume[i];
-      var offerDir = offerVal > 0 ? "Buy" : (offerVal < 0 ? "Sell" : "Net");
-      rows.push(["Offer (" + offerDir + ")", ConsumptionCalc.formatNL(offerVal, context.kind === "cost" ? 2 : 1) + offerUnit]);
-      rows.push(["Status", offerDir === "Sell"
-        ? "Provisional sell offer — not yet accepted"
-        : offerDir === "Buy"
-          ? "Provisional buy offer — not yet accepted"
-          : "Provisional offer — nets to zero here, not yet accepted"]);
     }
     // The weekday is not decoration here: peak blocks are Mon-Fri only, so
     // whether an interval is a Saturday is exactly what explains a hedge
@@ -3196,14 +3105,14 @@
     chart.setAttribute("viewBox", "0 0 " + width + " 260");
     chart.style.width = width + "px";
     chart.innerHTML = buildChartSvg(range.times, series.actualUsage, series.hedgeVolume, series.uncovered, width,
-      { hasUsage: range.hasUsage, offerVolume: range.offerVolume });
+      { hasUsage: range.hasUsage });
     // Cost chart is deliberately shorter (190 vs. usage's 260, design's
     // subordinate-not-peer treatment) — only the viewBox HEIGHT differs;
     // width tracks the usage chart's exactly, same as every other x-value.
     costChart.setAttribute("viewBox", "0 0 " + width + " 190");
     costChart.style.width = width + "px";
     costChart.innerHTML = buildCostChartSvg(range.times, series.hedgeCost, series.deltaCost, series.totalCost, width,
-      { hasUsage: range.hasUsage, offerCost: range.offerCost });
+      { hasUsage: range.hasUsage });
   }
 
   // Re-draw the day charts when the wrap's width actually changes (window
@@ -3291,21 +3200,14 @@
     return out;
   }
 
-  /** The single cross-portal trade (if any) touching this connection whose
-   *  delivery period overlaps the given range — the pending/accepted/confirmed
-   *  "offer" layer drawn over the hedge block. Rejected/expired offers are
-   *  dead and never shown; a range can straddle at most one live trade per
-   *  connection under this POC's "one pending trade" model, so the most
-   *  recently submitted match wins if more than one somehow qualifies. */
   /**
    * A trade's lifecycle splits three ways for the chart, and the split is the
-   * whole point: a **confirmed** trade is a real position and joins the hedge;
-   * an offer still awaiting an answer is **provisional** and draws as an
-   * offer; everything else — accepted, rejected, expired, failed — is neither
-   * and simply is not there.
+   * whole point: a **confirmed** trade is a real position and joins the
+   * hedge. Nothing else is drawn — a trade the desk has not executed is not
+   * a position, and this chart shows positions.
    *
    * `effectiveStatus` is the authority rather than the stored string, because
-   * an offer expires on a clock.
+   * a trade's status moves on a clock.
    */
   /**
    * Every trade on the link, or [] if there is no link to read. A broken or
@@ -3319,25 +3221,6 @@
   }
 
   function nowForLink() { return Date.now(); }
-
-  /**
-   * Only an offer the customer has not yet answered draws as provisional.
-   *
-   * Accepting is the decision the overlay exists to support — it shows what
-   * the position WOULD become — so once it has been made the overlay has
-   * nothing left to ask and is dropped. An accepted trade is not drawn on the
-   * chart at all: it is not yet a position (only Confirmed joins the hedge,
-   * see hedgeBlocksFor), and it is no longer a question. It reappears on the
-   * hedge line the moment the desk confirms it.
-   */
-  function isPendingOffer(req, now) {
-    var status = PortalTradeLink.effectiveStatus(req, now);
-    return status !== PortalTradeLink.STATUS_CONFIRMED &&
-           status !== PortalTradeLink.STATUS_ACCEPTED &&
-           status !== PortalTradeLink.STATUS_REJECTED &&
-           status !== PortalTradeLink.STATUS_OFFER_EXPIRED &&
-           status !== PortalTradeLink.STATUS_FAILED;
-  }
 
   function coversRange(req, siteId, from, to) {
     if (!req.periodStart || !req.periodEnd || req.periodEnd < from || req.periodStart > to) { return false; }
@@ -3371,73 +3254,6 @@
     var contracted = (DATA && DATA.hedge && DATA.hedge[siteId]) || [];
     var confirmed = confirmedBlocksForRange(siteId, from, to);
     return confirmed.length ? contracted.concat(confirmed) : contracted;
-  }
-
-  function findOfferForRange(siteId, from, to) {
-    var now = nowForLink();
-    var candidates = liveTradeRecords().filter(function (r) {
-      // A confirmed trade is a POSITION, not an offer — it belongs in the
-      // hedge line (see confirmedBlocksForRange), and leaving it here would
-      // both draw it as still-provisional and double-count it against the
-      // hedge it is now part of. Rejected, expired and failed trades are not
-      // positions either and are simply gone.
-      if (!isPendingOffer(r, now)) { return false; }
-      if (!coversRange(r, siteId, from, to)) { return false; }
-      return true;
-    });
-    // Fall back to a seeded pending offer when the link has nothing covering
-    // this range. Without this the overlay is invisible until you have
-    // submitted a trade yourself — which made a shipped feature look missing.
-    // Seeded records are display data for the Trading screen, so only those
-    // carrying real period/connection fields can be drawn.
-    if (!candidates.length) {
-      candidates = (PortalSeedData.TRADES_SEED || []).filter(function (t) {
-        if (!t.pending || !t.periodStart || !t.periodEnd) { return false; }
-        if (t.periodEnd < from || t.periodStart > to) { return false; }
-        return (t.connections || []).some(function (c) { return c.id === siteId; });
-      }).map(function (t) {
-        return {
-          id: t.id, period: t.period, shape: t.shape, direction: t.direction, seeded: true,
-          periodStart: t.periodStart, periodEnd: t.periodEnd,
-          indicativePrice: t.priceMwh, connections: t.connections,
-          offer: { priceMwh: t.priceMwh }
-        };
-      });
-      if (!candidates.length) { return null; }
-    }
-    candidates.sort(function (a, b) { return (b.submittedAt || "").localeCompare(a.submittedAt || ""); });
-
-    // EVERY live offer over this range is drawn, not just the newest. A
-    // customer can hold several pending offers on the same connection and
-    // period — nothing prevents it, and the wizard will happily submit a
-    // second — and showing only one silently understates what accepting them
-    // all would add. computeIntervalHedgeVolumes() already sums across a
-    // block list (it does exactly that for stacked hedge blocks), so the fix
-    // is to hand it every block rather than a one-element array.
-    var blocks = candidates.map(function (req) {
-      var line = (req.connections || []).filter(function (c) { return c.id === siteId; })[0];
-      return blockForOffer(req, line);
-    });
-    var req = candidates[0];
-    // Net direction across every candidate — a single-offer range is just
-    // that offer's own direction; several offers on the same range can mix
-    // Buy and Sell (blockForOffer already signs each one), so the chart's
-    // "dotted indigo" line is genuinely a NET position once count > 1, not
-    // "an offer" in the singular sense the old wording implied.
-    var directions = candidates.map(function (r) { return String(r.direction || "Buy"); });
-    var netDirection = directions.every(function (d) { return d === directions[0]; }) ? directions[0] : "Net";
-    return {
-      // A seeded record has no link lifecycle, so effectiveStatus() (which
-      // reads offer/response/expiry) has nothing to decide from.
-      status: req.seeded ? "Offer received" : PortalTradeLink.effectiveStatus(req, now),
-      seeded: !!req.seeded,
-      periodLabel: req.period,
-      shape: String(req.shape || "").toLowerCase(),
-      direction: netDirection,
-      count: candidates.length,
-      ids: candidates.map(function (r) { return r.id; }),
-      blocks: blocks
-    };
   }
 
   /**
@@ -3506,10 +3322,7 @@
    * here — `ConsumptionCalc.computeIntervalRow`'s hedge computation runs
    * regardless of usage, so `series.hedgeVolume`/`series.hedgeCost` (computed
    * below in render(), over these same times/dates) already extend correctly
-   * into the future. `offerVolume`/`offerCost` are the same per-interval
-   * computation against a synthetic one-block hedgeBlocks array built from
-   * the single live cross-portal trade touching this connection, if any — an
-   * additional, clearly-separate layer on top of the real position.
+   * into the future.
    */
   /**
    * The indicative forward price (EUR/kWh) for an interval with no metered
@@ -3548,10 +3361,7 @@
   function concatRangeData(from, to) {
     var dates = allCalendarDatesInRange(from, to);
     var allTimes = [], allDatesPerIndex = [], allPrices = [], allC = [], allG = [], hasUsage = [];
-    var offerVolume = [], offerCost = [];
     var siteId = siteSelect.value;
-    var offer = findOfferForRange(siteId, from, to);
-    var offerBlocks = offer ? offer.blocks : null;
     var profile = null; // built lazily, only if this range actually needs a projection
     dates.forEach(function (d) {
       var ds = DATA.byDate[d];
@@ -3577,19 +3387,11 @@
           allC.push(projected.consumption);
           allG.push(projected.production);
         }
-        if (offerBlocks) {
-          var off = ConsumptionCalc.computeIntervalHedgeVolumes(d, t, offerBlocks);
-          offerVolume.push(off.hedgeVolumeKwh);
-          offerCost.push(off.hedgeCost);
-        } else {
-          offerVolume.push(0);
-          offerCost.push(0);
-        }
       }
     });
     return {
       dates: allDatesPerIndex, times: allTimes, prices: allPrices, consumption: allC, production: allG,
-      hasUsage: hasUsage, offerVolume: offerVolume, offerCost: offerCost, offer: offer
+      hasUsage: hasUsage
     };
   }
 
@@ -3600,7 +3402,6 @@
     var n = times.length;
     opts = opts || {};
     var hasUsage = opts.hasUsage || null;
-    var offerVolume = opts.offerVolume || null;
     var pxPerInterval = 4;
     var width = Math.max(960, n * pxPerInterval);
     var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
@@ -3612,7 +3413,7 @@
       minVal = Math.min(minVal, actualUsage[i]);
       maxVal = Math.max(maxVal, actualUsage[i]);
       minVal = Math.min(minVal, hedgeVolume[i]);
-      maxVal = Math.max(maxVal, hedgeVolume[i] + (offerVolume ? offerVolume[i] : 0));
+      maxVal = Math.max(maxVal, hedgeVolume[i]);
     }
     if (minVal === maxVal) { maxVal = minVal + 1; }
     var range = maxVal - minVal;
@@ -3623,8 +3424,7 @@
     function barX(idx) { return padLeft + idx * stepX - barW / 2; }
 
     var rbw = barWidthFor(barW); // rendered bar width — also the hatch's own pitch basis, see hatchPitchFor
-    var offerFill = provisionalFillUrl("#4338ca", rbw) || "#4338ca";
-    var coveredBars = "", bars = "", offerBars = "";
+    var coveredBars = "", bars = "";
     for (i = 0; i < n; i++) {
       var bx = barX(i);
       var measured = !hasUsage || hasUsage[i];
@@ -3645,15 +3445,6 @@
       bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + barH.toFixed(1) + '" fill="' + slAttrs.fill + '" opacity="' + slAttrs.opacity + '"></rect>';
 
-      // See buildChartSvg's comment: !== 0 so a Sell's negative offerVolume
-      // still draws (band hangs below the hedge line), geometry unchanged.
-      if (offerVolume && offerVolume[i] !== 0) {
-        var yBase = yFor(hedgeVolume[i]);
-        var yTop = yFor(hedgeVolume[i] + offerVolume[i]);
-        offerBars += '<rect x="' + bx.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + rbw.toFixed(1) +
-          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="' + offerFill + '" opacity="' +
-          CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
-      }
     }
 
     var netSegments = [], seg = null, segMeasured = null;
@@ -3693,7 +3484,7 @@
       }
     }
 
-    var boundaries = certaintyBoundaries(hasUsage, offerVolume, barX).map(function (m) {
+    var boundaries = certaintyBoundaries(hasUsage, barX).map(function (m) {
       return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
     }).join("");
 
@@ -3704,10 +3495,8 @@
       '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
       coveredBars +
       bars +
-      offerBars +
       netLines +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="1.5" stroke-dasharray="5,3"></polyline>' +
-      provisionalOfferLine(n, hedgeVolume, offerVolume, function (i) { return padLeft + i * stepX; }, yFor, barW / 2) +
       dayLabels +
       boundaries +
       '<line id="month-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
@@ -3752,7 +3541,6 @@
   function costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, anchorOffset, lineWidth, opts) {
     opts = opts || {};
     var hasUsage = opts.hasUsage || null;
-    var offerCost = opts.offerCost || null;
     var minVal = 0, maxVal = 0, i;
     for (i = 0; i < n; i++) {
       if (!hasUsage || hasUsage[i]) {
@@ -3760,7 +3548,7 @@
         maxVal = Math.max(maxVal, totalCost[i]);
       }
       minVal = Math.min(minVal, hedgeCost[i]);
-      maxVal = Math.max(maxVal, hedgeCost[i] + (offerCost ? offerCost[i] : 0));
+      maxVal = Math.max(maxVal, hedgeCost[i]);
     }
     if (minVal === maxVal) { maxVal = minVal + 1; }
     var range = maxVal - minVal;
@@ -3768,7 +3556,7 @@
     var zeroY = yFor(0);
     function barX(idx) { return padLeft + idx * stepX + anchorOffset - barW / 2; }
 
-    var deltaBars = "", offerBars = "";
+    var deltaBars = "";
     // Hedge cost is as block-shaped as hedge volume is — same step treatment.
     var hedgePoints = stepPoints(n, function (k) { return padLeft + k * stepX + anchorOffset; }, barW / 2,
       function (k) { return yFor(hedgeCost[k]); });
@@ -3776,7 +3564,6 @@
     // Same bar geometry as the usage chart's, so the two align pixel-for-pixel
     // under the shared crosshair.
     var w = barWidthFor(barW);
-    var offerFill = provisionalFillUrl(COST_HEDGE_LINE, w) || COST_HEDGE_LINE;
     for (i = 0; i < n; i++) {
       var anchor = padLeft + i * stepX + anchorOffset;
       var x = anchor - barW / 2;
@@ -3795,34 +3582,22 @@
       } else {
         seg = null;
       }
-      // See buildChartSvg's comment: !== 0 so a Sell's negative offerCost
-      // (selling receives money, so it's a cost credit) still draws.
-      if (offerCost && offerCost[i] !== 0) {
-        var yBase = yH, yTop = yFor(hedgeCost[i] + offerCost[i]);
-        offerBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yBase, yTop).toFixed(1) + '" width="' + w.toFixed(1) +
-          '" height="' + Math.abs(yBase - yTop).toFixed(1) + '" fill="' + offerFill + '" opacity="' +
-          CERTAINTY_PROVISIONAL_OPACITY + '"></rect>';
-      }
     }
     var totalLines = totalSegments.map(function (pts) {
       return '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + COST_TOTAL_LINE +
         '" stroke-width="' + lineWidth + '" stroke-linejoin="round" stroke-linecap="round"></polyline>';
     }).join("");
-    var boundaries = certaintyBoundaries(hasUsage, offerCost, barX).map(function (m) {
+    var boundaries = certaintyBoundaries(hasUsage, barX).map(function (m) {
       return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
     }).join("");
     return {
       zeroY: zeroY,
-      markup: '<defs>' + hatchDefs([{ hue: COST_HEDGE_LINE, pitch: hatchPitchFor(w) }]) + '</defs>' +
-        '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
+      markup: '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
         '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
         deltaBars +
-        offerBars +
         totalLines +
         '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="' + COST_HEDGE_LINE +
         '" stroke-width="' + lineWidth + '" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"></polyline>' +
-        provisionalOfferLine(n, hedgeCost, offerCost,
-          function (i) { return padLeft + i * stepX + anchorOffset; }, yFor, barW / 2) +
         boundaries
     };
   }
@@ -4027,30 +3802,8 @@
         ? " · projected — no measured usage yet"
         : " · measured usage ends " + formatDateShort(MAX_DATE) + ", projected after that")
       : "";
-    // Name the provisional line, or it is just an unexplained dotted stroke.
-    // Direction matters now that Sell offers draw negative (they REDUCE the
-    // hedged position, so the line can sit below the confirmed hedge line,
-    // not just above it) — a bare "offer" next to a downward line reads as a
-    // rendering glitch, not an intentional sell.
-    var offerDirWord = range.offer && range.offer.direction === "Sell" ? "sell"
-      : range.offer && range.offer.direction === "Buy" ? "buy" : "net";
-    var offerNote = range.offer
-      // Name how many, because the line is their SUM — "pending offer"
-      // singular next to a level built from three of them would misread.
-      // With count > 1 the line is explicitly a NET position (candidates can
-      // mix Buy and Sell), never implied to be a single pending offer.
-      ? (range.offer.count > 1
-          // offerDirWord is already "net" for a mixed Buy+Sell combo, so
-          // don't double it into "net net position" — only prefix "net "
-          // when it's a real direction word (a uniform Buy+Buy or Sell+Sell
-          // combo, where "net buy position" is still an accurate summary).
-          ? " · dotted indigo = " + (offerDirWord === "net" ? "net position" : "net " + offerDirWord + " position") +
-            " from " + range.offer.count + " pending offers combined (" + range.offer.ids.join(", ") + ") — not yet in your position"
-          : " · dotted indigo = pending " + range.offer.periodLabel + " " + offerDirWord + " offer (" +
-            range.offer.status.toLowerCase() + " — not yet in your position)")
-      : "";
     chartSubtitle.textContent = range.times.length + " intervals · " +
-      dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam" + futureNote + offerNote;
+      dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam" + futureNote;
 
     renderStatCards(stats, { realDayCount: realDayCount, totalDayCount: totalDayCount, measuredStats: measuredStats, projectedStats: projectedStats });
 
@@ -4064,36 +3817,36 @@
     // Frames the cost chart as derived FROM the usage chart above it, not an
     // equal peer — the "Same intervals" phrasing points back at that card
     // rather than restating its own interval/day count.
-    costChartSubtitle.textContent = "Same intervals, valued in €" + futureNote + offerNote;
+    costChartSubtitle.textContent = "Same intervals, valued in €" + futureNote;
     tableSummarySub.textContent = range.times.length + " intervals · " + rangeLabel(from, to);
 
-    // hasUsage/offerVolume/offerCost ride along on the context so the
-    // tooltip (buildTooltipHtml) can say "Projected"/"Provisional offer" in
-    // words per the certainty-layer spec, not just draw the visual treatment.
+    // hasUsage rides along on the context so the tooltip (buildTooltipHtml)
+    // can say "Projected" in words per the certainty-layer spec, not just
+    // draw the visual treatment.
     var ctx = {
       dates: range.dates, times: range.times, prices: range.prices, series: series,
-      hasUsage: range.hasUsage, offerVolume: range.offerVolume, offerCost: range.offerCost
+      hasUsage: range.hasUsage
     };
     if (singleDay) {
       lastDayContext = ctx;
       lastCostDayContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost",
-        hasUsage: range.hasUsage, offerVolume: range.offerVolume, offerCost: range.offerCost };
+        hasUsage: range.hasUsage };
       lastMonthContext = null;
       lastCostMonthContext = null;
       drawDayCharts(range, series, dayChartWidth());
     } else {
       lastMonthContext = ctx;
       lastCostMonthContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost",
-        hasUsage: range.hasUsage, offerVolume: range.offerVolume, offerCost: range.offerCost };
+        hasUsage: range.hasUsage };
       lastDayContext = null;
       lastCostDayContext = null;
-      var monthOpts = { hasUsage: range.hasUsage, offerVolume: range.offerVolume };
+      var monthOpts = { hasUsage: range.hasUsage };
       var markup = buildMonthChartSvg(range.dates, range.times, series.actualUsage, series.hedgeVolume, series.uncovered, monthOpts);
       monthChart.setAttribute("viewBox", "0 0 " + lastMonthChartGeom.width + " 260");
       monthChart.style.width = lastMonthChartGeom.width + "px";
       monthChart.innerHTML = markup;
 
-      var costMonthOpts = { hasUsage: range.hasUsage, offerCost: range.offerCost };
+      var costMonthOpts = { hasUsage: range.hasUsage };
       var costMarkup = buildMonthCostChartSvg(range.dates, range.times, series.hedgeCost, series.deltaCost, series.totalCost, costMonthOpts);
       // Shorter than the usage range chart's 260 — width still tracks it exactly.
       costMonthChart.setAttribute("viewBox", "0 0 " + lastMonthCostChartGeom.width + " 190");
@@ -4233,14 +3986,16 @@
         if (block.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = block.periodEnd; }
       });
     });
-    // Live trades extend that horizon too — a confirmed position or an open
-    // offer for a period beyond every contracted block is exactly what the
-    // customer wants to look at, and would otherwise be unreachable because
-    // the To input's max stopped short of it.
+    // Confirmed trades extend that horizon too — a position for a period
+    // beyond every contracted block is exactly what the customer wants to
+    // look at, and would otherwise be unreachable because the To input's max
+    // stopped short of it. Only confirmed ones: nothing else reaches this
+    // chart any more (see isPendingOffer's removal), so nothing else has a
+    // reason to widen the range.
     liveTradeRecords().forEach(function (r) {
       var now = nowForLink();
       if (!r.periodEnd) { return; }
-      if (!isPendingOffer(r, now) && PortalTradeLink.effectiveStatus(r, now) !== PortalTradeLink.STATUS_CONFIRMED) { return; }
+      if (PortalTradeLink.effectiveStatus(r, now) !== PortalTradeLink.STATUS_CONFIRMED) { return; }
       if (r.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = r.periodEnd; }
     });
 
