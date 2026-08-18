@@ -970,6 +970,27 @@ period rows, one selection," unrelated to and unaffected by this pass, but
 cheap to re-check given the CSS in the same area was touched) — plus the
 full Node suite.
 
+#### Base and Peak trade places (2026-08-18, a seventh pass)
+
+Product direction, immediately after the sixth pass shipped: "exchange
+color each other for base and peak background and items." Not a new
+palette decision — a straight swap of the two tables' identities. Every
+rule the sixth pass touched (`.shape-table-base`/`-peak` background and
+shadow, `.shape-table-head`, `.wpr-label`, hover border/bar, selected
+border/wash/checkmark/price/bar, and `shapeTextColor()`) had its Base and
+Peak values exchanged wholesale — Base now carries the single-tier
+blue-300/blue-050/blue-500 set Peak had, Peak now carries the three-tier
+coral/`--pp-coral-value`/coral-text set (and its checkmark shadow
+override) Base had. No new colour, no new contrast question: every value
+and its underlying rationale (why `--pp-coral-value` exists, why coral
+reads its background token directly while blue needs a hand blend, why
+the checkmark shadow override travels with whichever table is coral) is
+exactly what the sixth pass established — only which table each value is
+attached to changed. Verified by re-reading every swapped computed style
+(background, shadow, heading, hover, and the full selected-state set on
+both tables) against its new expected value, a live screenshot, and the
+full Node suite — no calculation logic anywhere near this change.
+
 ### Vertical spacing between sections — a footgun
 
 `.page` is a flex column with `gap:16px`, but **only Consumption puts its

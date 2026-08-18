@@ -674,24 +674,18 @@
      background split by a hairline. */
   .shape-tables { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:10px; }
   .shape-table { border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:16px 18px 14px; min-width:0; }
-  /* Background and shadow, per shape (2026-08-18, on explicit product
-     direction: "change background different for 2 tables… add more
-     shadows"; recoloured again the same day — "change the another colour
-     for base block items and background, should be different with peak" —
-     Base moved off the blue family entirely rather than staying a paler
-     blue-700, which is the strongest reading of "different" available.
-     Peak's blue-300-at-8% (#eff6ff) is untouched. Base now reads
-     --pp-coral-bg (#fff0e8) directly rather than a hand-blended tint: blue
-     has no pre-made background tier in this palette (hence the earlier
-     computed 5%/8% blends), but coral does — SB-2026 ships one for every
-     accent hue precisely for this job, so using it is more correct than
-     inventing a parallel blend would be. The shadow reads coral darkened
-     22% (rgba from --pp-coral-value below, see the selected-state comment
-     for why that tier exists) rather than raw coral, matching how Peak's
-     own shadow already reads its border/mark tier (blue-300) and not some
-     separate shade. */
-  .shape-table-base { background:var(--pp-coral-bg); box-shadow:0 10px 26px -8px rgba(199,112,72,.28); }
-  .shape-table-peak { background:#eff6ff; box-shadow:0 10px 26px -8px rgba(60,147,250,.26); }
+  /* Background and shadow, per shape — swapped again (2026-08-18, later
+     still): "exchange color each other for base and peak background and
+     items." Base and Peak simply trade places: every value below is
+     identical to the sixth pass, just reassigned to the other table. Base
+     is now the blue-300-at-8% tint (#eff6ff) Peak used to carry; Peak now
+     reads --pp-coral-bg (#fff0e8) the way Base did. The underlying
+     reasoning for each value (blue has no pre-made background tier in this
+     palette so its tint is hand-blended, coral ships its own so it's read
+     directly; each shadow tints its table's own border/mark tier) is
+     unchanged from the sixth pass — only which table it applies to moved. */
+  .shape-table-base { background:#eff6ff; box-shadow:0 10px 26px -8px rgba(60,147,250,.26); }
+  .shape-table-peak { background:var(--pp-coral-bg); box-shadow:0 10px 26px -8px rgba(199,112,72,.28); }
   /* Uppercase + 15px (was 13px, sentence case) — the table's own identity
      needs to read before any of its numbers do. Colour comes from the
      .shape-table-base/-peak rules below now (was an inline style set from
@@ -700,8 +694,8 @@
      no longer the only inline-coloured piece; shapeTextColor() itself
      stays, since buildPriceReadout() (outside either table) still needs it. */
   .shape-table-head { font-size:15px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; margin-bottom:10px; }
-  .shape-table-base .shape-table-head { color:var(--pp-coral-text); }
-  .shape-table-peak .shape-table-head { color:var(--pp-blue-500); }
+  .shape-table-base .shape-table-head { color:var(--pp-blue-500); }
+  .shape-table-peak .shape-table-head { color:var(--pp-coral-text); }
 
   /* Three rows (6 months / 4 quarters / 2 years — see "Three period rows,
      one selection") replaced the old single row that switched between them.
@@ -733,52 +727,45 @@
   .bar-chart-period { font-size:10.5px; color:var(--pp-text-body); margin-top:8px; font-weight:600; }
   .bar-chart-col.selected .bar-chart-period { color:var(--pp-text-heading); font-weight:700; }
 
-  /* Row labels and hover, scoped per table too (2026-08-18, recoloured
-     again later the same day — see the background comment above for why
-     Base moved to coral). Peak is untouched. Base's hover reads raw
-     --pp-coral (2.25:1 vs white — below the 3:1 non-text floor, but this
-     is a transient, cursor-adjacent, mouse-only affordance on a desktop
-     tool, not the persisted signal selection is) as the "previewing, not
-     committed" tone, one step lighter than the --pp-coral-value the
-     selected state below commits to — the same lighter-hover/deeper-select
-     relationship Base always had (blue-500 -> blue-700), just recoloured
-     rather than collapsed to Peak's single-tier pattern. Placed before the
-     "Selected-state colour" block below (equal specificity — three
-     class-level selectors either way — so source order decides): a
-     hovered *and* selected card must still show selected's colour, not
-     hover's. */
-  .shape-table-base .wpr-label { color:var(--pp-coral-text); }
-  .shape-table-peak .wpr-label { color:var(--pp-blue-500); }
-  .shape-table-base .bar-chart-col:hover { border-color:var(--pp-coral); }
-  .shape-table-peak .bar-chart-col:hover { border-color:var(--pp-blue-300); }
-  .shape-table-base .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-coral); }
-  .shape-table-peak .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-blue-300); }
+  /* Row labels and hover, scoped per table too — swapped along with the
+     background above ("exchange color each other for base and peak
+     background and items"). Peak now carries the lighter-hover/
+     deeper-select coral structure Base had (raw --pp-coral for hover, one
+     step lighter than --pp-coral-value's selected commit — see the
+     selected-state comment below for why that tier exists); Base now
+     carries Peak's single-tier blue-300 (same value previews on hover and
+     commits on selection). Placed before the "Selected-state colour" block
+     below (equal specificity — three class-level selectors either way — so
+     source order decides): a hovered *and* selected card must still show
+     selected's colour, not hover's. */
+  .shape-table-base .wpr-label { color:var(--pp-blue-500); }
+  .shape-table-peak .wpr-label { color:var(--pp-coral-text); }
+  .shape-table-base .bar-chart-col:hover { border-color:var(--pp-blue-300); }
+  .shape-table-peak .bar-chart-col:hover { border-color:var(--pp-coral); }
+  .shape-table-base .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-blue-300); }
+  .shape-table-peak .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-coral); }
 
-  /* Selected-state colour, scoped per table (2026-08-18, recoloured again
-     later the same day — "change the another colour for base block items
-     and background, should be different with peak" — see the background
-     comment above). Base no longer shares blue with Peak at all. Unlike
-     blue-700 (which cleared AA text-contrast on its own, 8.53:1), raw
-     --pp-coral is only 2.25:1 — below even the 3:1 non-text floor blue-300
-     clears for Peak — so Base now needs the same fill-vs-text split Peak
-     already had, just with a tier the coral ramp doesn't ship: --pp-coral
-     (2.25:1) is a hover-only preview (see above), --pp-coral-text (5.00:1)
-     is the price figure, and a third, minted --pp-coral-value:#c77048 —
-     coral darkened 22%, the exact darkenHex(hex,0.22) derivation the
-     certainty-layer hatch texture already uses for this same coral (see
-     CLAUDE.md's hatch-ink table — #c77048 is already that row's own
-     computed value) — covers the border/wash-check/bar, at 3.60:1,
-     clearing the floor blue-300 set as this app's own precedent for that
-     role. The checkmark's shadow is repointed too (was the shared default
-     tuned for blue); Peak leaves it alone since Peak never overrode it. */
-  .shape-table-base .bar-chart-col.selected { border-color:var(--pp-coral-value); background:var(--pp-coral-bg); box-shadow:0 3px 10px rgba(199,112,72,.20); }
-  .shape-table-base .bar-chart-check { background:var(--pp-coral-value); box-shadow:0 1px 3px rgba(199,112,72,.4); }
-  .shape-table-base .bar-chart-col.selected .bar-chart-price { color:var(--pp-coral-text); }
-  .shape-table-base .bar-chart-bar.selected { background:var(--pp-coral-value); }
-  .shape-table-peak .bar-chart-col.selected { border-color:var(--pp-blue-300); background:var(--pp-blue-050); box-shadow:0 3px 10px rgba(60,147,250,.20); }
-  .shape-table-peak .bar-chart-check { background:var(--pp-blue-300); }
-  .shape-table-peak .bar-chart-col.selected .bar-chart-price { color:var(--pp-blue-500); }
-  .shape-table-peak .bar-chart-bar.selected { background:var(--pp-blue-300); }
+  /* Selected-state colour, scoped per table — swapped again (2026-08-18,
+     later still): "exchange color each other for base and peak background
+     and items." Every value is unchanged from the sixth pass, just
+     reassigned to the other table: --pp-coral-value (3.60:1, minted in
+     that pass because raw coral doesn't clear the 3:1 non-text floor) now
+     covers Peak's border/wash-check/bar, --pp-coral-text (5.00:1) now
+     covers Peak's price figure, and Base takes over the single-tier
+     blue-300/blue-050/blue-500 set Peak used to carry. The checkmark's
+     coral-tinted shadow override moves to Peak with it, for the reason it
+     existed on Base before: the shared default shadow is blue-tinted,
+     which reads fine under a blue-300 checkmark (Base, now) but not under
+     a coral one (Peak, now) — Base drops the override for the same reason
+     Peak used to have none. */
+  .shape-table-base .bar-chart-col.selected { border-color:var(--pp-blue-300); background:var(--pp-blue-050); box-shadow:0 3px 10px rgba(60,147,250,.20); }
+  .shape-table-base .bar-chart-check { background:var(--pp-blue-300); }
+  .shape-table-base .bar-chart-col.selected .bar-chart-price { color:var(--pp-blue-500); }
+  .shape-table-base .bar-chart-bar.selected { background:var(--pp-blue-300); }
+  .shape-table-peak .bar-chart-col.selected { border-color:var(--pp-coral-value); background:var(--pp-coral-bg); box-shadow:0 3px 10px rgba(199,112,72,.20); }
+  .shape-table-peak .bar-chart-check { background:var(--pp-coral-value); box-shadow:0 1px 3px rgba(199,112,72,.4); }
+  .shape-table-peak .bar-chart-col.selected .bar-chart-price { color:var(--pp-coral-text); }
+  .shape-table-peak .bar-chart-bar.selected { background:var(--pp-coral-value); }
 
   .price-readout { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:14px 16px; margin-top:16px; }
   .price-readout .pr-eyebrow { font-size:10px; font-weight:700; letter-spacing:.05em; color:var(--pp-text-body); text-transform:uppercase; }
@@ -2738,17 +2725,15 @@
       '<div class="bar-chart-row">' + cols + '</div></div>';
   }
 
-  /** The text-safe tier for a shape's identity colour. Base moved to
-   * coral (2026-08-18, recoloured off blue so it reads as genuinely
-   * different from Peak, not just a paler version of it) and, like Peak
-   * already did, needs a role split: raw --pp-coral is only 2.25:1, so
-   * anything readable (a heading, a price figure) reads --pp-coral-text
-   * (5.00:1) instead. Peak keeps blue-500 (5.08:1) for the same reason,
-   * over its own fill/border colour blue-300 (3.11:1). One place to get
-   * this right rather than three (table heading, price-readout, and any
-   * future caller). */
+  /** The text-safe tier for a shape's identity colour. Base and Peak
+   * swapped identities again ("exchange color each other for base and
+   * peak background and items") — Base now reads blue-500 (5.08:1) the
+   * way Peak used to, over its own fill/border colour blue-300 (3.11:1);
+   * Peak now reads --pp-coral-text (5.00:1) the way Base used to, since
+   * raw --pp-coral is only 2.25:1. One place to get this right rather
+   * than three (table heading, price-readout, and any future caller). */
   function shapeTextColor(shape) {
-    return shape === "Base" ? "var(--pp-coral-text)" : "var(--pp-blue-500)";
+    return shape === "Base" ? "var(--pp-blue-500)" : "var(--pp-coral-text)";
   }
 
   /**
