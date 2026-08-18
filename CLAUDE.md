@@ -337,7 +337,55 @@ distinction between which screen a banner appears on — one component, one
 correct size, everywhere it's used. Screenshotted more than one call site
 (Dashboard's offer banner, Wallet's low-balance banner) after the fix to
 confirm the shared change didn't read as broken or cramped anywhere else,
-not just the one that prompted it.
+not just the one that prompted it. **This entire fix is still correct for
+every banner it applies to except the one that prompted it** — see
+immediately below for why.
+
+**Third try: the offer banner was never a `.banner` at all.** The property
+table above assumed the *component choice* — a light `.banner-amber` icon
+banner — was right and only its sizing was off. It wasn't the sizing. A
+separate, more complete Claude Design project —
+**"Design system sync for peakpower-trading-demo"** (`93293a0d…`, distinct
+from the `5be12592…` component-library project the table above was checked
+against) — contains `Customer Portal.dc.html`, a far more complete
+recreation (88 KB vs. the `ui_kits/portal-2026` sample's 14 KB; a wizard,
+every screen, not just a handful). Its Dashboard renders the pending offer
+as `<sc-if value="{{ hasPendingOffer }}">` wrapping a **dark** card —
+`background:#2D3F54` (this file's own `--pp-teal-900`), white text, a
+`CountdownRing` component on the right — the exact same dark shell this
+file's own Trading detail page already uses for its own firm-offer banner
+(`.offer-banner`/`.ob-*`), not an amber warning banner at all. The earlier
+fix was real (every property it corrected is genuinely more accurate for
+the banners that *are* `.banner-amber`) but was checked against the wrong
+reference for this specific one — the smaller `ui_kits` sample simply
+doesn't have a Dashboard offer banner detailed enough to reveal the actual
+component choice; only reading the fuller project did.
+
+Rebuilt as `.offer-summary` (new: `.os-eyebrow`/`.os-headline`/`.os-sub`/
+`.os-countdown`/`.os-countdown-label`), a 2-column grid inside the
+**existing, shared** `.offer-banner` shell (not a parallel one) — headline
+block on the left, countdown on the right. `CountdownRing` itself (an
+animated SVG arc, `components/feedback/CountdownRing.jsx` in the
+`5be12592…` project) was **not** built: its own `.prompt.md` states
+plainly that "on the dark offer banner the ring can be reduced to plain
+mono mm:ss text in teal-300 — that is the same signal, not a different
+one," which is exactly what `.ob-countdown` already does on the Trading
+detail page's own banner. Building the animated version here would have
+made the Dashboard's condensed banner *more* elaborate than the full
+detail page's, backwards from what "condensed summary" should mean, for a
+difference the design system's own docs say carries no signal.
+
+Two small things fixed as part of the same pass, since they were directly
+in the way: `.offer-banner`'s padding was `18px 20px`, both of
+`Customer Portal.dc.html`'s own offer-banner instances (Dashboard's and
+Trading detail's) use `20px 22px`; and `.btn-accept` (the "View offer" /
+"Accept" button, shared by both banners) was re-checked against
+`components/core/Button.jsx`'s own `accent` variant and corrected —
+hover `#016A6C` → `#17a67c`, padding `8px 18px` → `10px 20px`, `12.5px` →
+`13px` font. Both are shared classes, so both banners picked up the fix
+together; screenshotted the Trading detail page's own banner afterward
+(not just Dashboard's) to confirm the shared change reads cleanly there
+too, the same discipline the property-table fix above already established.
 
 All six screens' "tables" are `display:grid` divs (`.grid-table`/`.gt-head`/
 `.gt-row`, explicit per-screen `grid-template-columns`) rather than
