@@ -777,7 +777,28 @@
   .balance-box .bb-row.total { font-weight:700; color:var(--pp-text-heading); border-top:1px solid var(--pp-border); margin-top:4px; padding-top:6px; }
   .fund-badge { display:inline-block; margin-top:8px; }
 
-  .wizard-vol-input { width:130px; text-align:right; }
+  /* Volume stepper (2026-08-18, "enhance the professional UI/UX approach to
+     the volume input") — adapts the Wallet top-up screen's own
+     .amount-input-wrap pattern (bordered wrap, borderless inner input,
+     focus-within ring) rather than inventing a second one: same shape,
+     brand colour swapped from this app's teal (that screen's own context)
+     to blue-700 (this wizard's own selected/brand colour throughout step
+     2), and a trailing "MW" unit instead of a leading "€", since a unit
+     follows the number in this convention where a currency symbol leads
+     it. Flanking +/− buttons step by VOLUME_STEP_MW via stepWizardVolume()
+     — a real stepper control, not just a bare <input type=number> relying
+     on tiny, inconsistently-styled native browser arrows; the native
+     spinner is hidden below so the two don't compete. */
+  .volume-stepper { display:flex; align-items:stretch; gap:8px; max-width:280px; }
+  .volume-step-btn { width:40px; flex-shrink:0; display:flex; align-items:center; justify-content:center; border:1.5px solid var(--pp-blue-300); border-radius:var(--radius-md); background:#fff; color:var(--pp-blue-700); font-size:19px; font-weight:700; line-height:1; cursor:pointer; font-family:var(--font-sans); transition:background-color .15s ease, border-color .15s ease, transform .1s ease, box-shadow .15s ease; }
+  .volume-step-btn:hover:not(:disabled) { background:var(--pp-blue-050); border-color:var(--pp-blue-500); box-shadow:0 2px 6px rgba(0,76,148,.14); }
+  .volume-step-btn:active:not(:disabled) { transform:scale(.92); }
+  .volume-step-btn:disabled { opacity:.35; cursor:not-allowed; }
+  .volume-input-wrap { flex:1; min-width:0; display:flex; align-items:center; border:1.5px solid var(--pp-blue-300); border-radius:var(--radius-md); padding:0 14px; background:var(--pp-blue-050); transition:border-color .15s ease, box-shadow .15s ease, background-color .15s ease; }
+  .volume-input-wrap:focus-within { border-color:var(--pp-blue-700); box-shadow:0 0 0 3px rgba(0,76,148,.14); background:#fff; }
+  .volume-input-wrap input { border:none; outline:none; padding:10px 0; font-size:19px; font-weight:700; color:var(--pp-text-heading); font-family:inherit; background:transparent; width:100%; text-align:center; -moz-appearance:textfield; }
+  .volume-input-wrap input::-webkit-outer-spin-button, .volume-input-wrap input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+  .volume-input-wrap .viw-unit { font-size:12px; font-weight:700; color:var(--pp-blue-700); padding-left:8px; user-select:none; }
   .field-group .fg-hint { font-size:10.5px; color:var(--pp-text-faint); margin-top:5px; }
   /* Connection picker — a card grid, not a table (2026-08-18, "refactor to
      approach the best UI/UX design with colorful"). Selection is carried by
@@ -789,13 +810,21 @@
      the same signal a second time. One selection language across the whole
      wizard, not two. */
   .conn-toolbar { display:flex; gap:8px; justify-content:flex-end; margin-bottom:10px; }
-  .conn-toolbar button { display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-pill); padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; font-family:var(--font-sans); border:1px solid; transition:background .15s ease, border-color .15s ease, color .15s ease; }
+  .conn-toolbar button { display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-pill); padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; font-family:var(--font-sans); border:1px solid; transition:background-color .18s ease, border-color .18s ease, color .18s ease, transform .12s ease, box-shadow .18s ease; }
   /* Select all reads constructive (tinted in the app's own brand blue);
      Clear all reads neutral/reset. The two actions are opposites and
      shouldn't share one visual weight — a colourful table with two
      identical grey buttons above it would still read as flat. */
   .conn-toolbar .btn-select-all { background:var(--pp-blue-050); border-color:var(--pp-blue-300); color:var(--pp-blue-700); }
-  .conn-toolbar .btn-select-all:hover { background:var(--pp-blue-100); border-color:var(--pp-blue-500); }
+  /* Fixed (2026-08-18): the previous hover target, blue-100 (#e7f0fa), was
+     one shade off blue-050 (#eaf2fb) — close enough to read as no hover at
+     all. Hover now inverts to a solid blue-700 fill with white text (an
+     unmistakable, high-contrast state change) plus a lift and shadow, with
+     a distinct :active press-down — the same tactile language
+     .conn-card:hover already established for this table, extended to its
+     own toolbar. */
+  .conn-toolbar .btn-select-all:hover { background:var(--pp-blue-700); border-color:var(--pp-blue-700); color:#fff; transform:translateY(-1px); box-shadow:0 4px 10px rgba(0,76,148,.28); }
+  .conn-toolbar .btn-select-all:active { transform:translateY(0); box-shadow:0 2px 5px rgba(0,76,148,.24); }
   .conn-toolbar .btn-clear-all { background:#fff; border-color:var(--pp-border-strong); color:var(--pp-text-body); }
   .conn-toolbar .btn-clear-all:hover { background:var(--pp-surface-alt); color:var(--pp-text-heading); }
   .conn-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
@@ -1505,9 +1534,9 @@
   /**
    * Live volume edit. Deliberately does NOT renderApp() — a full re-render
    * rebuilds the <input> and steals focus mid-keystroke, which is exactly why
-   * the old field could not be typed into. Only the derived readouts (total
-   * line, banner, Continue button) are patched in place; the input is left
-   * alone until it loses focus.
+   * the old field could not be typed into. Only the derived readouts (the
+   * banner, Continue button, stepper buttons) are patched in place; the
+   * input is left alone until it loses focus.
    */
   function setWizardVolume(raw) {
     var n = parseFloat(String(raw).replace(",", "."));
@@ -1525,6 +1554,21 @@
     refreshWizardVolumeUi();
   }
 
+  /** The stepper's +/− buttons (2026-08-18). Same snap-to-grid and
+   * double-rounding commitWizardVolume() already uses, so repeated clicks
+   * can't accumulate floating-point drift off the 0,01 MW grid; patches the
+   * input's own value directly rather than renderApp(), for the identical
+   * reason setWizardVolume() above does. */
+  function stepWizardVolume(dir) {
+    var n = (state.wizard.volumeMw || 0) + dir * VOLUME_STEP_MW;
+    if (n < MIN_VOLUME_MW) { n = MIN_VOLUME_MW; }
+    n = Math.round(n / VOLUME_STEP_MW) * VOLUME_STEP_MW;
+    state.wizard.volumeMw = Math.round(n * 1000) / 1000;
+    var input = document.getElementById("wizard-vol");
+    if (input) { input.value = state.wizard.volumeMw.toFixed(2); }
+    refreshWizardVolumeUi();
+  }
+
   function refreshWizardVolumeUi() {
     var invalid = !wizardVolumeValid();
     var note = document.getElementById("wizard-volume-note");
@@ -1532,6 +1576,8 @@
       note.className = "banner " + (invalid ? "banner-amber" : "banner-teal");
       note.textContent = invalid ? wizardVolumeHint() : wizardAllocationNote();
     }
+    var dec = document.getElementById("wizard-vol-dec");
+    if (dec) { dec.disabled = (state.wizard.volumeMw || 0) <= MIN_VOLUME_MW; }
     var btn = document.getElementById("wizard-continue");
     if (btn) { btn.disabled = invalid || !wizardFundsSufficient(); }
   }
@@ -1721,7 +1767,8 @@
     selectWizardBar: selectWizardBar, setHoverBar: setHoverBar, clearHoverBar: clearHoverBar,
     toggleWizardConnection: toggleWizardConnection, selectAllWizardConnections: selectAllWizardConnections,
     clearWizardConnections: clearWizardConnections, setWizardVolume: setWizardVolume,
-    commitWizardVolume: commitWizardVolume, onWizardNoteChange: onWizardNoteChange, submitWizard: submitWizard,
+    commitWizardVolume: commitWizardVolume, stepWizardVolume: stepWizardVolume,
+    onWizardNoteChange: onWizardNoteChange, submitWizard: submitWizard,
     topUpWallet: topUpWallet, backToWallet: backToWallet, closeTopupSuccess: closeTopupSuccess,
     setTopupAmount: setTopupAmount, setTopupAmountValue: setTopupAmountValue,
     onTopupAmountInput: onTopupAmountInput, performTopup: performTopup,
@@ -2923,6 +2970,12 @@
    * and a CURRENT COVER pill, computed live from connectionCoverMw()
    * against the wizard's own currently-selected delivery period rather
    * than a static seeded string.
+   *
+   * The volume field itself is a stepper (2026-08-18, "enhance the
+   * professional UI/UX approach to the volume input") — a bordered,
+   * unit-suffixed input flanked by +/− buttons (stepWizardVolume()),
+   * echoing the Wallet top-up screen's own .amount-input-wrap shape rather
+   * than a bare number field. See CLAUDE.md for the full redesign.
    */
   function buildWizardVolumeTable() {
     var period = getSelectedWizardPeriod();
@@ -2966,12 +3019,22 @@
     var grid = toolbar + '<div class="conn-grid">' + cards + '</div>';
 
     var invalid = !wizardVolumeValid();
-    var volField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Volume (MW) — total for all selected connections</div>' +
-      '<input id="wizard-vol" type="number" class="wizard-vol-input" inputmode="decimal"' +
-      ' min="' + MIN_VOLUME_MW + '" step="' + VOLUME_STEP_MW + '"' +
-      ' value="' + (state.wizard.volumeMw || 0).toFixed(2) + '"' +
-      ' oninput="PP.setWizardVolume(this.value)" onchange="PP.commitWizardVolume(this)">' +
-      '<div class="fg-hint">Minimum 0,01 MW · steps of 0,01 MW · split across all selected connections</div></div>';
+    var atMin = (state.wizard.volumeMw || 0) <= MIN_VOLUME_MW;
+    var volField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Volume (MW) — for all selected connections</div>' +
+      '<div class="volume-stepper">' +
+        '<button type="button" class="volume-step-btn" id="wizard-vol-dec"' + (atMin ? " disabled" : "") +
+          ' aria-label="Decrease volume" onclick="PP.stepWizardVolume(-1)">−</button>' +
+        '<div class="volume-input-wrap">' +
+          '<input id="wizard-vol" type="number" inputmode="decimal"' +
+          ' min="' + MIN_VOLUME_MW + '" step="' + VOLUME_STEP_MW + '"' +
+          ' value="' + (state.wizard.volumeMw || 0).toFixed(2) + '"' +
+          ' oninput="PP.setWizardVolume(this.value)" onchange="PP.commitWizardVolume(this)">' +
+          '<span class="viw-unit">MW</span>' +
+        '</div>' +
+        '<button type="button" class="volume-step-btn" id="wizard-vol-inc"' +
+          ' aria-label="Increase volume" onclick="PP.stepWizardVolume(1)">+</button>' +
+      '</div>' +
+      '<div class="fg-hint">Minimum 0,01 MW · steps of 0,01 MW</div></div>';
 
     var noteBox = '<div id="wizard-volume-note" class="banner ' + (invalid ? "banner-amber" : "banner-teal") + '" style="margin-top:8px">' +
       (invalid ? wizardVolumeHint() : wizardAllocationNote()) + '</div>';

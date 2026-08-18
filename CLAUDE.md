@@ -776,6 +776,88 @@ toolbar, unaffected. `#wizard-total-line` confirmed absent from the DOM and
 Plus the full Node suite — none of this touches calculation logic, only how
 a picker looks.
 
+### A stepper for volume, and a real Select all hover (trading wizard, step 2, 2026-08-18, later still)
+
+Three asks in one message: trim two redundant copy fragments, "fix" the
+`Select all` hover, and "enhance the professional UI/UX approach to the
+volume input."
+
+**Copy trims.** The `.fg-hint` under the volume field dropped its trailing
+"· split across all selected connections" clause, and the `.fg-label`
+above it lost the word "total" (`"Volume (MW) — total for all selected
+connections"` → `"Volume (MW) — for all selected connections"`). Neither
+removes information that was only stated once: `wizardAllocationNote()`'s
+own banner just below still spells out the split in full, by name, once a
+connection is actually chosen ("This block's total volume will be split
+across Rotterdam DC and Venlo cold store…") — the hint and label were a
+second and third restatement of the same fact, the same kind of redundancy
+the total-line removal one pass earlier was already trimming.
+
+**`Select all`'s hover was not a matter of taste — it was two colours a
+human eye can't tell apart.** `--pp-blue-050` is `#eaf2fb`; the hover state
+it transitioned to, `--pp-blue-100`, is `#e7f0fa` — three of three RGB
+channels within 3 units of each other. The button was never *not*
+responding to hover; the response was simply below the threshold of what a
+person can perceive as a colour change. Fixed by inverting to a solid
+`--pp-blue-700` fill with white text on hover — the largest contrast jump
+available in this app's own blue ramp, impossible to mistake for "nothing
+happened" — plus a lift (`translateY(-1px)`) and shadow matching
+`.conn-card:hover`'s own tactile language, and a distinct `:active`
+press-down. `Clear all` was left alone; the request named `Select all`
+specifically, and white-to-grey is already a real, visible shift unlike
+blue-050-to-blue-100.
+
+**The volume input became a stepper**, reusing the Wallet top-up screen's
+own `.amount-input-wrap` shape (a bordered wrap, a borderless inner input,
+a `:focus-within` ring) rather than inventing a second pattern for the same
+job — brand colour swapped to blue-700 (this wizard's own colour, not the
+Wallet screen's teal), and a trailing "MW" unit instead of a leading "€",
+since a unit conventionally follows the number where a currency symbol
+leads it. Flanking `−`/`+` buttons (`stepWizardVolume(dir)`) step by
+`VOLUME_STEP_MW` with the same snap-to-grid and double-rounding
+`commitWizardVolume()` already uses, so repeated clicks can't drift off the
+0,01 MW grid; the decrement button disables itself at `MIN_VOLUME_MW` via
+`refreshWizardVolumeUi()`'s existing live-patch path (`stepWizardVolume`
+patches the input's own value and calls the same function
+`setWizardVolume`/`commitWizardVolume` already call — no new update
+mechanism, no `renderApp()`, for the identical focus-stealing reason those
+two never call it either). The native number-input spin arrows are hidden
+(`-webkit-appearance:none` / `-moz-appearance:textfield`) since a real
+stepper control sits right next to the field now — keeping both would be
+two competing ways to do the same thing.
+
+**A debugging note worth keeping, not just a passing footnote.**
+Verifying the `:focus-within` ring hit a real false negative: Playwright's
+`page.focus(selector)` acquired focus for exactly one tick and then lost it
+(`document.activeElement` reverted to `<body>` within ~200ms, and the input
+node itself proved to be a *different* DOM node by then, confirmed by
+tagging the original with a throwaway JS property and finding it gone —
+i.e., something really did call `renderApp()`, not just steal focus).
+`page.click(selector)` on the identical element, in the identical state,
+focused it and *kept* it focused indefinitely. `.focus()` bypasses the
+browser's normal mouse/event pipeline in a way `.click()` doesn't; whatever
+was rebuilding the DOM only raced the former. This is a Playwright-API
+artifact of this specific test, not an application bug — real users click
+or tab into fields, they don't call `element.focus()` directly — but it
+cost real time to pin down, so: **prefer `page.click()` over `page.focus()`
+when verifying focus-dependent CSS on this page**, and don't conclude a
+`:focus-within` rule is broken from a `.focus()`-based test alone.
+
+Verified: both copy fragments confirmed absent from the page's own text;
+`Select all` hover read via computed style (`rgb(0, 76, 148)` background,
+white text) rather than eyeballed; the stepper's arithmetic checked by
+clicking `+` twice from 0,20 (→ 0,22) and `−` repeatedly from 0,20 down to
+the floor (19 clicks to reach exactly 0,01, matching `0.20 − 19×0.01`),
+confirming the decrement button becomes genuinely unclickable at the floor
+(Playwright's own actionability check refused to click it — a stronger
+guarantee than reading a `.disabled` property) and that a direct
+`stepWizardVolume(-1)` call at the floor still clamps rather than going
+negative; typing a value by hand still re-enables the decrement button and
+increments correctly from an uncommitted typed figure; and the
+`:focus-within` ring itself (border, glow, background) read correctly once
+verified via `page.click()`. Plus the full Node suite — none of this
+touches calculation logic.
+
 ### Three period rows, one selection (trading wizard, step 1, 2026-08-18)
 
 Step 1 ("Product & period") used to switch between Month / Quarter / "Next
