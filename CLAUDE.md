@@ -623,6 +623,29 @@ not built here. If it is built later, this hero is exactly where its real
 numbers replace these placeholder ones — no other change to the panel should
 be needed.
 
+**The Consumption interval table (follow-up pass).** The design project's own
+Consumption screen has a table that this one didn't originally match: its
+"Intervals" card is denser (head `9px 12px` @10px, row `11px 12px` — the
+`.dense` numbers, appropriate since this table is nested in a card), sets
+Time and EPEX in the mono stack, and colours its Short/Long cells with their
+own chart-bar hue. All three are now true here too (`td.mono`, `td.short`,
+`td.long` in `customer-portal.html`) — this table's own 17 real columns and
+their order are untouched; only density and per-cell type/colour changed.
+Reused rather than re-derived: `--pp-orange-text`/`--pp-teal-text`, the same
+pair `.stat-card .value.short`/`.value.export` already read, and the same
+`.net-export` rule already applies elsewhere in this table.
+
+One deliberate divergence from the source: its markup colours those two
+cells with the literal `var(--pp-orange)`/`var(--pp-cyan)` — the bright
+chart-*fill* hex, not the text-safe tier. Checked against white that is
+2,25:1 and 1,87:1, nowhere near AA for text — the exact mistake the "fill vs
+text" rule earlier in this section exists to catch, just uncaught here
+because this particular table row was hand-written demo markup rather than
+run through the same review as the badges and chart strokes. Text here reads
+the paired darker tier instead, matching how every other bright-fill-as-text
+spot in this sync was fixed. If the design project's own Intervals table is
+ever corrected, this file's tokens should already agree with the fix.
+
 **Verification.** Every screen of both portals was screenshotted in a real
 browser (Chrome via Playwright) before and after; a second Playwright pass
 drove the wizard, connection/trade/invoice detail views, the top-up flow, and
@@ -1121,7 +1144,11 @@ multi-day range it's what disambiguates the repeating `HH:MM` values
 across days. The Time column shows the interval's **end**
 (`intervalEndLabel`, see "Two time conventions" above), so a day's rows run
 00:15 … 00:00; the CSV export writes the same label, or the file and the
-screen would name the same row differently.
+screen would name the same row differently. Time and EPEX read in the mono
+stack (`td.mono`), Short and Long carry their own chart-bar hue as text
+(`td.short`/`td.long`) — see "Design system sync" further down for exactly
+which tier of that hue and why. Density is the design system's own spec for
+this table: head `9px 12px` @10px, row `11px 12px`.
 
 ### Visual hierarchy, and three numbers not to "tidy"
 

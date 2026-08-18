@@ -347,18 +347,33 @@
   .table-header-row details { flex:1; min-width:0; }
   .table-wrap { max-height:420px; overflow:auto; border:1px solid var(--pp-border); border-radius:8px; }
   table { width:100%; border-collapse:collapse; font-size:12px; }
-  /* Header and body share one padding rhythm (was 9px/14px vs 6px/14px —
-     the mismatch was part of the cramped feel) so the grid reads as one
-     consistent structure rather than a label row bolted onto denser data
-     rows. Row height grew 6px->8px vertical specifically: with 17 columns
-     the eye travels a long way from Date to Total Cost, and taller rows are
-     what keeps it from losing its line — zebra striping (below) still does
-     the same job it always did, just against slightly taller bands. */
-  thead th { position:sticky; top:0; background:var(--pp-surface-alt); text-align:left; padding:var(--space-2) var(--space-4); font-size:10.5px; font-weight:700; color:var(--pp-text-body); letter-spacing:.03em; border-bottom:1px solid var(--pp-border); text-transform:uppercase; }
+  /* Density matches the design system's own spec for this exact table (its
+     Consumption "Intervals" card — head 9px/12px @10px, row 11px/12px,
+     table row inheriting the 12px above) rather than the ad hoc 8px/16px
+     this used before: this table is "nested inside a card," which is
+     precisely the case CLAUDE.md's own density rule names .dense for. Zebra
+     striping still does the same job it always did, just against these
+     tighter bands. */
+  thead th { position:sticky; top:0; background:var(--pp-surface-alt); text-align:left; padding:9px 12px; font-size:10px; font-weight:700; color:var(--pp-text-body); letter-spacing:.03em; border-bottom:1px solid var(--pp-border); text-transform:uppercase; }
   thead th.num, td.num { text-align:right; }
-  tbody td { padding:var(--space-2) var(--space-4); border-bottom:1px solid var(--pp-border); }
+  tbody td { padding:11px 12px; border-bottom:1px solid var(--pp-border); }
   tbody tr:nth-child(even) { background:var(--pp-surface-zebra); }
   tbody tr.clickable { cursor:pointer; }
+  /* Time and EPEX read as instrument readings, not prose — the design's own
+     Intervals table sets both in the mono stack; every other numeric column
+     stays the table's own sans-serif. */
+  td.mono { font-family:var(--font-mono); }
+  /* Short/Long text mirrors their own chart-bar hue, the same "card tone
+     mirrors the chart" rule the Short/Long stat cards already follow (see
+     CLAUDE.md). The design's own Intervals table sets these with the bright
+     chart-fill hex directly (var(--pp-orange)/var(--pp-cyan)) — checked
+     against white, that is 2,25:1 and 1,87:1, nowhere near AA for text. Text
+     here reads the paired darker tier instead (orange-text/teal-text — cyan
+     has no -text of its own; teal is the same "long" role one tier darker,
+     already what .net-export below uses), same fix already applied
+     everywhere else this sync touched a bright fill used as text. */
+  td.short { color:var(--pp-orange-text); }
+  td.long { color:var(--pp-teal-text); }
   /* The 17 columns are 4 groups (identity / metered / position / money) with
      nothing today marking where one ends and the next begins — a rule at
      each boundary (stronger than the hairline row dividers, so it reads as
@@ -3172,18 +3187,18 @@
       var measured = !hasUsage || hasUsage[i];
       var provenanceHtml = measured ? '<td class="provenance">Measured</td>' : '<td class="provenance projected">Projected</td>';
       rows += '<tr data-idx="' + i + '"' + (measured ? "" : ' class="row-projected"') + '>' +
-        '<td>' + formatDateShort(dateStr) + "</td><td>" + ConsumptionCalc.intervalEndLabel(times[i]) + "</td>" + provenanceHtml +
+        '<td>' + formatDateShort(dateStr) + "</td><td class=\"mono\">" + ConsumptionCalc.intervalEndLabel(times[i]) + "</td>" + provenanceHtml +
         '<td class="num">' + formatNLOrDash(series.consumptionKwh[i], 1) + "</td>" +
         '<td class="num">' + formatNLOrDash(series.productionKwh[i], 1) + "</td>" +
-        '<td class="num">' + formatNLOrDash(prices[i], 4) + "</td>" +
+        '<td class="num mono">' + formatNLOrDash(prices[i], 4) + "</td>" +
         "<td" + tdClass(series.usageCost[i]) + ">" + formatNLOrDash(series.usageCost[i], 2) + "</td>" +
         "<td" + tdClass(series.actualUsage[i]) + ">" + formatNLOrDash(series.actualUsage[i], 1) + "</td>" +
         '<td class="num">' + ConsumptionCalc.formatNL(series.baseVolume[i], 1) + "</td>" +
         '<td class="num">' + ConsumptionCalc.formatNL(series.peakVolume[i], 1) + "</td>" +
         '<td class="num">' + ConsumptionCalc.formatNL(series.hedgeVolume[i], 1) + "</td>" +
         "<td" + tdClass(series.uncovered[i]) + ">" + formatNLOrDash(series.uncovered[i], 1) + "</td>" +
-        '<td class="num">' + formatNLOrDash(series.long[i], 1) + "</td>" +
-        '<td class="num">' + formatNLOrDash(series.short[i], 1) + "</td>" +
+        '<td class="num long">' + formatNLOrDash(series.long[i], 1) + "</td>" +
+        '<td class="num short">' + formatNLOrDash(series.short[i], 1) + "</td>" +
         "<td" + tdClass(series.deltaCost[i]) + ">" + formatNLOrDash(series.deltaCost[i], 2) + "</td>" +
         "<td" + tdClass(series.hedgeCost[i]) + ">" + ConsumptionCalc.formatNL(series.hedgeCost[i], 2) + "</td>" +
         "<td" + tdClass(series.totalCost[i]) + ">" + formatNLOrDash(series.totalCost[i], 2) + "</td>" +
