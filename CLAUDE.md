@@ -284,7 +284,7 @@ functional fidelity to the mockup for these six screens):
 | **Consumption** | Fully real, unchanged from before — see below | Single view, filtered by an arbitrary From/To date range with Day/Month/Quarter presets and CSV export (see "Scope" and "Date-range filter" below). |
 | **Prices** | `portal-seed-data.js` (`PRICES`) | Single view. Six indicative Base/Peak price cards (month/quarter/calendar-year) each with a "Request a price →" link that jumps straight into the Trading wizard (`startWizardFromPrice`), plus a synthetic 90-day trend chart. |
 | **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`, `WIZARD_YEAR`) + in-memory `state.trades` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView`. Detail shows a dark firm-offer banner with a live mm:ss countdown for the one pending trade, a timeline of `events`, and `facts`/`linked` records. The 3-step wizard (product & period → **connection & volume** → review & submit) mirrors the mockup's flow, including its bar-chart period picker and a wallet-balance-sufficiency check gating step 2; `submitWizard()` publishes the wizard's real selections (see "Cross-portal trade flow") and prepends a new `TRD-1079`-style row. See "One block, one connection" below for how step 2 diverges from the mockup. |
-| **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `TOPUPS`, `BANK_DETAILS`) + in-memory `state.walletAvailable/Settled/Reserved` | **ledger** / **topup**, via `state.walletView`. Ledger is a stat-card row + full CSS-grid ledger table (trade/invoice references are clickable links into those screens' detail views). Top-up view has a working iDEAL amount input + preset chips + bank-transfer details; `performTopup()` mutates the in-memory balances and prepends a ledger + top-up-history row, matching the mockup's `performTopup()` transition — genuinely interactive, just not persisted across a page reload. |
+| **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `TOPUPS`, `BANK_DETAILS`) + in-memory `state.walletAvailable/Settled/Reserved` | **ledger** / **topup**, via `state.walletView`. Ledger is a stat-card row + full CSS-grid ledger table (trade/invoice references are clickable links into those screens' detail views). The deposit view has a working iDEAL amount input + preset chips + bank-transfer details; `performTopup()` mutates the in-memory balances and prepends a ledger + deposit-history row, matching the mockup's `performTopup()` transition — genuinely interactive, just not persisted across a page reload. **The copy says "Deposit", the code says `topup`** — see "Two things called deposit" below. |
 | **Invoices** | `portal-seed-data.js` (`INVOICES`) | **list** / **detail** (`state.invoiceId`). Detail shows stat cards, a provisional-data banner where applicable, and a full line-item CSS-grid table with a volume-check/reconciliation footer. Static, ported line-for-line from the mockup; no live invoice generation exists in this POC. |
 
 All six screens' "tables" are `display:grid` divs (`.grid-table`/`.gt-head`/
@@ -1237,11 +1237,34 @@ roundings would miss the total by a cent on every screen showing all three.
 | Back Office | Customers · Commercial settings | The editable **Deposit on a bought block** field (`key: "depositPct"` in `COMMERCIAL_FIELDS`), plus a note saying what changing it does. An unusable value (blank, negative, over 100, words) **refuses the whole save** and keeps the form open — the field goes red. |
 | Back Office | Customers · detail | A **BALANCE OUTSTANDING** stat card, only when there is one. |
 | Back Office | Wallets | An **OUTSTANDING** column (one more than the mockup's, between MINIMUM and STATUS), red with an "N overdue" sub-line when late. |
-| Customer | Trading wizard step 2 & 3 | Deposit and balance rows with the due date, and the balance box's "Deposit reserved" line. The funds check gates on the **deposit**, not the full value — before this a 20 % term was meaningless because you still needed 100 % in the wallet to get past step 2. An insufficient wallet names the shortfall ("Top up € 9.385,20 to cover the 20 % deposit on this block") and links to the top-up flow, rather than only refusing. `wizardGoStep2()` and `submitWizard()` **re-check it themselves**, so the rule survives a call that bypasses the disabled button. |
+| Customer | Trading wizard step 2 & 3 | Deposit and balance rows with the due date, and the balance box's "Deposit reserved" line. The funds check gates on the **deposit**, not the full value — before this a 20 % term was meaningless because you still needed 100 % in the wallet to get past step 2. An insufficient wallet names the shortfall ("Add € 9.385,20 to your wallet to cover the 20 % deposit on this block") and links to the deposit flow, rather than only refusing. `wizardGoStep2()` and `submitWizard()` **re-check it themselves**, so the rule survives a call that bypasses the disabled button. |
 | Customer | Firm-offer banner | "Accepting reserves € X (20 %) now · balance € Y due …", and Accept is **disabled** when the deposit exceeds the available balance, with the shortfall named. |
 | Customer | Trade detail | A **Payment** card: trade value, deposit paid, balance, due date, a **Pay balance** button, and the state in words (overdue by N days / due in N days / paid in full). |
 | Customer | Wallet | A **Balance outstanding** stat card and an **Outstanding balances** table, soonest due first. |
 | Customer | Dashboard | A stat card, and a red/amber banner when a balance is overdue or within 14 days. |
+
+### Two things called deposit
+
+The wallet's funding flow was renamed from **Top up** to **Deposit** (product
+direction, 2026-08-18), which puts the word on two different things:
+
+| | means | called |
+|---|---|---|
+| Funding the wallet | money the customer sends in | "Deposit funds", "Recent deposits", "Deposit successful", "Minimum deposit is € 10,00" |
+| The deposit on a block | the share of a bought trade's value paid up front | "Deposit (20 %)", "Deposit reserved" |
+
+**Only the copy changed.** Every identifier stayed `topup` —
+`PP.topUpWallet`, `performTopup()`, `state.topupAmount`, the `#topup-*` ids
+and the `.topup-*` CSS classes — because those are a documented contract
+(the ids are what let `refreshTopupUi()` patch in place without a re-render,
+and the classes are the mockup's own geometry). Renaming them would be churn
+with no user-visible benefit and would break that contract for nothing.
+
+Where the two senses would collide in one sentence, the copy says what the
+money **does** rather than repeating the word: the wizard's shortfall reads
+"Add € 9.385,20 to your wallet to cover the 20 % deposit on this block", with
+the link — not the sentence — carrying "Deposit funds →". "Deposit € X to
+cover the deposit" reads as a typo.
 
 ### Things that would be easy to get wrong
 

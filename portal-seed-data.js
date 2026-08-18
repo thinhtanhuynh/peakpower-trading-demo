@@ -165,7 +165,7 @@
 
   var WALLET_LEDGER = [
     { date: "13-08 10:15", type: "Funds reserved", tone: "warning", desc: "Base Oct-26 · 0,12 MW", by: "P. Aksoy", byNote: "", ref: "TRD-1072", refKind: "trade", debit: "€ 9.400,00", credit: "", after: "€ 19.722,00" },
-    { date: "12-08 09:14", type: "Deposit (iDEAL)", tone: "success", desc: "Top-up via iDEAL", by: "J. de Vries", byNote: "", ref: "PAY-2291", refKind: "none", debit: "", credit: "€ 25.000,00", after: "€ 29.122,00" },
+    { date: "12-08 09:14", type: "Deposit (iDEAL)", tone: "success", desc: "Deposit via iDEAL", by: "J. de Vries", byNote: "", ref: "PAY-2291", refKind: "none", debit: "", credit: "€ 25.000,00", after: "€ 29.122,00" },
     { date: "05-08 16:03", type: "Reservation released", tone: "info", desc: "TRD-1048 failed — counterparty withdrew", by: "M. Bakker", byNote: "PeakPower", ref: "TRD-1048", refKind: "trade", debit: "", credit: "€ 3.900,00", after: "€ 4.122,00" },
     { date: "05-08 15:22", type: "Funds reserved", tone: "warning", desc: "Base Sep-26 · 0,05 MW", by: "J. de Vries", byNote: "", ref: "TRD-1048", refKind: "trade", debit: "€ 3.900,00", credit: "", after: "€ 222,00" },
     { date: "01-08 00:04", type: "Invoice", tone: "neutral", desc: "July 2026 · 6 connections", by: "System", byNote: "automatic", ref: "INV-2026-07-0042", refKind: "invoice", debit: "€ 18.110,00", credit: "", after: "€ 4.122,00" },
@@ -234,7 +234,7 @@
   ];
   var DASHBOARD_RECENT_ACTIVITY = [
     ["Funds reserved", "€ 9.400,00 · TRD-1072 · Base Oct-26", "13 Aug 10:15", "indigo"],
-    ["Wallet top-up", "€ 25.000,00 via iDEAL", "12 Aug 09:14", "green"],
+    ["Wallet deposit", "€ 25.000,00 via iDEAL", "12 Aug 09:14", "green"],
     ["Trade failed", "TRD-1048 · counterparty withdrew", "05 Aug 16:03", "red"],
     ["Invoice issued", "INV-2026-07-0042 · € 18.110,00", "01 Aug 00:04", "faint"]
   ];
@@ -273,7 +273,7 @@
       newAvailable: newAvailable,
       newSettled: newSettled,
       ledgerEntry: {
-        date: ledgerDate, type: "Deposit (iDEAL)", tone: "success", desc: "Top-up via iDEAL",
+        date: ledgerDate, type: "Deposit (iDEAL)", tone: "success", desc: "Deposit via iDEAL",
         by: "J. de Vries", byNote: "", ref: ref, refKind: "none", debit: "", credit: formatEUR(amount), after: formatEUR(newAvailable)
       },
       topupEntry: { date: topupDate, method: "iDEAL · ING", ref: ref, status: "Succeeded", amount: formatEUR(amount) }

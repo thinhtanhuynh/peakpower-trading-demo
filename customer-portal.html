@@ -546,7 +546,7 @@
   .bank-card { border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:20px 22px; background:#fff; display:flex; flex-direction:column; gap:14px; }
   /* Mockup's raw (non-Card-component) header for iDEAL/Bank transfer — bigger
      than the app's usual 13.5px Card title, since the mockup doesn't route
-     these two cards through the real Card primitive (only "Recent top-ups"
+     these two cards through the real Card primitive (only "Recent deposits"
      does; see .card-title below is deliberately NOT used here). */
   .topup-card-head { display:flex; align-items:center; justify-content:space-between; }
   .topup-card-title { font-size:20px; font-weight:700; color:var(--pp-text-heading); }
@@ -927,6 +927,20 @@
   // so the top-up screen's banner/chip are derived from the SAME real
   // threshold rather than a second hardcoded number.
   var MIN_BALANCE_ALERT = 25000;
+  // "Deposit" now means two different things in this app, and the copy keeps
+  // them apart deliberately:
+  //
+  //   * funding the wallet          — the Wallet's own "Deposit funds" flow,
+  //                                   what this constant and every topup*
+  //                                   identifier below belong to
+  //   * the deposit on a block      — the share of a bought trade's value
+  //                                   paid up front (PortalTermsLink)
+  //
+  // The identifiers stayed `topup` (ids, CSS classes and PP.* handlers are a
+  // documented contract — see CLAUDE.md), so the split lives in the copy, not
+  // in the code. Where the two would collide in one sentence the wording says
+  // what the money does — "add € X to your wallet to cover the 20 % deposit"
+  // — rather than "deposit … deposit", which reads as a typo.
   var MIN_TOPUP_EUR = 10;
 
   var state = {
@@ -1281,7 +1295,7 @@
     var msg = document.getElementById("topup-validation");
     if (msg) {
       msg.textContent = valid || state.topupAmount === 0 ? "" :
-        "Minimum top-up is € " + ConsumptionCalc.formatNL(MIN_TOPUP_EUR, 2) + ".";
+        "Minimum deposit is € " + ConsumptionCalc.formatNL(MIN_TOPUP_EUR, 2) + ".";
     }
   }
 
@@ -1296,7 +1310,7 @@
     var ref = "PAY-" + (2292 + state.topupsExtra.length);
     var newAvailable = state.walletAvailable + amt;
     var ledgerEntry = {
-      date: dateStr, type: "Deposit (iDEAL)", tone: "success", desc: "Top-up via iDEAL",
+      date: dateStr, type: "Deposit (iDEAL)", tone: "success", desc: "Deposit via iDEAL",
       by: "J. de Vries", byNote: "", ref: ref, refKind: "none", debit: "",
       credit: PortalSeedData.formatEUR(amt), after: PortalSeedData.formatEUR(newAvailable)
     };
@@ -1611,11 +1625,11 @@
       setCrumb("Vandersteen Koeling B.V. · 6 open or recent trades");
       actionsHtml = '<button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button>';
     } else if (page === "Wallet" && state.walletView === "topup") {
-      title = "Top up your wallet";
-      setCrumb("Add funds", "Wallet", "backToWallet");
+      title = "Deposit funds";
+      setCrumb("Add funds to your wallet", "Wallet", "backToWallet");
     } else if (page === "Wallet") {
       setCrumb("Vandersteen Koeling B.V. · EUR");
-      actionsHtml = '<button type="button" class="btn-primary" onclick="PP.topUpWallet()">Top up</button>' +
+      actionsHtml = '<button type="button" class="btn-primary" onclick="PP.topUpWallet()">Deposit funds</button>' +
         '<button type="button" class="btn-secondary" onclick="PP.noop()">Statement</button>';
     } else if (page === "Invoices" && state.invoiceId) {
       var inv = PortalSeedData.INVOICES.filter(function (x) { return x.id === state.invoiceId; })[0];
@@ -2023,7 +2037,7 @@
           (quote.dueDate ? formatDateShort(quote.dueDate) : "before delivery") + '</div>' +
           (quote.affordable ? '' :
             '<div class="ob-sub" style="margin-top:6px;color:#fca5a5">Available balance is ' + eur(state.walletAvailable) +
-            ' — top up ' + eur(quote.shortfallEur) + ' to accept this offer.</div>')
+            ' — add ' + eur(quote.shortfallEur) + ' to your wallet to accept this offer.</div>')
         : "";
       offerHtml = '<div class="offer-banner">' +
         '<div class="ob-eyebrow">Firm offer — respond before ' + esc(t.expiresLabel) + '</div>' +
@@ -2176,8 +2190,8 @@
         (afford
           ? ''
           : '<div style="font-size:11px;color:var(--pp-red);margin-top:8px">Available balance is ' +
-            eur(state.walletAvailable) + ' — top up ' + eur(st.balanceEur - state.walletAvailable) +
-            ' to cover this. <a class="btn-link" onclick="PP.topUpWallet()">Top up →</a></div>') +
+            eur(state.walletAvailable) + ' — add ' + eur(st.balanceEur - state.walletAvailable) +
+            ' to cover this. <a class="btn-link" onclick="PP.topUpWallet()">Deposit funds →</a></div>') +
         '</div>';
     }
 
@@ -2413,8 +2427,8 @@
       // it stays consistent with what the request actually requires.
       (sufficient ? "" :
         '<div style="font-size:11px;color:var(--pp-red);margin-top:8px;line-height:1.5">' +
-        'Top up ' + eur(-afterReservation) + ' to cover the ' + pctLabel(st.depositPct) +
-        ' deposit on this block. <a class="btn-link" onclick="PP.topUpWallet()">Top up →</a></div>');
+        'Add ' + eur(-afterReservation) + ' to your wallet to cover the ' + pctLabel(st.depositPct) +
+        ' deposit on this block. <a class="btn-link" onclick="PP.topUpWallet()">Deposit funds →</a></div>');
 
     return rowsHtml +
       '<div class="kv-row"><span class="k">Indicative price</span><span class="v">€ ' + ConsumptionCalc.formatNL(priceVal, 2) + ' / MWh</span></div>' +
@@ -2536,7 +2550,7 @@
 
     var lowBalanceBanner = state.walletAvailable < MIN_BALANCE_ALERT
       ? '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">Your minimum balance alert is set at € ' +
-        ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) + ' — you are currently below it. Top up to keep trading.</div></div>'
+        ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) + ' — you are currently below it. Make a deposit to keep trading.</div></div>'
       : "";
 
     var allLedger = state.walletLedgerExtra.concat(PortalSeedData.WALLET_LEDGER);
@@ -2570,9 +2584,12 @@
   /**
    * Real banner derived from state, replacing the old hardcoded "you are
    * short for the trade you were composing" copy — that trade/return journey
-   * doesn't exist anywhere in this codebase (topUpWallet() is only reached
-   * from the ledger's generic "Top up" button; the wizard's own insufficient-
-   * funds check never links here). Rather than leave the space blank, this
+   * doesn't exist anywhere in this codebase. topUpWallet() is reached from the
+   * ledger's "Deposit funds" button and, since the deposit feature, from the
+   * three shortfall lines that name what is missing (wizard step 2, the firm
+   * offer, and a trade's unpaid balance) — but none of them carries a
+   * composed trade back here, so this screen still cannot say "you are short
+   * for the trade you were composing". Rather than leave the space blank, this
    * mirrors the Wallet ledger's own real low-balance banner: shown, amber,
    * with the actual shortfall when the wallet is genuinely below the alert
    * threshold; a plain informational line otherwise. Either way nothing here
@@ -2583,7 +2600,7 @@
     if (shortfall > 0) {
       return '<div class="topup-note amber">' +
         'You are € ' + ConsumptionCalc.formatNL(shortfall, 2) + ' below your € ' + ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) +
-        ' minimum balance alert. Top up to clear it.</div>';
+        ' minimum balance alert. Make a deposit to clear it.</div>';
     }
     return '<div class="topup-note teal">Your balance is above the € ' +
       ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) + ' minimum balance alert. Add funds any time to keep trading.</div>';
@@ -2638,7 +2655,7 @@
         '<div class="amount-input-wrap"><span>€</span><input id="topup-amount-input" type="text" inputmode="decimal" value="' + ConsumptionCalc.formatNL(state.topupAmount, 0) +
           '" oninput="PP.onTopupAmountInput(this.value)" onchange="PP.setTopupAmount(this.value)"></div>' +
         '<div id="topup-validation" class="fg-hint" style="margin-top:6px;color:var(--pp-red)">' +
-          (topupAmountValid() ? "" : "Minimum top-up is € " + ConsumptionCalc.formatNL(MIN_TOPUP_EUR, 2) + ".") + '</div>' +
+          (topupAmountValid() ? "" : "Minimum deposit is € " + ConsumptionCalc.formatNL(MIN_TOPUP_EUR, 2) + ".") + '</div>' +
       '</div>' +
       smartChipHtml + '<div class="amount-chips">' + chipsHtml + '</div>' +
       '<div class="field-group" style="margin-bottom:0">' +
@@ -2675,7 +2692,7 @@
       return '<div class="gt-row" style="grid-template-columns:' + cols + '"><div>' + t.date + '</div><div>' + t.method + '</div>' +
         '<div class="gt-mono">' + t.ref + '</div><div>' + badge(t.status, "success") + '</div><div class="gt-cell-num">' + t.amount + '</div></div>';
     }).join("");
-    var topupsCard = cardHtml("Recent top-ups", "", '<div class="grid-table dense">' + head + rows + '</div>');
+    var topupsCard = cardHtml("Recent deposits", "", '<div class="grid-table dense">' + head + rows + '</div>');
 
     // #wallet-body's own 16px flex-column gap (see the shared -body wrapper
     // rule) already spaces these three top-level children — no manual
@@ -2696,7 +2713,7 @@
     var t = state.lastTopup;
     if (!t) { backToWallet(); return; }
     var successBanner = '<div class="banner banner-green"><div class="banner-icon success">✓</div><div class="banner-body">' +
-      '<div class="banner-title">Top-up successful</div>' +
+      '<div class="banner-title">Deposit successful</div>' +
       '<div class="banner-sub">€ ' + ConsumptionCalc.formatNL(t.amount, 2) + ' via iDEAL · reference ' + t.ref + ' · ' + t.dateStr + '</div></div></div>';
 
     var summaryCard = cardHtml("New balance", "", '<div class="balance-box">' +
