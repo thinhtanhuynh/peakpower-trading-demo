@@ -700,6 +700,82 @@ and its own live cover with no toolbar, unaffected by any of this. Plus the
 full Node suite — none of this touches calculation logic, only what feeds
 a picker row.
 
+### The picker becomes a card grid, and the redundant total line is gone (trading wizard, step 2, 2026-08-18, later still)
+
+Two asks in one message: "Remove the requested volume text in the request a
+trade wizard step 2, and refactor to approach the best UI/UX design with
+colorful for the select connection table with 2 button select all / clear
+all."
+
+**The `#wizard-total-line` ("Requested volume: X MW") is gone outright.**
+Once the volume input's own value *was* the requested total (the previous
+turn's reversal), a separate line restating that identical number a few
+pixels below it had lost its only reason to exist — it was never showing
+anything the input didn't already say. Removing it meant trimming
+`refreshWizardVolumeUi()`'s matching live-patch block too (dead once the
+element it targeted was gone) and dropping `buildWizardVolumeTable()`'s now-
+unused `totalMW` parameter — the caller still computes `totalMW` for
+`buildWizardSummaryBody`/`buildWizardReviewBody`, it just no longer has
+anywhere to hand it in this one call. The number itself is not lost from the
+screen: the Summary card beside the picker already shows the real derived
+total (`Power`, `Volume`), so this is a duplicate removed, not information
+removed.
+
+**The connection table became a card grid.** `.grid-table.dense` +
+`.gt-row.conn-pick` (a plain bordered-row table, shared CSS class names with
+every other list on this page) is replaced by bespoke `.conn-grid`/
+`.conn-card` — a 2-column grid of individually bordered, individually
+hoverable cards, used nowhere else, so this redesign has zero blast radius
+on any other `.grid-table` in the app (verified by grep: `conn-pick` had
+exactly one consumer before this pass, this table). Selection still reads
+through the **same three-cue language** the wizard's own period-picker cards
+established a few passes ago — border colour, a light wash, a clear "this is
+chosen" signal — except the third cue here is the real `<input
+type=checkbox>` itself rather than a manufactured floating badge: a genuine
+checkbox already unambiguously shows checked/unchecked, so stacking a
+checkmark badge on top of it would repeat the same signal a second time
+instead of adding one. One selection grammar across the whole wizard, not
+two competing ones.
+
+**"Colorful" is spent on two things that carry real meaning, not a rainbow.**
+Every connection getting its own arbitrary accent hue was considered and
+rejected — this app colours things by what they *mean* everywhere else
+(Base vs Peak, Short vs Long, hedge vs delta), and a decorative rainbow with
+no underlying category would be the one place that discipline quietly
+lapsed. Instead:
+- **CURRENT COVER became a pill, not plain text** — `.cc-pill.covered`
+  (blue-050 background, blue-700 text/border, this app's own brand hue) when
+  a connection has real contracted cover for the selected period, `.cc-pill.none`
+  (neutral grey) when it doesn't, `.cc-pill.ineligible` (amber, this app's
+  existing warning tone) carrying the reason inline ("Not eligible · ends 31
+  Dec 2026") instead of trailing grey text. A bare "—" that used to sit in a
+  table cell would have read as an empty, broken chip once wrapped in pill
+  styling, so the copy grew to say what it means ("No current cover",
+  "X,XX MW covered") rather than staying a lone symbol now that it has a
+  shape to fill.
+- **`Select all` and `Clear all` stopped being two identical grey buttons.**
+  They are opposites — one adds, one resets — so `.btn-select-all` reads
+  constructive (tinted blue-050/blue-300/blue-700, this app's own brand
+  triplet) while `.btn-clear-all` stays neutral/outlined, both now pill-
+  shaped (`--radius-pill`) with a leading ✓/✕ glyph, matching this file's
+  existing convention of plain Unicode glyphs over an icon library (the same
+  ✓ `buildStepIndicator()`'s own "done" circle already uses).
+
+Verified live, not just read from the CSS: 5 cards render (4 real pill
+colours captured via computed style — blue-050/blue-700 for covered,
+amber-bg/amber-text for Breda's ineligible pill), `Select all` puts every
+eligible card into the exact selected-state RGB triplet the period-picker
+cards already use elsewhere in this same wizard, `Clear all` returns the
+selected count to zero and swaps the note banner to the amber
+`NO_CONNECTION_HINT` with `Continue` disabled, hover reads blue-300 (one
+step lighter than selected's blue-700, settled past the CSS transition
+before reading it — the same false-positive this file has caught before at
+the exact 150ms mark), and locked mode still renders its one card with no
+toolbar, unaffected. `#wizard-total-line` confirmed absent from the DOM and
+`"Requested volume:"` confirmed absent from the page's own text anywhere.
+Plus the full Node suite — none of this touches calculation logic, only how
+a picker looks.
+
 ### Three period rows, one selection (trading wizard, step 1, 2026-08-18)
 
 Step 1 ("Product & period") used to switch between Month / Quarter / "Next

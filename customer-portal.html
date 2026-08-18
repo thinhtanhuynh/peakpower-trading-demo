@@ -779,18 +779,50 @@
 
   .wizard-vol-input { width:130px; text-align:right; }
   .field-group .fg-hint { font-size:10.5px; color:var(--pp-text-faint); margin-top:5px; }
-  /* Single-connection picker: the whole row is the click target for its radio. */
-  .gt-row.conn-pick { cursor:pointer; }
-  .gt-row.conn-pick:hover:not(.not-eligible):not(.locked) { background:var(--pp-surface-alt); }
-  .gt-row.conn-pick.selected { background:var(--pp-teal-100); box-shadow:inset 2px 0 0 var(--pp-teal-600); }
-  .gt-row.conn-pick.not-eligible { cursor:default; opacity:.55; }
+  /* Connection picker — a card grid, not a table (2026-08-18, "refactor to
+     approach the best UI/UX design with colorful"). Selection is carried by
+     the SAME three-cue language the wizard's own period-picker cards
+     already established one step earlier: border colour, a light wash, and
+     — standing in for a floating checkmark badge — the real <input
+     type=checkbox> itself, which already IS a third, unambiguous cue here;
+     adding a manufactured badge on top of a real checkbox would just repeat
+     the same signal a second time. One selection language across the whole
+     wizard, not two. */
+  .conn-toolbar { display:flex; gap:8px; justify-content:flex-end; margin-bottom:10px; }
+  .conn-toolbar button { display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-pill); padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; font-family:var(--font-sans); border:1px solid; transition:background .15s ease, border-color .15s ease, color .15s ease; }
+  /* Select all reads constructive (tinted in the app's own brand blue);
+     Clear all reads neutral/reset. The two actions are opposites and
+     shouldn't share one visual weight — a colourful table with two
+     identical grey buttons above it would still read as flat. */
+  .conn-toolbar .btn-select-all { background:var(--pp-blue-050); border-color:var(--pp-blue-300); color:var(--pp-blue-700); }
+  .conn-toolbar .btn-select-all:hover { background:var(--pp-blue-100); border-color:var(--pp-blue-500); }
+  .conn-toolbar .btn-clear-all { background:#fff; border-color:var(--pp-border-strong); color:var(--pp-text-body); }
+  .conn-toolbar .btn-clear-all:hover { background:var(--pp-surface-alt); color:var(--pp-text-heading); }
+  .conn-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .conn-card { position:relative; display:flex; align-items:flex-start; gap:10px; background:#fff; border:1.5px solid var(--pp-border); border-radius:var(--radius-md); padding:12px 14px; cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, transform .1s ease, background-color .15s ease; }
+  .conn-card:hover:not(.not-eligible):not(.locked) { border-color:var(--pp-blue-300); box-shadow:0 3px 10px rgba(45,63,84,.10); transform:translateY(-1px); }
+  .conn-card.selected { border-color:var(--pp-blue-700); background:var(--pp-blue-050); box-shadow:0 3px 12px rgba(0,76,148,.16); }
+  .conn-card.not-eligible { cursor:default; opacity:.55; }
   /* Locked (opened from a connection's own detail page, see
      startWizardFromConnection): still selected/full-opacity, just not
-     interactive — unlike .not-eligible, this row IS the trade, so dimming
+     interactive — unlike .not-eligible, this card IS the trade, so dimming
      it would read as "unavailable" rather than "already decided." */
-  .gt-row.conn-pick.locked { cursor:default; }
-  .gt-row.conn-pick input[type=radio], .gt-row.conn-pick input[type=checkbox] { accent-color:var(--pp-teal-600); cursor:pointer; }
-  .gt-row.conn-pick input[type=checkbox]:disabled { cursor:default; }
+  .conn-card.locked { cursor:default; }
+  .conn-card input[type=checkbox] { width:17px; height:17px; margin-top:1px; accent-color:var(--pp-blue-700); cursor:pointer; flex-shrink:0; }
+  .conn-card input[type=checkbox]:disabled { cursor:default; }
+  .conn-card .cc-body { flex:1; min-width:0; }
+  .conn-card .cc-name { font-size:13px; font-weight:700; color:var(--pp-text-heading); }
+  .conn-card .cc-ean { font-family:var(--font-mono); font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
+  .conn-card .cc-foot { margin-top:10px; }
+  /* A pill, not plain coloured text — "colorful" means a chip carries more
+     visual weight per card than a coloured number would. Two tones only,
+     both already meaningful elsewhere in this app rather than invented for
+     this table: blue for "has real cover" (the app's own brand hue), grey
+     for none, amber for ineligible (this app's existing warning tone). */
+  .conn-card .cc-pill { display:inline-flex; align-items:center; padding:3px 9px; border-radius:var(--radius-pill); font-size:11px; font-weight:700; border:1px solid; }
+  .conn-card .cc-pill.covered { background:var(--pp-blue-050); color:var(--pp-blue-700); border-color:var(--pp-blue-300); }
+  .conn-card .cc-pill.none { background:var(--pp-surface-alt); color:var(--pp-text-faint); border-color:var(--pp-border); }
+  .conn-card .cc-pill.ineligible { background:var(--pp-amber-bg); color:var(--pp-amber-text); border-color:var(--pp-amber-border); }
   .wizard-actions { display:flex; gap:10px; margin-top:16px; }
 
   /* Wallet — top-up screen, fidelity-matched to Customer Portal - Preview.html's
@@ -1494,13 +1526,7 @@
   }
 
   function refreshWizardVolumeUi() {
-    var totalMW = wizardTotalMW();
     var invalid = !wizardVolumeValid();
-    var line = document.getElementById("wizard-total-line");
-    if (line) {
-      line.textContent = "Requested volume: " + ConsumptionCalc.formatNL(totalMW, 3) + " MW";
-      line.style.color = invalid ? "var(--pp-red)" : "var(--pp-teal-700)";
-    }
     var note = document.getElementById("wizard-volume-note");
     if (note) {
       note.className = "banner " + (invalid ? "banner-amber" : "banner-teal");
@@ -2875,44 +2901,42 @@
   }
 
   /**
-   * Connection & volume: a checkbox multi-select (2026-08-18 — was a radio,
-   * exactly one connection; see CLAUDE.md, "Multiple connections, one shared
-   * volume") plus a "Select all" / "Clear all" pair, and the volume entered
-   * once below the table is the REQUESTED TOTAL across every selected
-   * connection, not a per-connection figure (see wizardTotalMW/wizardVolumes
-   * — reverted the same day it shipped, on explicit direction "do not
-   * multiply for multiple EANs"). Locked mode (opened from a connection's
-   * own detail page) shows only that one row, non-interactive, with no
+   * Connection & volume: a card grid, not a table (2026-08-18 — refactored
+   * for "the best UI/UX design, colorful"; see CLAUDE.md "The picker
+   * becomes a card grid" for the redesign in full), plus a "Select all" /
+   * "Clear all" pair. Volume is entered once below the grid and is the
+   * REQUESTED TOTAL across every selected connection, not a per-connection
+   * figure (see wizardTotalMW/wizardVolumes — reverted the same day it
+   * shipped, on explicit direction "do not multiply for multiple EANs");
+   * the redundant "Requested volume: X MW" line that used to restate that
+   * same number just below the input is gone too (2026-08-18, later still
+   * — "remove the requested volume text"), since the input's own value
+   * already shows it and the Summary card beside this one derives and
+   * shows the real total from it. Locked mode (opened from a connection's
+   * own detail page) shows only that one card, non-interactive, with no
    * toolbar — the choice was already made by which detail page this came
    * from.
    *
-   * The table shows each connection's full EAN (looked up from
-   * PortalSeedData.CONNECTIONS by id — the shared source, not a second copy;
-   * see CLAUDE.md "Derived detail must not out-claim its source") and its
-   * CURRENT COVER, now computed live from connectionCoverMw() against the
-   * wizard's own currently-selected delivery period rather than read off a
-   * static seeded string — so accepting a trade and coming back to request
-   * another one shows a genuinely different number if it changes what's
-   * already covered. AUG CONSUMPTION was dropped entirely (2026-08-18): it
-   * was always a static, non-updating figure with no clear use in a picker
-   * whose whole job is "how much of this connection is already covered."
+   * Each card shows the connection's full EAN (looked up from
+   * PortalSeedData.CONNECTIONS by id — the shared source, not a second
+   * copy; see CLAUDE.md "Derived detail must not out-claim its source")
+   * and a CURRENT COVER pill, computed live from connectionCoverMw()
+   * against the wizard's own currently-selected delivery period rather
+   * than a static seeded string.
    */
-  function buildWizardVolumeTable(totalMW) {
+  function buildWizardVolumeTable() {
     var period = getSelectedWizardPeriod();
-    var cols = "32px 2.6fr 1.2fr";
-    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div></div><div>CONNECTION</div>' +
-      '<div class="gt-cell-num">CURRENT COVER</div></div>';
     var locked = state.wizard.lockedConn;
     var ids = state.wizard.connIds || [];
     var list = locked
       ? PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return ids.indexOf(c.id) !== -1; })
       : PortalSeedData.WIZARD_CONNECTIONS;
-    var rows = list.map(function (c) {
+    var cards = list.map(function (c) {
       var sel = ids.indexOf(c.id) !== -1;
       var pick = c.notEligible
-        ? '<span class="gt-mono" style="color:var(--pp-text-faint)">—</span>'
-        // No separate onchange: a click anywhere in the row (including
-        // directly on the checkbox) already bubbles to the row's own
+        ? ""
+        // No separate onchange: a click anywhere in the card (including
+        // directly on the checkbox) already bubbles to the card's own
         // onclick below. A second handler here would double-fire on a
         // direct checkbox click and immediately toggle the selection back
         // off — harmless for the old radio's idempotent "set" but not for
@@ -2920,22 +2944,26 @@
         : '<input type="checkbox"' + (sel ? " checked" : "") + (locked ? " disabled" : "") + '>';
       var click = (c.notEligible || locked) ? "" : ' onclick="PP.toggleWizardConnection(\'' + c.id + '\')"';
       var fullEan = (PortalSeedData.CONNECTIONS.filter(function (x) { return x.id === c.id; })[0] || {}).ean || c.id;
-      var noteSuffix = c.note ? " · " + c.note : "";
-      var coverMw = connectionCoverMw(c.id, period.start, period.end);
-      var coverText = coverMw === 0 ? "—" : ConsumptionCalc.formatNL(coverMw, 2) + " MW";
-      return '<div class="gt-row conn-pick' + (sel ? " selected" : "") + (c.notEligible ? " not-eligible" : "") + (locked ? " locked" : "") +
-        '" style="grid-template-columns:' + cols + '"' + click + '>' +
-        '<div>' + pick + '</div>' +
-        '<div><div style="font-weight:600">' + c.name + '</div><div class="gt-cell-sub gt-mono">' + fullEan +
-          noteSuffix + (c.notEligible ? " · not eligible" : "") + '</div></div>' +
-        '<div class="gt-cell-num">' + coverText + '</div></div>';
+      var foot;
+      if (c.notEligible) {
+        foot = '<span class="cc-pill ineligible">Not eligible' + (c.note ? " · " + c.note : "") + '</span>';
+      } else {
+        var coverMw = connectionCoverMw(c.id, period.start, period.end);
+        foot = coverMw === 0
+          ? '<span class="cc-pill none">No current cover</span>'
+          : '<span class="cc-pill covered">' + ConsumptionCalc.formatNL(coverMw, 2) + ' MW covered</span>';
+      }
+      return '<div class="conn-card' + (sel ? " selected" : "") + (c.notEligible ? " not-eligible" : "") + (locked ? " locked" : "") + '"' + click + '>' +
+        pick +
+        '<div class="cc-body"><div class="cc-name">' + c.name + '</div><div class="cc-ean">' + fullEan + '</div>' +
+        '<div class="cc-foot">' + foot + '</div></div></div>';
     }).join("");
     var toolbar = locked ? "" :
-      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px">' +
-        '<button type="button" class="btn-secondary btn-sm" onclick="PP.selectAllWizardConnections()">Select all</button>' +
-        '<button type="button" class="btn-secondary btn-sm" onclick="PP.clearWizardConnections()">Clear all</button>' +
+      '<div class="conn-toolbar">' +
+        '<button type="button" class="btn-select-all" onclick="PP.selectAllWizardConnections()">✓ Select all</button>' +
+        '<button type="button" class="btn-clear-all" onclick="PP.clearWizardConnections()">✕ Clear all</button>' +
       '</div>';
-    var table = toolbar + '<div class="grid-table dense">' + head + rows + '</div>';
+    var grid = toolbar + '<div class="conn-grid">' + cards + '</div>';
 
     var invalid = !wizardVolumeValid();
     var volField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Volume (MW) — total for all selected connections</div>' +
@@ -2945,8 +2973,6 @@
       ' oninput="PP.setWizardVolume(this.value)" onchange="PP.commitWizardVolume(this)">' +
       '<div class="fg-hint">Minimum 0,01 MW · steps of 0,01 MW · split across all selected connections</div></div>';
 
-    var totalLine = '<div id="wizard-total-line" style="margin-top:10px;font-size:13px;font-weight:700;color:' +
-      (invalid ? "var(--pp-red)" : "var(--pp-teal-700)") + '">Requested volume: ' + ConsumptionCalc.formatNL(totalMW, 3) + ' MW</div>';
     var noteBox = '<div id="wizard-volume-note" class="banner ' + (invalid ? "banner-amber" : "banner-teal") + '" style="margin-top:8px">' +
       (invalid ? wizardVolumeHint() : wizardAllocationNote()) + '</div>';
     var noteField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Note (optional)</div>' +
@@ -2957,7 +2983,7 @@
     var actions = '<div class="wizard-actions"><button type="button" id="wizard-continue" class="btn-primary"' + disabled + ' onclick="PP.wizardGoStep2()">Continue to review</button>' +
       '<button type="button" class="btn-secondary" onclick="PP.wizardGoStep0()">Back</button></div>';
 
-    return table + volField + totalLine + noteBox + noteField + actions;
+    return grid + volField + noteBox + noteField + actions;
   }
 
   /**
@@ -3047,7 +3073,7 @@
       bodyHtml = '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">' +
         '<div>' + cardHtml("Connection & volume",
           state.wizard.lockedConn ? "Requested from this connection" : "Pick one or more connections this block is traded for",
-          buildWizardVolumeTable(totalMW)) + '</div>' +
+          buildWizardVolumeTable()) + '</div>' +
         '<div>' + cardHtml("Summary", "", buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
         '</div>';
     } else {
