@@ -375,6 +375,33 @@ made the Dashboard's condensed banner *more* elaborate than the full
 detail page's, backwards from what "condensed summary" should mean, for a
 difference the design system's own docs say carries no signal.
 
+**The ring got built after all, two turns later** (2026-08-18, still the
+same day) — explicit product direction ("a yellow circle around the time
+remaining in the firm offer in Dashboard page") overrode the call above,
+rather than the reasoning behind it turning out wrong. `countdownRingSvg()`
+sits right next to `mmss()`: two concentric `<circle>`s (a faint
+`rgba(255,255,255,.16)` track, then an amber `var(--pp-amber)` arc) with
+the arc's `stroke-dasharray`/`stroke-dashoffset` driven by
+`pending.secondsRemaining / pending.secondsTotal` — both fields already
+existed on every trade record (seeded and linked alike, see
+`portal-seed-data.js`/`portal-trade-link.js`'s `toCustomerTrade`), so
+this needed no data-model change, only a renderer. `CountdownRing.jsx`'s
+own colours are tuned for a light background and would be illegible here —
+its track and centre text both read `var(--pp-teal-900)`, this banner's
+own background — so the track becomes translucent white and the centre
+text stays `--pp-teal-300` (5.69:1 against `--pp-teal-900`, unchanged
+from what `.os-countdown` already used before it sat inside a ring). The
+amber arc itself needed no adaptation; amber reads clearly on this
+background on its own (5.87:1) and is the one part of the component that
+was never in question. `.ob-countdown` on the Trading detail page is
+**deliberately left as plain text** — the request named the Dashboard
+banner specifically, and the parity argument two turns ago (why build an
+animated ring nowhere else on the page already has one) is still true for
+that banner; only the Dashboard's own banner is asked to be more elaborate
+than its sibling now, not both. Verified live, not just statically: a
+Playwright read one second apart confirmed both the mm:ss text and the
+arc's `stroke-dashoffset` move together on the same tick.
+
 Two small things fixed as part of the same pass, since they were directly
 in the way: `.offer-banner`'s padding was `18px 20px`, both of
 `Customer Portal.dc.html`'s own offer-banner instances (Dashboard's and
@@ -861,6 +888,87 @@ settle rather than mid-animation (an early check caught its own false
 positive here — a value read at the same 150ms the transition itself
 takes back an interpolated, not final, colour), cross-table selection
 exclusivity re-run, and the full Node suite.
+
+#### Base leaves the blue family entirely (2026-08-18, a sixth pass)
+
+Product direction: "change the another colour for base block items and
+background, should be different with peak block items in the trade
+wizard." The fifth pass above had already split Base and Peak into two
+different *shades* of blue (blue-700 vs blue-300/blue-500); asked again
+for "different," a paler or deeper blue would only repeat that same
+answer. Base moves to coral instead — `--pp-coral` and its paired tiers —
+confirmed unused anywhere else in the file first (`grep -n "pp-coral"`
+matched only the `:root` definition), so adopting it here creates no
+collision with an existing role elsewhere on the page. Peak stays exactly
+as the fifth pass left it; nothing in this pass touches a
+`.shape-table-peak` rule.
+
+**Coral doesn't clear the same floor blue-700 did, and that's the one real
+complication.** Base's old identity colour, blue-700, was 8.53:1 against
+white — comfortably AA text-safe on its own, which is why Base never
+needed the fill-vs-text split Peak's blue-300 (3.11:1) already required.
+Raw `--pp-coral` (`#FF8F5C`) is only 2.25:1 — below even the 3:1
+non-text floor this app has been treating as its own minimum for a
+meaningful border/checkmark/bar (the threshold blue-300 was checked
+against establishing the precedent), let alone AA text. Base now needs
+*three* tiers where it used to need one:
+
+| Tier | Hex | vs white | Role |
+|---|---|---|---|
+| `--pp-coral` | `#FF8F5C` | 2.25:1 | Hover-only preview — a transient, cursor-adjacent, mouse-only affordance, not the persisted signal selection is, so the sub-3:1 contrast was accepted here rather than solved for |
+| `--pp-coral-value` (new) | `#c77048` | 3.60:1 | Selected border, wash checkmark, selected bar — clears the 3:1 floor blue-300 set |
+| `--pp-coral-text` | `#B4531F` | 5.00:1 | Table heading, row labels, selected price figure — anything read as text |
+
+`--pp-coral-value` is minted the same way `--pp-red-value` was minted
+alongside `--pp-red` earlier in this project (see "Design system sync"):
+an existing SB-2026 tier didn't cover a role the app actually needed, so a
+fourth was added next to the other three rather than forcing one of them
+into a job its contrast doesn't support. It isn't a new colour, either —
+`#c77048` is `darkenHex("#FF8F5C", 0.22)`, the exact derivation (and, it
+turns out, the exact value) the certainty-layer hatch texture already
+computed for this same coral fill (see "A hedge is a step, not a ramp"'s
+sibling section on provisional hatching, whose own ink table lists this
+identical hex for this identical hue) — reused rather than re-derived,
+the same way `darkenHex()` was always meant to be called again if a fill
+it already knew about needed a darker step somewhere else.
+
+**The table's own background reads `--pp-coral-bg` (`#fff0e8`) directly,
+not a computed blend** — a deliberate departure from how Base and Peak's
+backgrounds were built one pass earlier (blue-700 at 5%, blue-300 at 8%,
+both hand-computed). Those were computed *because they had to be*: the
+blue ramp in this palette has no `-bg` tier of its own (it's numbered
+100/050 instead), so there was nothing to reach for. Coral, like every
+other SB-2026 accent hue, ships its own pre-made `-bg` tint for exactly
+this job. Reaching for it directly isn't a shortcut relative to the blue
+tables' approach, it's the more correct move — computing a bespoke blend
+was always a workaround for blue's missing tier, not the standard to
+match. The table's shadow reads `--pp-coral-value`'s rgb
+(`rgba(199,112,72,.28)`), mirroring how Peak's own shadow already reads
+its border/mark tier (blue-300) rather than some separately-chosen shade.
+
+**Hover keeps Base's own lighter-preview/deeper-commit shape, just
+recoloured** — hover reads `--pp-coral`, selected reads
+`--pp-coral-value`, one step darker, the same relationship blue-500 (hover)
+and blue-700 (selected) had before this pass. This is very deliberately
+*not* collapsed to Peak's pattern, where hover and selected already shared
+one single tier (blue-300) — Base has always had two, and recolouring is
+not the moment to also flatten a structural difference nobody asked to
+change.
+
+`shapeTextColor()`, the one JS function `buildPriceReadout()` (outside
+either table) still depends on, now returns `--pp-coral-text` for Base
+instead of `--pp-blue-700` — Peak's branch is untouched.
+
+Verified the same way as every pass in this section: computed-style
+assertions for background/shadow/heading/label/hover/selected on both
+tables (Peak's own values re-read and confirmed byte-identical to before,
+not just assumed unchanged because its rules weren't edited), a live
+screenshot, and cross-table selection exclusivity re-confirmed — clicking
+a Peak card still clears Base's own `.selected` state and vice versa (one
+global selection across all six rows, pre-existing behaviour from "Three
+period rows, one selection," unrelated to and unaffected by this pass, but
+cheap to re-check given the CSS in the same area was touched) — plus the
+full Node suite.
 
 ### Vertical spacing between sections — a footgun
 

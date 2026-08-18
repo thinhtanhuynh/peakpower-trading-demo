@@ -27,7 +27,7 @@
     --pp-teal:#0FA69D; --pp-teal-text:#0A7A74; --pp-teal-deep:#028183;
     --pp-cyan:#00D4C6;
     --pp-violet:#9151B8; --pp-violet-text:#6F3A91; --pp-violet-bg:#f3eaf9; --pp-violet-border:#d6b7e8;
-    --pp-coral:#FF8F5C; --pp-coral-text:#B4531F; --pp-coral-bg:#fff0e8; --pp-coral-border:#ffc6a8;
+    --pp-coral:#FF8F5C; --pp-coral-text:#B4531F; --pp-coral-bg:#fff0e8; --pp-coral-border:#ffc6a8; --pp-coral-value:#c77048;
     --pp-pink:#FF57B0; --pp-pink-text:#A62E76; --pp-pink-bg:#ffeaf5; --pp-pink-border:#ffb8dc;
     --pp-grass:#73CC80; --pp-grass-text:#1B7A4F;
     --pp-amber:#EEB72B; --pp-amber-bg:#fdf5e0; --pp-amber-border:#eed591; --pp-amber-text:#8A6710;
@@ -600,19 +600,25 @@
   /* Dashboard's own condensed firm-offer summary — a 2-column grid (headline
      block left, countdown right), distinct from the Trading detail page's
      stacked big-price layout above; both use the same dark .offer-banner
-     shell. The design's own CountdownRing (an animated SVG arc) is reduced
-     to plain mono mm:ss text in teal-300 here — CountdownRing.prompt.md
-     states this explicitly for this exact dark-banner context ("the ring
-     can be reduced to plain mono mm:ss text in teal-300 — that is the same
-     signal, not a different one"), and it is exactly what .ob-countdown
-     above already does for the Trading detail page, so the two stay
-     consistent with each other, not just with the reference. */
+     shell. Countdown treatment now diverges between the two on purpose
+     (2026-08-18, later still, on explicit product direction — "a yellow
+     circle around the time remaining"): this ring is what CountdownRing.jsx
+     actually draws, an amber arc draining as pending.secondsRemaining counts
+     down against pending.secondsTotal, built by countdownRingSvg() near
+     mmss() below with the component's own light-background track/text
+     swapped for legible ones on --pp-teal-900 (see that function's own
+     comment). .ob-countdown on the Trading detail page keeps the plain mono
+     mm:ss text CountdownRing.prompt.md explicitly allows as an equivalent
+     signal for a dark banner — correct when it was the only countdown on a
+     dark surface, and left as-is now because the request naming the ring
+     named the Dashboard specifically, not because that reasoning changed. */
   .offer-summary { display:grid; grid-template-columns:1fr auto; gap:20px; align-items:center; }
   .offer-summary .os-eyebrow { font-size:10px; font-weight:700; letter-spacing:.1em; color:var(--pp-teal-300); text-transform:uppercase; }
   .offer-summary .os-headline { font-size:18px; font-weight:700; margin-top:8px; }
   .offer-summary .os-sub { font-size:12.5px; color:#c3cfdd; margin-top:5px; }
-  .offer-summary .os-countdown { font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--pp-teal-300); text-align:center; }
-  .offer-summary .os-countdown-label { font-size:10px; color:#93a2b5; text-align:center; margin-top:2px; }
+  .os-countdown-ring { position:relative; width:72px; height:72px; display:flex; align-items:center; justify-content:center; margin:0 auto; }
+  .offer-summary .os-countdown { font-family:var(--font-mono); font-size:14px; font-weight:700; color:var(--pp-teal-300); text-align:center; position:relative; z-index:1; }
+  .offer-summary .os-countdown-label { font-size:10px; color:#93a2b5; text-align:center; margin-top:6px; }
   /* Verified against components/core/Button.jsx's own "accent" variant
      (background var(--pp-mint) === this file's --pp-teal-500, same hex;
      hover #17a67c; padding 10px 20px at size "md"; font-size 13px) — this
@@ -670,16 +676,21 @@
   .shape-table { border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:16px 18px 14px; min-width:0; }
   /* Background and shadow, per shape (2026-08-18, on explicit product
      direction: "change background different for 2 tables… add more
-     shadows"). Each background is that shape's own identity hex blended
-     over white at a low opacity — computed the same way the selected
-     card's own wash already was, not eyeballed: blue-700 (Base) at 5%
-     gives #f2f6fa, blue-300 (Peak) at 8% gives #eff6ff — Peak needs the
-     higher opacity to register at all, since blue-300 is the lighter,
-     less saturated of the two hues to begin with. The shadow is
-     deliberately stronger than the flat --pp-shadow-card every other card
-     on this page carries: these two tables are this step's one real
-     decision, so they read as raised off the page, not merely bordered. */
-  .shape-table-base { background:#f2f6fa; box-shadow:0 10px 26px -8px rgba(0,76,148,.22); }
+     shadows"; recoloured again the same day — "change the another colour
+     for base block items and background, should be different with peak" —
+     Base moved off the blue family entirely rather than staying a paler
+     blue-700, which is the strongest reading of "different" available.
+     Peak's blue-300-at-8% (#eff6ff) is untouched. Base now reads
+     --pp-coral-bg (#fff0e8) directly rather than a hand-blended tint: blue
+     has no pre-made background tier in this palette (hence the earlier
+     computed 5%/8% blends), but coral does — SB-2026 ships one for every
+     accent hue precisely for this job, so using it is more correct than
+     inventing a parallel blend would be. The shadow reads coral darkened
+     22% (rgba from --pp-coral-value below, see the selected-state comment
+     for why that tier exists) rather than raw coral, matching how Peak's
+     own shadow already reads its border/mark tier (blue-300) and not some
+     separate shade. */
+  .shape-table-base { background:var(--pp-coral-bg); box-shadow:0 10px 26px -8px rgba(199,112,72,.28); }
   .shape-table-peak { background:#eff6ff; box-shadow:0 10px 26px -8px rgba(60,147,250,.26); }
   /* Uppercase + 15px (was 13px, sentence case) — the table's own identity
      needs to read before any of its numbers do. Colour comes from the
@@ -689,7 +700,7 @@
      no longer the only inline-coloured piece; shapeTextColor() itself
      stays, since buildPriceReadout() (outside either table) still needs it. */
   .shape-table-head { font-size:15px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; margin-bottom:10px; }
-  .shape-table-base .shape-table-head { color:var(--pp-blue-700); }
+  .shape-table-base .shape-table-head { color:var(--pp-coral-text); }
   .shape-table-peak .shape-table-head { color:var(--pp-blue-500); }
 
   /* Three rows (6 months / 4 quarters / 2 years — see "Three period rows,
@@ -722,37 +733,48 @@
   .bar-chart-period { font-size:10.5px; color:var(--pp-text-body); margin-top:8px; font-weight:600; }
   .bar-chart-col.selected .bar-chart-period { color:var(--pp-text-heading); font-weight:700; }
 
-  /* Row labels and hover, scoped per table too (2026-08-18) — "change…
-     colour for all items inside each shape" meant more than the selected
-     card alone. Hover used to be one shared blue-300 border regardless of
-     which table; Peak keeps that value (it was already Peak's own
-     identity colour), Base gets its own — blue-500, a midpoint between
-     resting-neutral and Base's blue-700 selected state, so hovering in
-     either table now previews *that table's* colour, not a third,
-     unrelated one. Placed before the "Selected-state colour" block below
-     (equal specificity — three class-level selectors either way — so
-     source order decides): a hovered *and* selected card must still show
-     selected's colour, not hover's. */
-  .shape-table-base .wpr-label { color:var(--pp-blue-700); }
+  /* Row labels and hover, scoped per table too (2026-08-18, recoloured
+     again later the same day — see the background comment above for why
+     Base moved to coral). Peak is untouched. Base's hover reads raw
+     --pp-coral (2.25:1 vs white — below the 3:1 non-text floor, but this
+     is a transient, cursor-adjacent, mouse-only affordance on a desktop
+     tool, not the persisted signal selection is) as the "previewing, not
+     committed" tone, one step lighter than the --pp-coral-value the
+     selected state below commits to — the same lighter-hover/deeper-select
+     relationship Base always had (blue-500 -> blue-700), just recoloured
+     rather than collapsed to Peak's single-tier pattern. Placed before the
+     "Selected-state colour" block below (equal specificity — three
+     class-level selectors either way — so source order decides): a
+     hovered *and* selected card must still show selected's colour, not
+     hover's. */
+  .shape-table-base .wpr-label { color:var(--pp-coral-text); }
   .shape-table-peak .wpr-label { color:var(--pp-blue-500); }
-  .shape-table-base .bar-chart-col:hover { border-color:var(--pp-blue-500); }
+  .shape-table-base .bar-chart-col:hover { border-color:var(--pp-coral); }
   .shape-table-peak .bar-chart-col:hover { border-color:var(--pp-blue-300); }
-  .shape-table-base .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-blue-500); }
+  .shape-table-base .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-coral); }
   .shape-table-peak .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-blue-300); }
 
-  /* Selected-state colour, scoped per table (2026-08-18) — BASE and PEAK no
-     longer share one hardcoded blue-700. Base keeps blue-700 throughout
-     (already AA text-contrast, 8.53:1 vs white). Peak splits by role like
-     every other bright-fill colour in this app already does: blue-300
-     (3.11:1 — a fill/border/mark tier only, same threshold class as a chart
-     bar) for the border/wash/checkmark, blue-500 (5.08:1, clears AA text)
-     for the price figure — using blue-300 for that text too would repeat
-     the exact contrast bug the SB-2026 sync's "fill vs text" rule exists to
-     catch (see CLAUDE.md), just in a new spot. */
-  .shape-table-base .bar-chart-col.selected { border-color:var(--pp-blue-700); background:var(--pp-blue-050); box-shadow:0 3px 10px rgba(0,76,148,.16); }
-  .shape-table-base .bar-chart-check { background:var(--pp-blue-700); }
-  .shape-table-base .bar-chart-col.selected .bar-chart-price { color:var(--pp-blue-700); }
-  .shape-table-base .bar-chart-bar.selected { background:var(--pp-blue-700); }
+  /* Selected-state colour, scoped per table (2026-08-18, recoloured again
+     later the same day — "change the another colour for base block items
+     and background, should be different with peak" — see the background
+     comment above). Base no longer shares blue with Peak at all. Unlike
+     blue-700 (which cleared AA text-contrast on its own, 8.53:1), raw
+     --pp-coral is only 2.25:1 — below even the 3:1 non-text floor blue-300
+     clears for Peak — so Base now needs the same fill-vs-text split Peak
+     already had, just with a tier the coral ramp doesn't ship: --pp-coral
+     (2.25:1) is a hover-only preview (see above), --pp-coral-text (5.00:1)
+     is the price figure, and a third, minted --pp-coral-value:#c77048 —
+     coral darkened 22%, the exact darkenHex(hex,0.22) derivation the
+     certainty-layer hatch texture already uses for this same coral (see
+     CLAUDE.md's hatch-ink table — #c77048 is already that row's own
+     computed value) — covers the border/wash-check/bar, at 3.60:1,
+     clearing the floor blue-300 set as this app's own precedent for that
+     role. The checkmark's shadow is repointed too (was the shared default
+     tuned for blue); Peak leaves it alone since Peak never overrode it. */
+  .shape-table-base .bar-chart-col.selected { border-color:var(--pp-coral-value); background:var(--pp-coral-bg); box-shadow:0 3px 10px rgba(199,112,72,.20); }
+  .shape-table-base .bar-chart-check { background:var(--pp-coral-value); box-shadow:0 1px 3px rgba(199,112,72,.4); }
+  .shape-table-base .bar-chart-col.selected .bar-chart-price { color:var(--pp-coral-text); }
+  .shape-table-base .bar-chart-bar.selected { background:var(--pp-coral-value); }
   .shape-table-peak .bar-chart-col.selected { border-color:var(--pp-blue-300); background:var(--pp-blue-050); box-shadow:0 3px 10px rgba(60,147,250,.20); }
   .shape-table-peak .bar-chart-check { background:var(--pp-blue-300); }
   .shape-table-peak .bar-chart-col.selected .bar-chart-price { color:var(--pp-blue-500); }
@@ -1868,6 +1890,24 @@
     return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
   }
 
+  // Adapted from the design system's CountdownRing.jsx (amber progress arc,
+  // draining as time elapses) for the Dashboard's dark firm-offer banner —
+  // the component's own light-background track/text colours would be
+  // illegible on --pp-teal-900, so those two are swapped for this context;
+  // the amber arc itself is unchanged, which is the part that reads as "a
+  // countdown ring" regardless of background.
+  function countdownRingSvg(secondsRemaining, secondsTotal) {
+    var size = 72, stroke = 6, r = (size - stroke) / 2, c = size / 2;
+    var circumference = 2 * Math.PI * r;
+    var pct = secondsTotal > 0 ? Math.max(0, Math.min(1, secondsRemaining / secondsTotal)) : 0;
+    var offset = circumference * (1 - pct);
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" style="position:absolute;top:0;left:0">' +
+      '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="' + stroke + '"/>' +
+      '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="var(--pp-amber)" stroke-width="' + stroke + '" stroke-linecap="round" ' +
+      'stroke-dasharray="' + circumference.toFixed(2) + '" stroke-dashoffset="' + offset.toFixed(2) + '" ' +
+      'transform="rotate(-90 ' + c + ' ' + c + ')" style="transition:stroke-dashoffset .3s linear"/></svg>';
+  }
+
   // ------------------------- Topbar chrome (title/crumb/actions) --------
 
   function setCrumb(restHtml, backLabel, backFn) {
@@ -2113,7 +2153,7 @@
         '<div class="os-headline">' + esc(pending.shape) + ' ' + esc(pending.period) + ' · ' + esc(pending.power) + ' · ' + esc(pending.price) + '/MWh</div>' +
         '<div class="os-sub">Total ' + esc(pending.value) + ' · respond before the countdown reaches zero.</div>' +
         '<div style="margin-top:16px"><button type="button" class="btn-accept" onclick="PP.openTrade(\'' + pending.id + '\')">View offer</button></div></div>' +
-        '<div><div class="os-countdown">' + mmss(pending.secondsRemaining) + '</div><div class="os-countdown-label">to respond</div></div>' +
+        '<div><div class="os-countdown-ring">' + countdownRingSvg(pending.secondsRemaining, pending.secondsTotal) + '<div class="os-countdown">' + mmss(pending.secondsRemaining) + '</div></div><div class="os-countdown-label">to respond</div></div>' +
         '</div></div>';
     }
 
@@ -2698,15 +2738,17 @@
       '<div class="bar-chart-row">' + cols + '</div></div>';
   }
 
-  /** The text-safe tier for a shape's identity colour — Base's blue-700
-   * clears AA on its own (8.53:1); Peak's fill/border colour, blue-300, is
-   * only 3.11:1 and would repeat the exact contrast bug the SB-2026 sync's
-   * "fill vs text" rule exists to catch if used as text directly (see
-   * CLAUDE.md), so anything readable (a heading, a price figure) reads
-   * blue-500 (5.08:1) for Peak instead. One place to get this right rather
-   * than three (table heading, price-readout, and any future caller). */
+  /** The text-safe tier for a shape's identity colour. Base moved to
+   * coral (2026-08-18, recoloured off blue so it reads as genuinely
+   * different from Peak, not just a paler version of it) and, like Peak
+   * already did, needs a role split: raw --pp-coral is only 2.25:1, so
+   * anything readable (a heading, a price figure) reads --pp-coral-text
+   * (5.00:1) instead. Peak keeps blue-500 (5.08:1) for the same reason,
+   * over its own fill/border colour blue-300 (3.11:1). One place to get
+   * this right rather than three (table heading, price-readout, and any
+   * future caller). */
   function shapeTextColor(shape) {
-    return shape === "Base" ? "var(--pp-blue-700)" : "var(--pp-blue-500)";
+    return shape === "Base" ? "var(--pp-coral-text)" : "var(--pp-blue-500)";
   }
 
   /**
