@@ -820,8 +820,8 @@
             <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Actual usage</div>
             <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed #004C94"></span>Hedge volume</div>
             <div><span class="swatch" style="background:#EEB72B;opacity:.2"></span>Covered (min of actual &amp; hedge)</div>
-            <div><span class="swatch" style="background:var(--pp-orange);opacity:.55"></span>Short — bought at day-ahead</div>
-            <div><span class="swatch" style="background:var(--pp-cyan);opacity:.3"></span>Long — sold at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-orange)"></span>Short — bought at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-teal)"></span>Long — sold at day-ahead</div>
           </div>
         </div>
         <div class="card">
@@ -846,8 +846,8 @@
           <div class="legend">
             <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Total cost</div>
             <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed #004C94"></span>Hedge cost</div>
-            <div><span class="swatch" style="background:var(--pp-orange);opacity:.55"></span>Buy — uncovered volume at day-ahead</div>
-            <div><span class="swatch" style="background:var(--pp-cyan);opacity:.3"></span>Sell — surplus hedge at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-orange)"></span>Buy — uncovered volume at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-teal)"></span>Sell — surplus hedge at day-ahead</div>
           </div>
         </div>
         <div class="card">
@@ -3303,7 +3303,7 @@
   /** The 3 hues the covered/short/long bars hatch with, all at the one pitch this chart's bars actually render at. */
   function usageChartHatchEntries(rbw) {
     var pitch = hatchPitchFor(rbw);
-    return ["#FF8F5C", "#00D4C6", "#EEB72B"].map(function (hue) { return { hue: hue, pitch: pitch }; });
+    return ["#FF8F5C", "#0FA69D", "#EEB72B"].map(function (hue) { return { hue: hue, pitch: pitch }; });
   }
 
   /**
@@ -3380,7 +3380,7 @@
       var yHedge = yFor(hedgeVolume[i]);
       var barTop = Math.min(yNet, yHedge);
       var barH = Math.abs(yNet - yHedge);
-      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#FF8F5C" : "#00D4C6", uncovered[i] >= 0 ? 0.55 : 0.3, measured, rbw);
+      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#FF8F5C" : "#0FA69D", 1, measured, rbw);
 
       var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
       var yCovered = yFor(coveredVal);
@@ -3987,7 +3987,7 @@
       var yHedge = yFor(hedgeVolume[i]);
       var barTop = Math.min(yNet, yHedge);
       var barH = Math.abs(yNet - yHedge);
-      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#FF8F5C" : "#00D4C6", uncovered[i] >= 0 ? 0.55 : 0.3, measured, rbw);
+      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#FF8F5C" : "#0FA69D", 1, measured, rbw);
 
       var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
       var yCovered = yFor(coveredVal);
@@ -4083,7 +4083,7 @@
   var COST_HEDGE_LINE = "#004C94";   // blue-700, matching the hedge-volume line
   var COST_TOTAL_LINE = "#006ECF";   // blue-500, matching the actual-usage line
   var COST_BUY_FILL = "#FF8F5C";     // coral, matching Short
-  var COST_SELL_FILL = "#00D4C6";    // bright cyan, matching Long
+  var COST_SELL_FILL = "#0FA69D";    // teal, matching Long — see Dashboard's composition bar
 
   /**
    * Shared bar/line geometry for both cost charts.
@@ -4131,7 +4131,7 @@
         var buy = deltaCost[i] >= 0;
         deltaBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yH, yT).toFixed(1) +
           '" width="' + w.toFixed(1) + '" height="' + Math.abs(yH - yT).toFixed(1) +
-          '" fill="' + (buy ? COST_BUY_FILL : COST_SELL_FILL) + '" opacity="' + (buy ? "0.55" : "0.3") + '"></rect>';
+          '" fill="' + (buy ? COST_BUY_FILL : COST_SELL_FILL) + '" opacity="1"></rect>';
         if (!seg) { seg = []; totalSegments.push(seg); }
         seg.push(anchor.toFixed(1) + "," + yT.toFixed(1));
       } else {

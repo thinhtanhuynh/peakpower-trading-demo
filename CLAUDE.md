@@ -646,6 +646,36 @@ the paired darker tier instead, matching how every other bright-fill-as-text
 spot in this sync was fixed. If the design project's own Intervals table is
 ever corrected, this file's tokens should already agree with the fix.
 
+**Usage/cost chart saturation (second follow-up).** Product direction: the
+Short/Long chart marks read pale next to the Dashboard hero's own
+composition bar, which draws the same two roles as flat, fully-saturated
+blocks. Two separate things were off, not one:
+
+- **Long's hue never matched.** The chart filled Long with `#00D4C6` (the
+  "long/surplus FILL only" bright cyan the palette readme names), while the
+  Dashboard hero — and the Long stat card's own accent cap and value colour
+  — have always used `#0FA69D` (`--pp-teal`). Chart now matches: `#0FA69D`
+  in both `barFillAttrs` call sites, `usageChartHatchEntries`, and
+  `COST_SELL_FILL`.
+- **Both bars were drawn at reduced opacity** (Short 55%, Long 30% —
+  `uncovered[i] >= 0 ? 0.55 : 0.3` at the two `barFillAttrs` call sites, and
+  the matching literals on the cost chart's delta-bar `opacity=` attribute)
+  while the composition bar is 100%. Both now render at full opacity on
+  both charts. The certainty-layer multiply (`× CERTAINTY_PROVISIONAL_OPACITY`,
+  0.55) inside `barFillAttrs` is untouched — a projected Short/Long bar now
+  reads at roughly the old *measured* bar's strength, not washed out further
+  from an already-pale base, and still visibly lighter than a measured one.
+  The amber "Covered" wash (20%) is deliberately unchanged — it exists
+  specifically to stay subordinate to the segment above it, which this
+  change makes more true, not less.
+
+Four legend swatches (usage chart's Short/Long, cost chart's Buy/Sell) had
+their own matching `opacity:.55`/`opacity:.3` inline styles — a swatch
+showing a paler colour than what the chart actually draws would be its own
+small lie, so those were dropped (full-opacity `background`) and Long/Sell's
+swatch now reads `var(--pp-teal)` instead of `var(--pp-cyan)`, for the same
+reason as the fill itself.
+
 **Verification.** Every screen of both portals was screenshotted in a real
 browser (Chrome via Playwright) before and after; a second Playwright pass
 drove the wizard, connection/trade/invoice detail views, the top-up flow, and
@@ -1002,18 +1032,22 @@ and Consumption, Production, Peak demand, Usage Cost, and Uncovered are
 likewise table-only — all six remain columns in the table and in the CSV
 export.
 
-**Usage chart (both single-day and multi-day):** two lines — actual usage (solid teal) and hedge
-volume (dashed indigo) — with each interval rendered as a stacked bar from
-the zero baseline: a light-yellow segment (20% opacity, deliberately muted
-so it doesn't compete with the Short/Long segment above it) from zero up
-to `MIN(Actual Usage, Hedge Volume)` — the portion of usage already covered
-by the hedge — topped by the existing orange/cyan segment spanning the gap
-between the two lines: orange (55% opacity) when Uncovered ≥ 0 ("Short —
-bought at day-ahead"), cyan (30% opacity) when Uncovered < 0 ("Long — sold
-at day-ahead") — the same color convention as the original Customer Portal
-mockup's Day-tab legend. Consumption and production are no longer plotted;
-the y-axis is bipolar (a proper zero baseline, not always at the bottom) to
-correctly show intervals where Actual Usage goes negative.
+**Usage chart (both single-day and multi-day):** two lines — actual usage
+(solid blue-500, `#006ECF`) and hedge volume (dashed blue-700, `#004C94`) —
+with each interval rendered as a stacked bar from the zero baseline: an
+amber segment (20% opacity, deliberately muted so it doesn't compete with
+the Short/Long segment above it) from zero up to
+`MIN(Actual Usage, Hedge Volume)` — the portion of usage already covered by
+the hedge — topped by the coral/teal segment spanning the gap between the
+two lines: coral, `#FF8F5C`, **full opacity**, when Uncovered ≥ 0 ("Short —
+bought at day-ahead"), teal, `#0FA69D`, **full opacity**, when Uncovered < 0
+("Long — sold at day-ahead"). Full opacity as of 2026-08-18, on product
+direction to match the Dashboard hero's own composition bar (see "Design
+system sync" below) — until then these were 55%/30% and Long's fill was the
+brighter `#00D4C6`, a hue the composition bar never uses. Consumption and
+production are no longer plotted; the y-axis is bipolar (a proper zero
+baseline, not always at the bottom) to correctly show intervals where Actual
+Usage goes negative.
 
 **Cost chart (second chart):** a second chart over the *same* intervals
 plotting money rather than volume, in its own card below the usage chart. It
@@ -1037,8 +1071,13 @@ There is deliberately **no fill down to zero** here. The usage chart's yellow
 spend a colour on nothing. Every mark on this chart means something.
 
 Buy/Sell is encoded by **colour *and* by which side of the hedge line the bar
-sits on**, and named in the tooltip — so the orange/cyan pair is never the
-only cue (it's the weakest pair under tritanopia, ΔE 5.9).
+sits on**, and named in the tooltip — so the coral/teal pair (`#FF8F5C` /
+`#0FA69D`, full opacity as of 2026-08-18 — see "Design system sync" below)
+is never the only cue. The tritanopia ΔE figure once cited here (5.9, later
+19.6) was measured against the *pre-08-18* orange/cyan pair; this pair
+hasn't been re-run through the dataviz validator since the 2026-08-18 hue
+and opacity change — re-run it before citing a number here again rather
+than trusting a stale one.
 
 ### A hedge is a step, not a ramp
 
