@@ -1080,7 +1080,19 @@
   function cancelWizard() { state.tradingView = "list"; state.wizardStep = 0; renderApp(); }
   function wizardGoStep0() { state.wizardStep = 0; renderApp(); }
   function wizardGoStep1() { state.wizardStep = 1; renderApp(); }
-  function wizardGoStep2() { state.wizardStep = 2; renderApp(); }
+  /**
+   * Step 2 -> review, and review -> submitted. Both re-check the deposit
+   * rather than trusting the disabled Continue button, matching how
+   * setWizardConnection and respondToOffer guard themselves: the button is the
+   * affordance, the handler is the rule. Without this, PP.wizardGoStep2() from
+   * anywhere — a stale screen, a console, a future call site — walks straight
+   * past a check the UI only paints.
+   */
+  function wizardGoStep2() {
+    if (!wizardVolumeValid() || !wizardFundsSufficient()) { renderApp(); return; }
+    state.wizardStep = 2;
+    renderApp();
+  }
 
   function setDirIdx(i) { state.wizard.direction = i === 0 ? "Buy" : "Sell"; renderApp(); }
   function setShapeIdx(i) { state.wizard.shape = i === 0 ? "Base" : "Peak"; renderApp(); }
@@ -1145,6 +1157,10 @@
    * Back Office Trade desk's "To price" queue via PortalTradeLink.
    */
   function submitWizard() {
+    // Same rule at the last step. A request the customer cannot fund the
+    // deposit on must not reach the desk, where it would be priced and then
+    // refused at acceptance — wasting the desk's time and the customer's.
+    if (!wizardVolumeValid() || !wizardFundsSufficient()) { renderApp(); return; }
     var id = "TRD-" + state.nextSeq;
     // buildRequest() still takes a volume-per-connection map; a single-connection
     // block is simply a map with one entry.
@@ -2391,7 +2407,14 @@
       '<div class="bb-row"><span>Available balance</span><span>€ ' + ConsumptionCalc.formatNL(state.walletAvailable, 2) + '</span></div>' +
       '<div class="bb-row"><span>Deposit reserved</span><span>' + eur(st.depositEur) + '</span></div>' +
       '<div class="bb-row total"><span>After reservation</span><span style="color:' + (sufficient ? "var(--pp-green)" : "var(--pp-red)") + '">€ ' + ConsumptionCalc.formatNL(afterReservation, 2) + '</span></div>' +
-      '</div><div class="fund-badge">' + badge(sufficient ? "SUFFICIENT FUNDS" : "INSUFFICIENT FUNDS", sufficient ? "success" : "critical") + '</div>';
+      '</div><div class="fund-badge">' + badge(sufficient ? "SUFFICIENT FUNDS" : "INSUFFICIENT FUNDS", sufficient ? "success" : "critical") + '</div>' +
+      // Naming the shortfall is the difference between a refusal and an
+      // instruction — and it is the deposit's shortfall, not the block's, so
+      // it stays consistent with what the request actually requires.
+      (sufficient ? "" :
+        '<div style="font-size:11px;color:var(--pp-red);margin-top:8px;line-height:1.5">' +
+        'Top up ' + eur(-afterReservation) + ' to cover the ' + pctLabel(st.depositPct) +
+        ' deposit on this block. <a class="btn-link" onclick="PP.topUpWallet()">Top up →</a></div>');
 
     return rowsHtml +
       '<div class="kv-row"><span class="k">Indicative price</span><span class="v">€ ' + ConsumptionCalc.formatNL(priceVal, 2) + ' / MWh</span></div>' +
