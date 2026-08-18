@@ -481,6 +481,70 @@ land cleanly on the redesigned step with no console errors; and the full
 Node suite re-run (none of this touched calculation logic, so an unchanged
 pass was expected, not just hoped for).
 
+#### Base/Peak side by side (2026-08-18, later the same day)
+
+Product direction: stop making Base vs Peak a toggle a customer flips back
+and forth, and show both shapes' prices for the same 12 periods at once, so
+comparing them is a glance instead of a memory exercise. The standalone
+Shape `seg-tabs` field from the redesign above is **gone** — a card's column
+now *is* the shape choice, so a separate toggle would be a second, possibly
+disagreeing way to set the same thing. `.wizard-quick-row` (which existed
+only to sit Direction and Shape side by side) went with it; Direction is now
+the step's only quick-setting field, on its own.
+
+- **State/selection model**: `selectWizardBar(shape, type, i)` gained the
+  `shape` argument (was `(type, i)`) and sets `state.wizard.shape` alongside
+  `periodType`/`[type + "Idx"]` — a single click now decides all three
+  dimensions (shape, period type, period index) that used to take two
+  separate interactions (a Shape toggle click, then a bar click). Exactly
+  one card is selected at a time across the full 2×3 grid (24 cards: 2
+  shapes × (6 month + 4 quarter + 2 year)), the same invariant "Three period
+  rows, one selection" established for 12 — just extended one dimension
+  further, by the same mechanism (one `sel` boolean, now checking
+  `w.shape === shape && w.periodType === type && i === idx`).
+- **`buildWizardPeriodRow(type, label)` became `buildWizardPeriodRow(shape,
+  type, label)`** — it already took `type` as an explicit, fixed-per-call-site
+  argument rather than reading `state.wizard.periodType` (see "Three period
+  rows" above); `shape` now follows the identical pattern for the identical
+  reason. Per-row min/max bar normalisation is unchanged in principle, just
+  now also scoped per shape: a Base row's 6 bars compare only to each other,
+  never to the Peak row directly below carrying different numbers.
+- **New `buildShapeColumn(shape)`** renders one shape's heading plus its
+  three period rows; the step body calls it twice
+  (`buildShapeColumn("Base") + buildShapeColumn("Peak")`) inside a new
+  `.shape-columns` two-up grid. Each column heading is coloured to match
+  that shape's price-tile colour elsewhere in the app (Base `--pp-blue-700`,
+  Peak `--pp-blue-300` — the same pairing the design-system project's own
+  Dashboard price tiles use for Base/Peak), so the column identity survives
+  a glance even before reading the word.
+- **No second card-within-a-card.** The two columns are separated by a
+  single vertical rule (`border-right` on the first `.shape-column`) and
+  their own coloured headings, not a second white bordered box each — the
+  period-option cards are already the one "card" tier inside the sunken
+  `.period-panel`; nesting another bordered white box per column around
+  them would have meant two blank cards visually holding smaller cards; a
+  plain divider reads as "two tables" without that extra, empty layer.
+- **Cards narrowed again**: `.bar-chart-col` 72px→62px, `.bar-chart-row` gap
+  10px→8px. Each column now has roughly half the width the single-column
+  step had, and the 6-wide Month row is what has to fit it — checked that
+  the widest price string in the dataset (`€ 108,90`) still fits the
+  narrower card without wrapping before treating this as done, not just
+  after.
+- **`setShapeIdx()` deleted**, definition and `window.PP` export both — it
+  had exactly one caller (the removed Shape `seg-tabs`) and nothing else in
+  the codebase referenced it (checked by grepping the whole repo, not
+  assumed).
+
+Verified the same way again: a scripted pass confirming exactly one card
+selected across all 24 at every step, cross-shape-*and*-cross-row
+exclusivity specifically (a Base click clearing a prior Peak selection and
+vice versa, not just clearing within one shape), the price readout tracking
+whichever card was actually clicked, all three wizard entry points still
+preselecting into the *correct column* (not just *a* column), Direction and
+Continue/Cancel unaffected, the full Node suite re-run, and a full-page
+screenshot checked for card overflow/wrapping before calling the sizing
+numbers above final.
+
 ### Vertical spacing between sections — a footgun
 
 `.page` is a flex column with `gap:16px`, but **only Consumption puts its

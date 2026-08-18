@@ -585,18 +585,25 @@
   .field-group { margin-bottom:14px; }
   .field-group .fg-label { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; margin-bottom:6px; }
 
-  /* Direction and Shape are quick binary settings, not the decision this step
-     is actually about — sat side by side (2026-08-18 redesign) so they read
-     as a pair of toggles, leaving Delivery period as the step's clear focus
-     rather than three stacked full-width fields of equal visual weight. */
-  .wizard-quick-row { display:flex; gap:24px; margin-bottom:4px; }
-  .wizard-quick-row .field-group { flex:0 0 auto; margin-bottom:0; }
-
   /* Delivery period gets its own sunken panel, the price readout nested
      inside it — "your choice" and "what it costs" read as one unit, not two
      unrelated blocks stacked in a card. */
   .period-panel { background:var(--pp-surface-alt); border-radius:var(--radius-lg); padding:16px 18px 14px; margin-top:18px; }
   .period-panel-label { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; margin-bottom:2px; }
+
+  /* Base and Peak side by side (2026-08-18 redesign) — the same 12 periods
+     priced twice, once per shape, so a customer compares Base vs Peak for
+     the same period directly instead of re-reading the same 12 bars after
+     flipping a Shape toggle. A plain 2-up grid plus one vertical rule, not a
+     second nested card per column — the period cards below are already the
+     one "card" tier in this panel; giving each column its own white
+     bordered box too would read as two blank cards holding smaller cards,
+     not two clearly separated tables. */
+  .shape-columns { display:grid; grid-template-columns:1fr 1fr; gap:0; margin-top:10px; }
+  .shape-column { padding:0 16px; min-width:0; }
+  .shape-column:first-child { padding-left:0; border-right:1px solid var(--pp-border); }
+  .shape-column:last-child { padding-right:0; }
+  .shape-column-head { font-size:13px; font-weight:700; margin-bottom:2px; }
 
   /* Three rows (6 months / 4 quarters / 2 years — see "Three period rows,
      one selection") replaced the old single row that switched between them.
@@ -606,20 +613,23 @@
      bars stay a sixth of it — same data, wildly different-looking marks. A
      fixed column width keeps every bar the same size regardless of which row
      it's in; a short row is simply narrower overall, which is honest about
-     there being fewer choices, not a rendering quirk.
+     there being fewer choices, not a rendering quirk. Narrowed again (72px→
+     62px, gap 10px→8px) for the Base/Peak columns above — each now has
+     roughly half the width the single-column layout did, and the 6-wide
+     Month row is what has to fit.
      Each option is a real card (2026-08-18 redesign), not a bare column: a
      border and white fill at rest, an elevated hover, and a selected state
      carried by THREE redundant cues — border colour, a light blue wash, and
      a checkmark badge — never colour alone, matching how this app already
      insists on redundant cues everywhere else (see CLAUDE.md's certainty
      layer). The comparative bar height is still the same real number
-     (min/max-normalised per row) — polish changed how it's framed, not what
-     it shows. */
+     (min/max-normalised per row, per shape) — polish changed how it's
+     framed, not what it shows. */
   .wizard-period-row { margin-top:16px; }
   .wizard-period-row:first-child { margin-top:10px; }
   .wpr-label { font-size:10.5px; font-weight:700; color:var(--pp-text-heading); margin-bottom:8px; }
-  .bar-chart-row { display:flex; align-items:stretch; gap:10px; height:116px; }
-  .bar-chart-col { flex:0 0 72px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; box-sizing:border-box; padding:10px 4px 8px; position:relative; background:#fff; border:1.5px solid var(--pp-border); border-radius:var(--radius-md); cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, transform .1s ease; }
+  .bar-chart-row { display:flex; align-items:stretch; gap:8px; height:116px; }
+  .bar-chart-col { flex:0 0 62px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; box-sizing:border-box; padding:10px 2px 8px; position:relative; background:#fff; border:1.5px solid var(--pp-border); border-radius:var(--radius-md); cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, transform .1s ease; }
   .bar-chart-col:hover { border-color:var(--pp-blue-300); box-shadow:0 3px 10px rgba(45,63,84,.10); transform:translateY(-1px); }
   .bar-chart-col.selected { border-color:var(--pp-blue-700); background:var(--pp-blue-050); box-shadow:0 3px 10px rgba(0,76,148,.16); }
   .bar-chart-check { position:absolute; top:-7px; right:-7px; width:18px; height:18px; border-radius:50%; background:var(--pp-blue-700); color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,76,148,.4); opacity:0; transform:scale(.5); transition:opacity .15s ease, transform .15s ease; }
@@ -1254,16 +1264,16 @@
   }
 
   function setDirIdx(i) { state.wizard.direction = i === 0 ? "Buy" : "Sell"; renderApp(); }
-  function setShapeIdx(i) { state.wizard.shape = i === 0 ? "Base" : "Peak"; renderApp(); }
   /**
-   * Clicking any bar in any of the three rows both picks that item AND makes
-   * its row the active one — before the three-rows-at-once redesign this only
-   * ever fired for bars in the row a separate Month/Quarter/Year tab had
-   * already made current, so periodType never needed setting here. Now that
-   * all three rows are visible together, a click is the only signal of which
-   * one the customer means.
+   * Clicking any card in either shape column, any of the three rows, both
+   * picks that item AND makes its shape+row the active pair — a standalone
+   * Shape toggle would now be redundant (and could disagree with whichever
+   * card is actually selected), so shape is set here, from which column the
+   * click came from, same as periodType already was from which row. See
+   * "Base/Peak side by side" in CLAUDE.md.
    */
-  function selectWizardBar(type, i) {
+  function selectWizardBar(shape, type, i) {
+    state.wizard.shape = shape;
     state.wizard.periodType = type;
     state.wizard[type + "Idx"] = i;
     renderApp();
@@ -1496,7 +1506,7 @@
     startWizard: startWizard, startWizardFromPrice: startWizardFromPrice,
     startWizardFromConnection: startWizardFromConnection, cancelWizard: cancelWizard,
     wizardGoStep0: wizardGoStep0, wizardGoStep1: wizardGoStep1, wizardGoStep2: wizardGoStep2,
-    setDirIdx: setDirIdx, setShapeIdx: setShapeIdx,
+    setDirIdx: setDirIdx,
     selectWizardBar: selectWizardBar, setHoverBar: setHoverBar, clearHoverBar: clearHoverBar,
     setWizardConnection: setWizardConnection, setWizardVolume: setWizardVolume,
     commitWizardVolume: commitWizardVolume, onWizardNoteChange: onWizardNoteChange, submitWizard: submitWizard,
@@ -2503,30 +2513,31 @@
   }
 
   /**
-   * One of the three always-visible period rows (month/quarter/year) — see
-   * "Three period rows, one selection" in CLAUDE.md. `type` is which list
-   * this row shows, fixed per call site; it is deliberately NOT read from
-   * `state.wizard.periodType`, because all three rows render regardless of
-   * which one is currently selected — only `sel` below reads that, to decide
-   * whether THIS row's bar is the highlighted one.
+   * One of the three always-visible period rows (month/quarter/year), for
+   * one of the two always-visible shape columns (Base/Peak) — see "Base/Peak
+   * side by side" in CLAUDE.md. `shape` and `type` are fixed per call site,
+   * not read from `state.wizard`, because all six rows (2 shapes × 3 period
+   * types) render together regardless of which one is currently selected —
+   * only `sel` below reads wizard state, to decide whether THIS row's card
+   * is the one highlighted.
    *
    * Each row still normalises its own bar heights independently (min/max
-   * within that row's own list), exactly as the single-row version did —
-   * comparing a month's price to a year's on the same 0–100% scale would
-   * compare unlike things.
+   * within that row's own list, for that row's own shape) — comparing a
+   * month's price to a year's, or a Base price to a Peak one, on the same
+   * 0–100% scale would compare unlike things.
    */
-  function buildWizardPeriodRow(type, label) {
+  function buildWizardPeriodRow(shape, type, label) {
     var w = state.wizard;
     var list = PortalSeedData.WIZARD_PERIODS[type];
     var idx = w[type + "Idx"];
-    var vals = list.map(function (p) { return w.shape === "Base" ? p.base : p.peak; });
+    var vals = list.map(function (p) { return shape === "Base" ? p.base : p.peak; });
     var minV = Math.min.apply(null, vals), maxV = Math.max.apply(null, vals);
     var range = (maxV - minV) || 1;
     var cols = list.map(function (p, i) {
-      var v = w.shape === "Base" ? p.base : p.peak;
+      var v = shape === "Base" ? p.base : p.peak;
       var pct = 30 + (v - minV) / range * 70;
-      var sel = w.periodType === type && i === idx;
-      return '<div class="bar-chart-col' + (sel ? " selected" : "") + '" onclick="PP.selectWizardBar(\'' + type + '\',' + i + ')">' +
+      var sel = w.shape === shape && w.periodType === type && i === idx;
+      return '<div class="bar-chart-col' + (sel ? " selected" : "") + '" onclick="PP.selectWizardBar(\'' + shape + '\',\'' + type + '\',' + i + ')">' +
         '<div class="bar-chart-check">✓</div>' +
         '<div class="bar-chart-price">€ ' + ConsumptionCalc.formatNL(v, 2) + '</div>' +
         '<div class="bar-chart-bar' + (sel ? " selected" : "") + '" style="height:' + pct.toFixed(0) + '%"></div>' +
@@ -2534,6 +2545,22 @@
     }).join("");
     return '<div class="wizard-period-row"><div class="wpr-label">' + label + '</div>' +
       '<div class="bar-chart-row">' + cols + '</div></div>';
+  }
+
+  /**
+   * One shape's whole column — its three period rows stacked, under a
+   * heading coloured to match that shape's own price-tile colour elsewhere
+   * in the app (Prices screen, Dashboard tiles: Base blue-700, Peak
+   * blue-300). Two of these side by side let a customer compare the same
+   * period's Base and Peak price at a glance, rather than needing to flip a
+   * toggle and re-read the same 12 bars twice.
+   */
+  function buildShapeColumn(shape) {
+    var color = shape === "Base" ? "var(--pp-blue-700)" : "var(--pp-blue-300)";
+    return '<div class="shape-column"><div class="shape-column-head" style="color:' + color + '">' + shape + '</div>' +
+      buildWizardPeriodRow(shape, "month", "Month") +
+      buildWizardPeriodRow(shape, "quarter", "Quarter") +
+      buildWizardPeriodRow(shape, "year", "Calendar year") + '</div>';
   }
 
   function buildPriceReadout(period, priceVal) {
@@ -2674,15 +2701,10 @@
     var bodyHtml = "";
 
     if (state.wizardStep === 0) {
-      bodyHtml = cardHtml("Product & period", "Choose a direction, shape and delivery period — the indicative price updates as you pick.",
-        '<div class="wizard-quick-row">' +
+      bodyHtml = cardHtml("Product & period", "Choose a direction and a delivery period — Base and Peak price the same periods side by side, so pick straight from whichever suits.",
         '<div class="field-group"><div class="fg-label">Direction</div>' + segTabs(["Buy", "Sell"], w.direction === "Buy" ? 0 : 1, "setDirIdx") + '</div>' +
-        '<div class="field-group"><div class="fg-label">Shape</div>' + segTabs(["Base", "Peak"], w.shape === "Base" ? 0 : 1, "setShapeIdx") + '</div>' +
-        '</div>' +
         '<div class="period-panel"><div class="period-panel-label">Delivery period</div>' +
-        buildWizardPeriodRow("month", "Month") +
-        buildWizardPeriodRow("quarter", "Quarter") +
-        buildWizardPeriodRow("year", "Calendar year") +
+        '<div class="shape-columns">' + buildShapeColumn("Base") + buildShapeColumn("Peak") + '</div>' +
         buildPriceReadout(period, priceVal) + '</div>' +
         '<div class="wizard-actions"><button type="button" class="btn-primary" onclick="PP.wizardGoStep1()">Continue</button>' +
         '<button type="button" class="btn-secondary" onclick="PP.cancelWizard()">Cancel</button></div>');
