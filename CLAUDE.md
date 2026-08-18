@@ -307,6 +307,38 @@ read "Offer received", while the Trading page's own banner and the design
 system's own Dashboard mockup both say "**Firm** offer received"; a small,
 separate inconsistency caught while fixing the same line.
 
+**The banner's own CSS didn't match the Claude Design project either — a
+second, separate bug found on review.** Fixing the text above was read as
+also confirming the *structure* was already right ("icon+title+sub+button,
+matching the reference"); it wasn't checked property by property, and
+several genuinely weren't. `portal-shell.css` (the shared CSS file) has no
+`.banner` rule at all — the only source for it is the `<style>` block
+inside `ui_kits/portal-2026/index.html` itself, which had not been read
+before. Checked against that:
+
+| Property | Design (`index.html`) | Was | Now |
+|---|---|---|---|
+| `.banner` gap | 14px | 12px | 14px |
+| `.banner` padding | 15px 18px | 12px 16px | 15px 18px |
+| `.bd` (icon) size | 26px, `min-width:26px` | 22px, no min-width | 26px, `min-width:26px` |
+| `.bd` shape | `border-radius:8px` (rounded square) | `border-radius:50%` (**circle**) | `border-radius:8px` |
+| `.bt` (title) size | 13px | inherited `.banner`'s 12.5px | 13px |
+| `.bb` (sub) size / margin | 11.5px / `margin-top:3px` | inherited 12.5px / `margin-top:2px` | 11.5px / `margin-top:3px` |
+
+The icon shape was the largest miss — a circle reads as a completely
+different component from a rounded square at a glance, independent of any
+other property matching. Fixed on the **shared** `.banner`/`.banner-icon`/
+`.banner-title`/`.banner-sub` rules, not a Dashboard-only override:
+`.banner` backs every warning/info/success/error banner on this page
+(Wallet's low-balance warning, the wizard's volume-validation note, the
+data-quality and invoice provisional banners, the overdue-balance banner,
+…), and the design project's `.banner`/`.bd`/`.bt`/`.bb` make no
+distinction between which screen a banner appears on — one component, one
+correct size, everywhere it's used. Screenshotted more than one call site
+(Dashboard's offer banner, Wallet's low-balance banner) after the fix to
+confirm the shared change didn't read as broken or cramped anywhere else,
+not just the one that prompted it.
+
 All six screens' "tables" are `display:grid` divs (`.grid-table`/`.gt-head`/
 `.gt-row`, explicit per-screen `grid-template-columns`) rather than
 `<table>` elements, matching the mockup's own markup — Consumption's own
@@ -707,6 +739,80 @@ submit and checking the record actually written to `localStorage` carries
 that identical adjusted number — the thing that would silently break if
 the wizard's display and the submission path ever used two different
 formulas.
+
+#### Each table gets its own surface, shadow, and voice (2026-08-18, a fifth pass)
+
+Product direction: "change background different for 2 tables BASE and
+PEAK, add more shadows and change color for all items inside each shape."
+Until this pass, BASE and PEAK were two identically-white, identically-flat
+cards whose *only* colour difference was the heading text and whichever
+one card happened to be selected — everything else (background, shadow,
+row labels, hover) was shared and neutral.
+
+**Backgrounds are computed, not eyeballed** — the same method the selected
+card's own light wash already used one pass earlier: each shape's identity
+hex blended over white at a low opacity. Base is blue-700 at 5% (`#f2f6fa`);
+Peak is blue-300 at 8% (`#eff6ff`) — Peak needs the higher opacity to
+register at all, since blue-300 is the lighter, less saturated of the two
+hues to begin with even at full strength. Both stay light enough that the
+white 1.5px-bordered period cards sitting on top still read clearly as
+cards on a surface, not as a second, competing white-on-white layer.
+
+**Shadow is deliberately heavier than `--pp-shadow-card`**, the flat
+two-layer shadow every other card on this page carries
+(`0 1px 2px rgba(45,63,84,.06), 0 10px 28px -18px rgba(45,63,84,.28)`) —
+`0 10px 26px -8px rgba([shape rgb],[.22 Base / .26 Peak])`, tinted per
+shape like the selected-card shadow already was, and visibly stronger: on
+explicit request ("add *more* shadows"), these two tables are this step's
+one real decision and were asked to read as raised off the page, not
+merely bordered like every other card.
+
+**Colour now reaches every labelled element inside a table, not just its
+selected card** — `.wpr-label` (the "Month"/"Quarter"/"Calendar year" row
+labels) and the `.shape-table-head` ("BASE"/"PEAK" itself) both take their
+table's identity colour now. The heading's colour source moved from an
+inline style (`shapeTextColor()` called directly in `buildShapeTable()`)
+into the same `.shape-table-base`/`.shape-table-peak` CSS scope everything
+else uses — `shapeTextColor()` the *function* stays, since
+`buildPriceReadout()` (outside either table entirely) still needs it, but
+the table heading itself no longer needs its own special case now that a
+CSS rule can reach it identically to the row labels beside it.
+
+**Hover became per-shape too, and this is the one place restraint won.**
+Both tables shared one neutral `blue-300` hover border before; Peak kept
+that value (it was already Peak's own identity colour, so nothing to
+change), Base gained its own, `blue-500` — a midpoint between
+resting-neutral and Base's `blue-700` selected state, so hovering in
+either table now previews *that table's* colour rather than a third,
+unrelated one shared by both. What did **not** change: a card's own price
+figure and period label stay neutral (`--pp-text-body`/`--pp-text-heading`)
+until it is actually selected. Tried the fuller version — tinting every
+unselected card's price text too — and reverted it before shipping: it
+made the *selected* card's own full-strength colour stop reading as
+distinct, the exact contrast the three redundant selected-state cues (see
+"Three period rows, one selection") exist to protect. "Every item" reached
+its sensible limit at the elements that are always-on brand for a table
+(heading, row labels, hover, surface) rather than the elements whose whole
+job is to change meaning on selection.
+
+**CSS specificity note, if this is touched again:** the new
+`.shape-table-base .bar-chart-col:hover` / `.shape-table-peak
+.bar-chart-col:hover` rules sit *before* the existing `.shape-table-base
+.bar-chart-col.selected` / `.shape-table-peak … .selected` rules in the
+stylesheet, not after. Both selectors resolve to the same specificity
+(three class-level selectors each — a pseudo-class counts the same as a
+real class), so a tie is broken by source order alone; a hovered *and*
+selected card must keep showing the selected colour, which only holds if
+the selected rules come *later*. Moving the hover rules below the selected
+ones would silently flip that.
+
+Verified the same way as the pass before it: computed-style assertions
+(not just a screenshot) confirming the exact background/shadow/label-colour
+values on both tables, hover colours read after letting the CSS transition
+settle rather than mid-animation (an early check caught its own false
+positive here — a value read at the same 150ms the transition itself
+takes back an interpolated, not final, colour), cross-table selection
+exclusivity re-run, and the full Node suite.
 
 ### Vertical spacing between sections — a footgun
 
