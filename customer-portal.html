@@ -418,6 +418,14 @@
   .chart-tab:hover:not(.active):not(:disabled) { color:var(--pp-teal-700); }
   .chart-tab.active { background:#fff; color:var(--pp-teal-700); box-shadow:0 1px 2px rgba(0,0,0,0.08); }
   .chart-tab:disabled { opacity:.5; cursor:not-allowed; }
+  /* Same pill/segment language as .chart-tabs (matching surface, radius,
+     padding) so the two read as one control cluster, not two unrelated
+     widgets glued together. */
+  .chart-zoom { display:flex; align-items:center; gap:2px; background:var(--pp-surface-alt); border-radius:8px; padding:3px; }
+  .zoom-btn { border:none; background:transparent; width:24px; height:24px; border-radius:6px; font-size:14px; font-weight:700; line-height:1; color:var(--pp-text-body); cursor:pointer; font-family:var(--font-sans); }
+  .zoom-btn:hover:not(:disabled) { background:#fff; color:var(--pp-teal-700); box-shadow:0 1px 2px rgba(0,0,0,0.08); }
+  .zoom-btn:disabled { opacity:.4; cursor:not-allowed; }
+  .zoom-label { font-size:11px; font-weight:600; color:var(--pp-text-body); min-width:34px; text-align:center; }
   .chart-scroll { overflow-x:auto; }
   .chart-tooltip { position:fixed; z-index:20; background:#2D3F54; color:#fff; font-size:11px; line-height:1.6; padding:8px 10px; border-radius:6px; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,0.25); white-space:nowrap; display:none; }
   .chart-tooltip .tt-head { font-weight:700; margin-bottom:4px; color:#43d3a6; }
@@ -809,6 +817,15 @@
               <button type="button" class="chart-tab" data-period="month" disabled>Month</button>
               <button type="button" class="chart-tab" data-period="quarter" disabled>Quarter</button>
             </div>
+            <!-- Only meaningful once there's more than one day on screen — a
+                 single day already renders at its container's own width, 1:1
+                 (see "Single-day charts size to their container"). Shown/hidden
+                 alongside #month-chart-wrap itself. -->
+            <div class="chart-zoom" id="chart-zoom" style="display:none">
+              <button type="button" id="zoom-out" class="zoom-btn" disabled title="Zoom out">−</button>
+              <span class="zoom-label" id="zoom-label">Fit</span>
+              <button type="button" id="zoom-in" class="zoom-btn" disabled title="Zoom in">+</button>
+            </div>
           </div>
           <div id="day-chart-wrap">
             <svg id="chart" viewBox="0 0 960 260" style="width:100%;height:260px;display:block"></svg>
@@ -819,7 +836,7 @@
           <div class="legend">
             <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Actual usage</div>
             <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed #004C94"></span>Hedge volume</div>
-            <div><span class="swatch" style="background:#EEB72B;opacity:.2"></span>Covered (min of actual &amp; hedge)</div>
+            <div><span class="swatch" style="background:#EEB72B;opacity:.45"></span>Covered (min of actual &amp; hedge)</div>
             <div><span class="swatch" style="background:var(--pp-orange)"></span>Short — bought at day-ahead</div>
             <div><span class="swatch" style="background:var(--pp-teal)"></span>Long — sold at day-ahead</div>
           </div>
@@ -1031,7 +1048,13 @@
     invoiceId: null,
     trades: PortalSeedData.TRADES_SEED.slice(),
     nextSeq: 1079,
-    hoverBar: null
+    hoverBar: null,
+    // Multiplies the range chart's own fit-to-container px/interval — 1 is
+    // "fit" (no zoom), never below it (see rangeChartGeometry). Reset to 1
+    // by render() on every genuine range/site change; left alone by a zoom
+    // click or a window resize, which redraw through drawMonthCharts()
+    // instead of render() for exactly that reason.
+    chartZoom: 1
   };
 
   function activatePageDom(pageLower) {
@@ -3137,7 +3160,7 @@
     var costEquation =
       // Hedge cost is priced at the block's own contract price, not spot —
       // never withheld or marked projected, even on a fully-projected range.
-      statCardHtml("Hedge cost", dualEurValue(stats.hedgeCostEur), "", "hedge volume at block price", {}) +
+      statCardHtml("Hedge cost", dualEurValue(stats.hedgeCostEur), "brand", "hedge volume at block price", {}) +
       statOpHtml("+") +
       deltaCostHtml +
       statResultGroupHtml(totalCostHtml);
@@ -3148,7 +3171,7 @@
       statOpHtml("−") +
       // Hedge volume is a real booked position regardless of date — never
       // gets the projected treatment, even on an otherwise-projected row.
-      statCardHtml("Hedge volume", dualKwhValue(stats.hedgeVolumeKwh), "", "base + peak, locked in") +
+      statCardHtml("Hedge volume", dualKwhValue(stats.hedgeVolumeKwh), "brand", "base + peak, locked in") +
       statResultGroupHtml(statCardHtml(uncoveredLabel, dualKwhValue(uncoveredValueKwh), uncoveredTone, uncoveredSublabel,
         mergeOpts({ result: true }, volumeCertaintyOpts(realDayCount, totalDayCount, projectedUncoveredKwh, kwhValue))));
 
@@ -3386,7 +3409,7 @@
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      var covAttrs = barFillAttrs("#EEB72B", 0.2, measured, rbw);
+      var covAttrs = barFillAttrs("#EEB72B", 0.45, measured, rbw);
       coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
 
@@ -3952,13 +3975,44 @@
 
   var lastMonthChartGeom = null;
   var monthChart = document.getElementById("month-chart");
+  var monthChartWrap = document.getElementById("month-chart-wrap");
 
+  var RANGE_PX_PER_INTERVAL_MIN = 4; // the existing readable floor — never denser than this
+  var ZOOM_MIN = 1, ZOOM_MAX = 8;
+
+  /**
+   * The one place both range charts get their width and px/interval from —
+   * calling it once and handing the same result to both builders is what
+   * keeps them pixel-aligned (see "The two range charts must keep identical
+   * geometry").
+   *
+   * Replaces the old fixed `Math.max(960, n * 4)`, which was blind to the
+   * card's actual width: a short range (e.g. 2 days) rendered *narrower*
+   * than a wide card and just sat there with empty space on the right,
+   * because 4px/interval × a couple hundred intervals is well under a
+   * typical card's width. Fit-to-container first (`wrapWidth / n`, floored
+   * at the same 4px/interval so a very long range still gets a readable
+   * minimum and keeps scrolling, exactly as before) makes the chart fill
+   * the card whenever there's room to; `state.chartZoom` (>=1, see state's
+   * own comment) then widens it beyond that on request, which is what makes
+   * scrolling to a specific period inside a wide selected range possible.
+   */
+  function rangeChartGeometry(n) {
+    var wrapWidth = Math.max(monthChartWrap.clientWidth || 0, 480);
+    var fitPx = n > 0 ? wrapWidth / n : RANGE_PX_PER_INTERVAL_MIN;
+    var basePx = Math.max(RANGE_PX_PER_INTERVAL_MIN, fitPx);
+    var px = basePx * state.chartZoom;
+    return { width: Math.max(wrapWidth, n * px), pxPerInterval: px };
+  }
+
+  // width/pxPerInterval are drawMonthCharts()'s own rangeChartGeometry(n)
+  // result, always passed — not defaulted here, so a caller that forgets
+  // them fails loudly instead of silently drawing at the wrong width.
   function buildMonthChartSvg(dates, times, actualUsage, hedgeVolume, uncovered, opts) {
     var n = times.length;
-    opts = opts || {};
     var hasUsage = opts.hasUsage || null;
-    var pxPerInterval = 4;
-    var width = Math.max(960, n * pxPerInterval);
+    var pxPerInterval = opts.pxPerInterval;
+    var width = opts.width;
     var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
     var plotW = width - padLeft - 10;
     var plotH = height - padTop - padBottom;
@@ -3993,7 +4047,7 @@
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      var covAttrs = barFillAttrs("#EEB72B", 0.2, measured, rbw);
+      var covAttrs = barFillAttrs("#EEB72B", 0.45, measured, rbw);
       coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
 
@@ -4193,14 +4247,18 @@
 
   var lastMonthCostChartGeom = null;
   var costMonthChart = document.getElementById("cost-month-chart");
+  var costMonthChartWrap = document.getElementById("cost-month-chart-wrap");
 
   function buildMonthCostChartSvg(dates, times, hedgeCost, deltaCost, totalCost, opts) {
     // Geometry MUST match buildMonthChartSvg exactly: the two range charts sit
     // one above the other and share a synced crosshair, so any difference in
-    // width or per-interval spacing would visibly misalign them.
+    // width or per-interval spacing would visibly misalign them. Both now
+    // come from the same rangeChartGeometry(n) call in drawMonthCharts()
+    // rather than each computing their own — opts.width/pxPerInterval are
+    // required, not merely a default, for exactly that reason.
     var n = times.length;
-    var pxPerInterval = 4;
-    var width = Math.max(960, n * pxPerInterval);
+    var pxPerInterval = opts.pxPerInterval;
+    var width = opts.width;
     // Shorter than the usage range chart's 260 — see buildCostChartSvg's
     // comment. width/plotW/stepX/barW stay identical to buildMonthChartSvg's
     // so the two range charts keep pixel-identical x-geometry.
@@ -4229,6 +4287,113 @@
   var lastCostDayContext = null, lastCostMonthContext = null;
   attachChartInteraction(costChart, "cost-chart-crosshair", function () { return lastCostChartGeom; }, function () { return lastCostDayContext; }, highlightTableRow);
   attachChartInteraction(costMonthChart, "cost-month-chart-crosshair", function () { return lastMonthCostChartGeom; }, function () { return lastCostMonthContext; }, highlightTableRow);
+
+  /**
+   * Rebuilds both range-chart SVGs at whatever geometry rangeChartGeometry()
+   * currently computes, from already-known data — no date/site re-fetch, no
+   * stat cards or table touched. This is what a zoom click or a container
+   * resize redraws through; render() itself calls it too (for the initial
+   * draw of a new range) rather than duplicating the viewBox/width wiring.
+   * Mirrors drawDayCharts()'s role for the single-day pair.
+   */
+  function drawMonthCharts(range, series) {
+    var geom = rangeChartGeometry(range.times.length);
+    var monthOpts = { hasUsage: range.hasUsage, width: geom.width, pxPerInterval: geom.pxPerInterval };
+    monthChart.setAttribute("viewBox", "0 0 " + geom.width + " 260");
+    monthChart.style.width = geom.width + "px";
+    monthChart.innerHTML = buildMonthChartSvg(range.dates, range.times, series.actualUsage, series.hedgeVolume, series.uncovered, monthOpts);
+
+    var costMonthOpts = { hasUsage: range.hasUsage, width: geom.width, pxPerInterval: geom.pxPerInterval };
+    costMonthChart.setAttribute("viewBox", "0 0 " + geom.width + " 190");
+    costMonthChart.style.width = geom.width + "px";
+    costMonthChart.innerHTML = buildMonthCostChartSvg(range.dates, range.times, series.hedgeCost, series.deltaCost, series.totalCost, costMonthOpts);
+
+    lastDrawnMonthWidth = geom.width;
+    updateZoomUi();
+  }
+
+  var chartZoomEl = document.getElementById("chart-zoom");
+  var zoomInBtn = document.getElementById("zoom-in");
+  var zoomOutBtn = document.getElementById("zoom-out");
+  var zoomLabel = document.getElementById("zoom-label");
+
+  function updateZoomUi() {
+    zoomLabel.textContent = state.chartZoom === 1 ? "Fit" : (state.chartZoom + "×");
+    zoomOutBtn.disabled = state.chartZoom <= ZOOM_MIN;
+    zoomInBtn.disabled = state.chartZoom >= ZOOM_MAX;
+  }
+
+  /**
+   * Doubling steps (1/2/4/8) rather than a continuous drag — a stepped
+   * control is simpler to reason about, to disable at the ends, and to
+   * test, and "twice as wide" is already a meaningful jump in how many
+   * intervals fit on screen at once. Never below 1 (=fit): going narrower
+   * than the container is exactly the dead-space bug rangeChartGeometry
+   * exists to prevent, so zoming "out" bottoms out at fit rather than
+   * shrinking past it.
+   */
+  function setChartZoom(next) {
+    if (!lastRender) { return; }
+    var z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next));
+    if (z === state.chartZoom) { return; }
+    state.chartZoom = z;
+    drawMonthCharts(lastRender.range, lastRender.series);
+    // A new zoom level changes what "the same scroll position" even means;
+    // starting back at the range's own start is less surprising than
+    // landing on an arbitrary offset into it.
+    monthChartWrap.scrollLeft = 0;
+    costMonthChartWrap.scrollLeft = 0;
+  }
+  function zoomChartIn() { setChartZoom(state.chartZoom * 2); }
+  function zoomChartOut() { setChartZoom(state.chartZoom / 2); }
+
+  // Same guarded-to-one-redraw-per-frame pattern as scheduleDayChartResize
+  // below, watching the range chart's own wrap instead. Needed because
+  // rangeChartGeometry() now measures the wrap on every draw — without this,
+  // a resized window would leave the chart at whatever width it was first
+  // drawn at, silently reintroducing the dead-space bug on the next layout
+  // change instead of just on first paint.
+  var lastDrawnMonthWidth = null, monthResizeQueued = false;
+  function scheduleMonthChartResize() {
+    if (monthResizeQueued) { return; }
+    monthResizeQueued = true;
+    requestAnimationFrame(function () {
+      monthResizeQueued = false;
+      if (!lastRender || monthChartWrap.style.display === "none") { return; }
+      var geom = rangeChartGeometry(lastRender.range.times.length);
+      if (geom.width === lastDrawnMonthWidth) { return; }
+      drawMonthCharts(lastRender.range, lastRender.series);
+    });
+  }
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(scheduleMonthChartResize).observe(monthChartWrap);
+  } else {
+    window.addEventListener("resize", scheduleMonthChartResize);
+  }
+
+  /**
+   * Keeps the usage and cost range charts scrolled to the same position —
+   * they already share geometry and a crosshair (see "The two range charts
+   * must keep identical geometry"), so scrolling one out of step with the
+   * other would show two different slices of time stacked on each other.
+   * Zoom is what makes this likely to actually happen day to day: at "fit"
+   * neither chart scrolls at all, but any zoom level beyond that turns both
+   * into independent scroll containers with nothing else linking them.
+   *
+   * Assigning scrollLeft to a value it already holds does not re-fire a
+   * scroll event, so each handler naturally stops the other from
+   * re-triggering — no separate "am I already syncing" flag needed.
+   */
+  monthChartWrap.addEventListener("scroll", function () {
+    if (costMonthChartWrap.scrollLeft !== monthChartWrap.scrollLeft) {
+      costMonthChartWrap.scrollLeft = monthChartWrap.scrollLeft;
+    }
+  });
+  costMonthChartWrap.addEventListener("scroll", function () {
+    if (monthChartWrap.scrollLeft !== costMonthChartWrap.scrollLeft) {
+      monthChartWrap.scrollLeft = costMonthChartWrap.scrollLeft;
+    }
+  });
 
   /**
    * Snaps From/To to the day, month, or quarter containing the current To
@@ -4279,6 +4444,12 @@
     // Drop any hover state from the previous view: the hidden chart variant
     // keeps its old markup, so a stale crosshair would otherwise linger.
     clearHover();
+    // A genuine range/site change starts the range chart back at "fit" —
+    // carrying over a zoom level chosen for a different interval count
+    // would land on an arbitrary, likely-wrong width. Zoom clicks and
+    // resizes redraw through drawMonthCharts() directly, never render(),
+    // which is exactly why they don't hit this reset.
+    state.chartZoom = 1;
     var siteId = siteSelect.value;
     var site = DATA.sites.filter(function (s) { return s.id === siteId; })[0];
 
@@ -4374,6 +4545,8 @@
     document.getElementById("month-chart-wrap").style.display = singleDay ? "none" : "";
     document.getElementById("cost-day-chart-wrap").style.display = singleDay ? "" : "none";
     document.getElementById("cost-month-chart-wrap").style.display = singleDay ? "none" : "";
+    // Zoom only means something once there's a range to scroll through.
+    chartZoomEl.style.display = singleDay ? "none" : "";
     // Frames the cost chart as derived FROM the usage chart above it, not an
     // equal peer — the "Same intervals" phrasing points back at that card
     // rather than restating its own interval/day count.
@@ -4400,18 +4573,7 @@
         hasUsage: range.hasUsage };
       lastDayContext = null;
       lastCostDayContext = null;
-      var monthOpts = { hasUsage: range.hasUsage };
-      var markup = buildMonthChartSvg(range.dates, range.times, series.actualUsage, series.hedgeVolume, series.uncovered, monthOpts);
-      monthChart.setAttribute("viewBox", "0 0 " + lastMonthChartGeom.width + " 260");
-      monthChart.style.width = lastMonthChartGeom.width + "px";
-      monthChart.innerHTML = markup;
-
-      var costMonthOpts = { hasUsage: range.hasUsage };
-      var costMarkup = buildMonthCostChartSvg(range.dates, range.times, series.hedgeCost, series.deltaCost, series.totalCost, costMonthOpts);
-      // Shorter than the usage range chart's 260 — width still tracks it exactly.
-      costMonthChart.setAttribute("viewBox", "0 0 " + lastMonthCostChartGeom.width + " 190");
-      costMonthChart.style.width = lastMonthCostChartGeom.width + "px";
-      costMonthChart.innerHTML = costMarkup;
+      drawMonthCharts(range, series);
     }
 
     renderTable(range.dates, range.times, range.prices, series, range.hasUsage);
@@ -4579,6 +4741,13 @@
         applyPeriodPreset(evt.currentTarget.getAttribute("data-period"));
       });
     }
+    // Start enabled (updateZoomUi immediately disables whichever end is at
+    // its limit) rather than disabled-until-first-draw — there's no reason
+    // to wait, unlike the tabs above, which do nothing until a range exists.
+    zoomOutBtn.disabled = false;
+    zoomInBtn.disabled = false;
+    zoomOutBtn.addEventListener("click", zoomChartOut);
+    zoomInBtn.addEventListener("click", zoomChartIn);
 
     siteSelect.disabled = false;
     exportBtn.addEventListener("click", exportCsv);

@@ -1019,10 +1019,19 @@ Two things to preserve if you touch this:
 All are totals over the selected date range.
 
 Card tones deliberately mirror the chart's own colors so the two read as
-one system: **Long** uses the `.export` tone (`--pp-cyan`) and **Short**
-the `.short` tone (`--pp-orange`), matching the cyan "sold at day-ahead"
-and orange "bought at day-ahead" bar segments. Delta and Total Cost are
-red when it's an additional cost, green when it's savings/revenue.
+one system: **Long** uses the `.export` tone (`--pp-teal-text`, matching the
+chart's own teal fill — see "Usage/cost chart saturation") and **Short**
+the `.short` tone (`--pp-orange-text`), matching the coral "bought at
+day-ahead" bar segment. Delta and Total Cost are red when it's an
+additional cost, green when it's savings/revenue. **Hedge cost** and
+**Hedge volume** — the one figure in each equation that is never derived,
+never withheld, and never marked projected (a locked-in contract position,
+see "Looking past the end of the data" below) — carry `tone="brand"`
+(`#004C94`, blue-700), the same blue as the hedge line on the chart above
+and the Hedge segment on the Dashboard's own composition bar. Before
+2026-08-18 both were untoned (a plain grey accent cap); the design system's
+own Consumption screen names Hedge volume `tone="brand"` explicitly, and
+Hedge cost gets the same treatment for the same reason, one equation over.
 
 The `#stat-row` element is a `.stat-stack` flex column wrapping two
 `.stat-row` divs — loading/no-data/error placeholders go through
@@ -1035,8 +1044,10 @@ export.
 **Usage chart (both single-day and multi-day):** two lines — actual usage
 (solid blue-500, `#006ECF`) and hedge volume (dashed blue-700, `#004C94`) —
 with each interval rendered as a stacked bar from the zero baseline: an
-amber segment (20% opacity, deliberately muted so it doesn't compete with
-the Short/Long segment above it) from zero up to
+amber segment (`#EEB72B` at 45% opacity — bumped up from 20% on
+2026-08-18, in the same product direction as the Short/Long full-opacity
+change below, but deliberately kept short of Short/Long's own full opacity
+so it still reads as the subordinate quantity, not an equal one) from zero up to
 `MIN(Actual Usage, Hedge Volume)` — the portion of usage already covered by
 the hedge — topped by the coral/teal segment spanning the gap between the
 two lines: coral, `#FF8F5C`, **full opacity**, when Uncovered ≥ 0 ("Short —
@@ -1140,13 +1151,94 @@ through the same registry for all four variants; `activeCharts()` is gone.
 There are still two tooltip elements (`#chart-tooltip`, `#cost-chart-tooltip`),
 now because each chart owns one, not so both can show together.
 
-**The two range charts must keep identical geometry** (`pxPerInterval = 4`,
-same `width`/`plotW`/`stepX`/`barW` derivation) — they sit one above the other
-and share a synced crosshair, so any difference visibly misaligns them. That
-was wrong when the cost chart was first added (it used its own `stepX = 3`)
-and the crosshairs landed at different x. `costChartBody()`'s `anchorOffset`
-parameter is what lets one body serve both the day chart (anchor `barW/2`)
-and the range chart (anchor `0`), matching the usage charts' conventions.
+**The two range charts must keep identical geometry** (same
+`width`/`pxPerInterval`/`plotW`/`stepX`/`barW` derivation) — they sit one
+above the other and share a synced crosshair, so any difference visibly
+misaligns them. That was wrong when the cost chart was first added (it used
+its own `stepX = 3`) and the crosshairs landed at different x.
+`costChartBody()`'s `anchorOffset` parameter is what lets one body serve
+both the day chart (anchor `barW/2`) and the range chart (anchor `0`),
+matching the usage charts' conventions. `pxPerInterval` used to be a flat
+`4` constant; see "The range chart fits its container, then zooms" below for
+what it is now and why keeping both charts reading it from the same call is
+just as load-bearing for the new value as it was for the old fixed one.
+
+### The range chart fits its container, then zooms (2026-08-18)
+
+Product direction: a short multi-day range (e.g. 2 days) rendered *narrower*
+than the card holding it — `Math.max(960, n * 4)` is blind to the card's
+actual width, and 4px/interval × a couple hundred intervals is well under a
+typical desktop card's width — leaving dead space on the right exactly like
+the day chart's own pre-fix letterboxing (see "Single-day charts size to
+their container" above), just never diagnosed the same way because nobody
+had compared it side by side with a card that *did* fill correctly.
+
+**`rangeChartGeometry(n)`** is the fix, and now the single place both range
+charts get `width`/`pxPerInterval` from — calling it once per redraw and
+handing the identical result to both builders is what keeps them
+pixel-aligned, the same invariant `costChartBody()`'s shared geometry has
+always protected, just extended to a value that can now change per range and
+per zoom level instead of being a baked-in `4`:
+
+```js
+function rangeChartGeometry(n) {
+  var wrapWidth = Math.max(monthChartWrap.clientWidth || 0, 480);
+  var fitPx = n > 0 ? wrapWidth / n : RANGE_PX_PER_INTERVAL_MIN;
+  var basePx = Math.max(RANGE_PX_PER_INTERVAL_MIN, fitPx);
+  var px = basePx * state.chartZoom;
+  return { width: Math.max(wrapWidth, n * px), pxPerInterval: px };
+}
+```
+
+`fitPx = wrapWidth / n` is the px/interval that makes the content exactly
+fill the container with nothing left to scroll — the direct fix for the
+reported bug. Flooring it at `RANGE_PX_PER_INTERVAL_MIN` (4, the original
+constant) preserves the *other* existing behaviour: a genuinely long range
+(a full quarter is ~8.700 intervals) still renders at a scrollable minimum
+rather than being squeezed down to sub-pixel bars to force-fit the card.
+`state.chartZoom` (≥1, never below — going narrower than fit would just
+reintroduce the dead-space bug) then widens the chart beyond fit on request;
+`width` itself is still `Math.max(wrapWidth, n*px)` as a second, independent
+floor, so a container measured as `0` before layout (or `n=0`) can't produce
+a chart narrower than its own minimum.
+
+`buildMonthChartSvg`/`buildMonthCostChartSvg` take `opts.width`/
+`opts.pxPerInterval` with **no fallback** — a caller that forgets them fails
+loudly (`NaN` propagating through the geometry math) rather than silently
+drawing at the old hardcoded width. The only caller is `drawMonthCharts()`.
+
+**Zoom itself** is `state.chartZoom`, a doubling multiplier (1/2/4/8,
+`ZOOM_MIN`/`ZOOM_MAX`) driven by the `−`/`+` buttons next to the Day/Month/
+Quarter tabs (`#chart-zoom`, shown only when they are — a single day already
+renders at its container's own width 1:1 and has nothing to zoom into).
+`setChartZoom()` redraws through `drawMonthCharts()` and resets both range
+charts' horizontal scroll to 0, since a new zoom level changes what "the same
+scroll position" even means. **`render()` resets `chartZoom` to 1 on every
+genuine range or site change** (a zoom level chosen for one interval count
+has no reason to make sense for a different one); zoom clicks and container
+resizes redraw through `drawMonthCharts()` directly and never touch `render()`,
+which is exactly why they don't hit that reset.
+
+`drawMonthCharts(range, series)` is the one function that turns geometry +
+already-known data into both SVGs — `render()` calls it for the initial draw
+of a new range, `setChartZoom()` calls it after a zoom click, and
+`scheduleMonthChartResize()` (a `ResizeObserver` on `#month-chart-wrap`,
+guarded on `lastDrawnMonthWidth` exactly like the day chart's own
+`lastDrawnDayWidth` guard) calls it when the container itself changes size —
+without this observer, a browser-window resize would leave the chart at
+whatever width it first fit to, silently reintroducing the dead-space bug on
+the *next* layout change instead of only on first paint.
+
+**Scroll sync, added alongside zoom for the same reason `costChartBody()`
+shares geometry.** At "fit" neither range chart scrolls, so this was latent
+and harmless; any zoom level beyond that turns both `.chart-scroll` wraps
+into independent scroll containers with nothing else linking them, and the
+two charts are supposed to be showing *the same interval* stacked on top of
+each other. `#month-chart-wrap` and `#cost-month-chart-wrap` each mirror
+their `scrollLeft` onto the other on `scroll`; assigning `scrollLeft` to a
+value it already holds does not re-fire a `scroll` event, so each handler
+naturally stops the other from re-triggering — no separate "am I already
+syncing" flag needed.
 
 **Each tooltip covers only what its own chart plots**, selected by
 `context.kind` (`"cost"` vs. anything else); the full set of columns stays
@@ -1244,9 +1336,10 @@ of form-first:
 |---|---|---|
 | Site `#site-select` | page level, by the title | it changes everything on the page |
 | From/To + Day/Month/Quarter `#from-date` `#to-date` | inside the usage-chart card, as its toolbar | they filter the charts and table, and sit next to what visibly changes |
+| Zoom `#chart-zoom` (`#zoom-out`/`#zoom-in`) | same toolbar, right of Day/Month/Quarter | it doesn't filter anything — it changes how closely the *already-filtered* range is viewed, so it reads as a sibling of the period tabs, not a peer of From/To |
 | Export CSV `#export-csv` | on the interval table's summary row | export belongs with the thing it exports |
 
-**The ids are the contract, not the DOM position.** All four elements are
+**The ids are the contract, not the DOM position.** These elements are
 acquired once by `getElementById` at startup and nothing reads their parent,
 position or a container class — which is why they could be relocated without
 touching `goToConsumption()`, the presets or the export. Keep the ids if you
