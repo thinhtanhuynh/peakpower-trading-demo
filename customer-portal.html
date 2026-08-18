@@ -585,31 +585,56 @@
   .field-group { margin-bottom:14px; }
   .field-group .fg-label { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; margin-bottom:6px; }
 
-  /* Three rows (6 months / 4 quarters / 2 years — see "Three period rows,
-     one selection") replaced the old single row that switched between them,
-     so each got shorter (130px->84px) to keep the stack from dominating the
-     step. flex:1 used to stretch every column to fill the row — fine for one
-     row of a fixed count, wrong once row length varies: a 2-item year row
-     would stretch each bar to half the row's width, while the 6-item month
-     row's bars stay a sixth of it — same data, wildly different-looking
-     marks. A fixed column width keeps every bar the same size regardless of
-     which row it's in; a short row is simply narrower overall, which is
-     honest about there being fewer choices, not a rendering quirk. */
-  .wizard-period-row { margin-top:14px; }
-  .wizard-period-row:first-child { margin-top:8px; }
-  .wpr-label { font-size:10px; font-weight:600; color:var(--pp-text-faint); margin-bottom:4px; }
-  .bar-chart-row { display:flex; align-items:flex-end; gap:8px; height:84px; }
-  .bar-chart-col { flex:0 0 60px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; cursor:pointer; }
-  .bar-chart-price { font-size:10.5px; font-weight:700; color:var(--pp-text-body); margin-bottom:6px; transition:color .15s ease; }
-  .bar-chart-bar { width:70%; border-radius:4px 4px 0 0; background:var(--pp-border-strong); transition:background-color .15s ease, height .15s ease; }
-  .bar-chart-bar.selected { background:var(--pp-teal-600); }
-  .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-teal-300); }
-  .bar-chart-col:hover .bar-chart-price { color:var(--pp-teal-700); }
-  .bar-chart-period { font-size:10.5px; color:var(--pp-text-body); margin-top:6px; font-weight:600; }
+  /* Direction and Shape are quick binary settings, not the decision this step
+     is actually about — sat side by side (2026-08-18 redesign) so they read
+     as a pair of toggles, leaving Delivery period as the step's clear focus
+     rather than three stacked full-width fields of equal visual weight. */
+  .wizard-quick-row { display:flex; gap:24px; margin-bottom:4px; }
+  .wizard-quick-row .field-group { flex:0 0 auto; margin-bottom:0; }
 
-  .price-readout { background:var(--pp-surface-alt); border-radius:var(--radius-md); padding:12px 16px; margin-top:14px; }
+  /* Delivery period gets its own sunken panel, the price readout nested
+     inside it — "your choice" and "what it costs" read as one unit, not two
+     unrelated blocks stacked in a card. */
+  .period-panel { background:var(--pp-surface-alt); border-radius:var(--radius-lg); padding:16px 18px 14px; margin-top:18px; }
+  .period-panel-label { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; margin-bottom:2px; }
+
+  /* Three rows (6 months / 4 quarters / 2 years — see "Three period rows,
+     one selection") replaced the old single row that switched between them.
+     flex:1 used to stretch every column to fill the row — fine for one row
+     of a fixed count, wrong once row length varies: a 2-item year row would
+     stretch each bar to half the row's width, while the 6-item month row's
+     bars stay a sixth of it — same data, wildly different-looking marks. A
+     fixed column width keeps every bar the same size regardless of which row
+     it's in; a short row is simply narrower overall, which is honest about
+     there being fewer choices, not a rendering quirk.
+     Each option is a real card (2026-08-18 redesign), not a bare column: a
+     border and white fill at rest, an elevated hover, and a selected state
+     carried by THREE redundant cues — border colour, a light blue wash, and
+     a checkmark badge — never colour alone, matching how this app already
+     insists on redundant cues everywhere else (see CLAUDE.md's certainty
+     layer). The comparative bar height is still the same real number
+     (min/max-normalised per row) — polish changed how it's framed, not what
+     it shows. */
+  .wizard-period-row { margin-top:16px; }
+  .wizard-period-row:first-child { margin-top:10px; }
+  .wpr-label { font-size:10.5px; font-weight:700; color:var(--pp-text-heading); margin-bottom:8px; }
+  .bar-chart-row { display:flex; align-items:stretch; gap:10px; height:116px; }
+  .bar-chart-col { flex:0 0 72px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; box-sizing:border-box; padding:10px 4px 8px; position:relative; background:#fff; border:1.5px solid var(--pp-border); border-radius:var(--radius-md); cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, transform .1s ease; }
+  .bar-chart-col:hover { border-color:var(--pp-blue-300); box-shadow:0 3px 10px rgba(45,63,84,.10); transform:translateY(-1px); }
+  .bar-chart-col.selected { border-color:var(--pp-blue-700); background:var(--pp-blue-050); box-shadow:0 3px 10px rgba(0,76,148,.16); }
+  .bar-chart-check { position:absolute; top:-7px; right:-7px; width:18px; height:18px; border-radius:50%; background:var(--pp-blue-700); color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,76,148,.4); opacity:0; transform:scale(.5); transition:opacity .15s ease, transform .15s ease; }
+  .bar-chart-col.selected .bar-chart-check { opacity:1; transform:scale(1); }
+  .bar-chart-price { font-size:11px; font-weight:700; color:var(--pp-text-body); margin-bottom:8px; transition:color .15s ease; }
+  .bar-chart-col.selected .bar-chart-price { color:var(--pp-blue-700); }
+  .bar-chart-bar { width:56%; min-height:3px; border-radius:3px 3px 0 0; background:var(--pp-border-strong); transition:background-color .15s ease, height .15s ease; }
+  .bar-chart-bar.selected { background:var(--pp-blue-700); }
+  .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-blue-300); }
+  .bar-chart-period { font-size:10.5px; color:var(--pp-text-body); margin-top:8px; font-weight:600; }
+  .bar-chart-col.selected .bar-chart-period { color:var(--pp-text-heading); font-weight:700; }
+
+  .price-readout { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:14px 16px; margin-top:16px; }
   .price-readout .pr-eyebrow { font-size:10px; font-weight:700; letter-spacing:.05em; color:var(--pp-text-body); text-transform:uppercase; }
-  .price-readout .pr-price { font-size:24px; font-weight:700; margin-top:4px; }
+  .price-readout .pr-price { font-size:26px; font-weight:700; margin-top:4px; color:var(--pp-blue-700); }
   .price-readout .pr-meta { font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
 
   .balance-box { background:var(--pp-surface-alt); border-radius:var(--radius-md); padding:12px 14px; margin-top:10px; }
@@ -1180,6 +1205,7 @@
   }
 
   function startWizard() {
+    state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "wizard"; state.wizardStep = 0;
     state.wizard = defaultWizard("Peak", "quarter", 0, 1);
     renderApp();
@@ -2500,7 +2526,8 @@
       var v = w.shape === "Base" ? p.base : p.peak;
       var pct = 30 + (v - minV) / range * 70;
       var sel = w.periodType === type && i === idx;
-      return '<div class="bar-chart-col" onclick="PP.selectWizardBar(\'' + type + '\',' + i + ')">' +
+      return '<div class="bar-chart-col' + (sel ? " selected" : "") + '" onclick="PP.selectWizardBar(\'' + type + '\',' + i + ')">' +
+        '<div class="bar-chart-check">✓</div>' +
         '<div class="bar-chart-price">€ ' + ConsumptionCalc.formatNL(v, 2) + '</div>' +
         '<div class="bar-chart-bar' + (sel ? " selected" : "") + '" style="height:' + pct.toFixed(0) + '%"></div>' +
         '<div class="bar-chart-period">' + p.period + '</div></div>';
@@ -2647,14 +2674,16 @@
     var bodyHtml = "";
 
     if (state.wizardStep === 0) {
-      bodyHtml = cardHtml("Product & period", "",
+      bodyHtml = cardHtml("Product & period", "Choose a direction, shape and delivery period — the indicative price updates as you pick.",
+        '<div class="wizard-quick-row">' +
         '<div class="field-group"><div class="fg-label">Direction</div>' + segTabs(["Buy", "Sell"], w.direction === "Buy" ? 0 : 1, "setDirIdx") + '</div>' +
         '<div class="field-group"><div class="fg-label">Shape</div>' + segTabs(["Base", "Peak"], w.shape === "Base" ? 0 : 1, "setShapeIdx") + '</div>' +
-        '<div class="field-group"><div class="fg-label">Delivery period</div>' +
+        '</div>' +
+        '<div class="period-panel"><div class="period-panel-label">Delivery period</div>' +
         buildWizardPeriodRow("month", "Month") +
         buildWizardPeriodRow("quarter", "Quarter") +
-        buildWizardPeriodRow("year", "Calendar year") + '</div>' +
-        buildPriceReadout(period, priceVal) +
+        buildWizardPeriodRow("year", "Calendar year") +
+        buildPriceReadout(period, priceVal) + '</div>' +
         '<div class="wizard-actions"><button type="button" class="btn-primary" onclick="PP.wizardGoStep1()">Continue</button>' +
         '<button type="button" class="btn-secondary" onclick="PP.cancelWizard()">Cancel</button></div>');
     } else if (state.wizardStep === 1) {

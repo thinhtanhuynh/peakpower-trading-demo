@@ -322,13 +322,28 @@ plus a single volume field:
   radio, and `setWizardConnection()` refuses them — the guard is in the handler,
   not only in the markup.
 
-**Entry points into the wizard.** Three, all landing on step 1:
+**Entry points into the wizard.** Four buttons, three functions, all landing on step 1:
 
 | From | Function | Preselects |
 |---|---|---|
-| Trading list "Request a trade" | `startWizard()` | Peak / next quarter, first eligible connection |
+| Trading list "Request a trade", **Dashboard hero "Request a trade"** | `startWizard()` | Peak / next quarter, first eligible connection |
 | Prices card "Request a price →" | `startWizardFromPrice(shape, periodType)` | that card's shape & period type |
 | **Connection detail "Request a trade"** | `startWizardFromConnection(id)` | **that connection, locked** |
+
+**The Dashboard button silently did nothing until 2026-08-18.** `startWizard()`
+was the one entry point that never set `state.page`/`activatePageDom("trading")`
+— harmless as long as its only caller (the Trading list's own topbar button)
+was already on the Trading page when clicked, so `state.page` needed no
+correction. Wiring the Dashboard hero's own "Request a trade" button to the
+same function exposed the gap: clicking it updated `state.wizard` and
+`state.tradingView` correctly, then rendered the wizard into the (hidden)
+`#page-trading` container while `#page-dashboard` stayed the visible one —
+no error, no visible effect, just a dead button. Fixed by giving `startWizard()`
+the same two lines its siblings (`startWizardFromPrice`, `startWizardFromConnection`,
+`openTrade`) already had. If a fifth "Request a trade" button ever appears
+somewhere new, check this first rather than assuming the click handler alone
+is enough — `state.page`/`activatePageDom` is what actually switches which
+`.page` is visible; `renderApp()` only refreshes whichever one already is.
 
 The connection-detail button sits **below** the "Block positions on this
 connection" table, in a `.card-foot-action` (16px margin, 14px padding, a
@@ -405,6 +420,66 @@ choosing exactly one item across all three.
   quarter and year can all cover the same date. Grep for `WIZARD_YEAR` before
   assuming a future change here is complete; it should only ever match dated
   historical prose, never a live reference.
+
+#### Step 1 visual redesign (2026-08-18)
+
+Product direction: make the "choosing the trading block" step read as a
+professional, guided decision rather than a dense settings form. Checked the
+`peakpower-trading-design-system` Claude Design project first for a ready
+answer — there isn't one: `ui_kits/portal-2026` (the kit actually adopted for
+this app's Dashboard/sidebar) has no wizard at all, and the older
+`ui_kits/customer-portal/Trading.jsx` recreation has the *same* bare
+bar-chart-column pattern already live in this file. This redesign is
+original work within the established SB-2026 tokens, not a port.
+
+- **Direction and Shape moved into a `.wizard-quick-row`**, sitting side by
+  side instead of two stacked full-width `.field-group`s. They're quick
+  binary settings, not the step's actual decision — stacking them at the
+  same visual weight as Delivery period buried the real choice under two
+  toggles that take one glance each.
+- **Delivery period got its own `.period-panel`** — a sunken
+  `--pp-surface-alt` panel wrapping all three period rows *and* the price
+  readout together, the same treatment `.price-readout` alone used to have.
+  "Your choice" and "what it costs" now read as one unit; before, the price
+  readout was just another sibling block in the card, with no visual tie to
+  the rows above it.
+- **Each period option became a real card, not a bare column.** `.bar-chart-col`
+  gained a white fill, a 1.5px border, `border-radius:var(--radius-md)`, and
+  `box-sizing:border-box` padding (72px wide, up from 60px; row height 84px→
+  116px to give the card room to breathe). Selected state is now **three
+  redundant cues together** — border colour (`var(--pp-blue-700)`), a light
+  wash background (`var(--pp-blue-050)`), and a small checkmark badge
+  (`.bar-chart-check`, absolutely positioned, always in the DOM at
+  `opacity:0` and animated in via the `.selected` class) — never colour
+  alone, the same discipline the certainty layer and every chart legend on
+  this page already follow. Hover gets its own distinct, weaker cue (border
+  → `--pp-blue-300`, a soft shadow, a 1px lift) so resting/hover/selected are
+  three visually distinct states, not two. The comparative bar-height
+  visualisation itself is unchanged — still real, still per-row min/max
+  normalised (see "Three period rows" above) — polish changed how the choice
+  is framed, not what it shows.
+- **`buildWizardPeriodRow()`'s selected check moved from the bar to the
+  column**: `sel` now sets `.bar-chart-col.selected` (driving the border/wash/
+  checkmark) in addition to `.bar-chart-bar.selected` (the fill), since the
+  whole card is the selection now, not just the bar inside it.
+- **The card gained a subtitle** ("Choose a direction, shape and delivery
+  period — the indicative price updates as you pick") — step 1 was the only
+  wizard step without one; steps 2 and 3 already had theirs.
+- **Colour**: selection uses `var(--pp-blue-700)` directly (the canonical
+  SB-2026 name), not the legacy `--pp-teal-600`/`--pp-teal-700` aliases the
+  older seg-tabs/step-rail styling still reads — new code here follows
+  CLAUDE.md's own "write new code against the ramps above" rule from the
+  Design system sync. Not a colour *change*: both names resolve to the same
+  `#004C94`, so the visible brand colour is identical throughout the step.
+
+Verified the same way as every other visual change to this file: Playwright
+screenshots of resting, hover and selected states; a scripted interaction
+pass confirming cross-row exclusivity, the checkmark's computed opacity, the
+quick-row's side-by-side layout, and that all three wizard entry points
+(`startWizard`, `startWizardFromPrice`, `startWizardFromConnection`) still
+land cleanly on the redesigned step with no console errors; and the full
+Node suite re-run (none of this touched calculation logic, so an unchanged
+pass was expected, not just hoped for).
 
 ### Vertical spacing between sections — a footgun
 
