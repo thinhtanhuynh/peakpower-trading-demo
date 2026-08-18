@@ -3300,8 +3300,9 @@
   /**
    * A trade's lifecycle splits three ways for the chart, and the split is the
    * whole point: a **confirmed** trade is a real position and joins the hedge;
-   * anything still in flight is **provisional** and draws as an offer; a
-   * rejected, expired or failed one is neither and simply is not there.
+   * an offer still awaiting an answer is **provisional** and draws as an
+   * offer; everything else — accepted, rejected, expired, failed — is neither
+   * and simply is not there.
    *
    * `effectiveStatus` is the authority rather than the stored string, because
    * an offer expires on a clock.
@@ -3319,9 +3320,20 @@
 
   function nowForLink() { return Date.now(); }
 
+  /**
+   * Only an offer the customer has not yet answered draws as provisional.
+   *
+   * Accepting is the decision the overlay exists to support — it shows what
+   * the position WOULD become — so once it has been made the overlay has
+   * nothing left to ask and is dropped. An accepted trade is not drawn on the
+   * chart at all: it is not yet a position (only Confirmed joins the hedge,
+   * see hedgeBlocksFor), and it is no longer a question. It reappears on the
+   * hedge line the moment the desk confirms it.
+   */
   function isPendingOffer(req, now) {
     var status = PortalTradeLink.effectiveStatus(req, now);
     return status !== PortalTradeLink.STATUS_CONFIRMED &&
+           status !== PortalTradeLink.STATUS_ACCEPTED &&
            status !== PortalTradeLink.STATUS_REJECTED &&
            status !== PortalTradeLink.STATUS_OFFER_EXPIRED &&
            status !== PortalTradeLink.STATUS_FAILED;

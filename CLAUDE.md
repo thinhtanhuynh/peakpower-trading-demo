@@ -1071,8 +1071,8 @@ are exclusive** — a trade is in exactly one of them, never two:
 | stage | draws as | in |
 |---|---|---|
 | `Confirmed` | part of the **hedge** — a real position | `confirmedBlocksForRange()` |
-| anything still in flight (`Awaiting price`, `Offer received`, `Accepted · awaiting execution`) | the **provisional offer** overlay | `findOfferForRange()` |
-| `Offer rejected` / `Offer expired` / `Execution failed` | nothing at all | neither |
+| an offer still awaiting an answer (`Awaiting price`, `Offer received`) | the **provisional offer** overlay | `findOfferForRange()` |
+| `Accepted · awaiting execution` / `Offer rejected` / `Offer expired` / `Execution failed` | nothing at all | neither |
 
 Confirming a trade therefore *moves* it from the overlay into the hedge line,
 the Hedge volume card and the Hedge Cost — it does not add a second copy. That
@@ -1080,6 +1080,15 @@ was a real bug: the overlay filter excluded only rejected and expired, so a
 confirmed trade kept drawing as still-provisional while never joining the hedge
 it had actually become, and a failed one drew as a live offer. `isPendingOffer()`
 is the single predicate; extend **it**, not a call site, when a status is added.
+
+**Accepting a trade takes it off the chart entirely**, and that is deliberate.
+The overlay exists to answer one question — what would this position become if
+you accepted? — so once the answer is given it has nothing left to ask. An
+accepted trade is not yet a position either (only `Confirmed` joins the hedge),
+so it draws nowhere and reappears on the hedge line the moment the desk
+confirms it. Its status is still visible on Trading and the Dashboard, which is
+where a trade awaiting execution belongs; the chart is for positions and open
+questions.
 
 Read the hedge through **`hedgeBlocksFor(siteId, from, to)`**, never
 `DATA.hedge[siteId]` directly — that helper is the one place the contracted
