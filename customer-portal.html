@@ -6,43 +6,83 @@
 <title>Consumption — Live Data · PeakPower Customer Portal</title>
 <style>
   :root {
-    --pp-bg:#eef2f6; --pp-surface:#ffffff; --pp-surface-alt:#f8fafc; --pp-surface-zebra:#fbfdff;
-    --pp-border:#dbe3ec; --pp-border-strong:#c3cede;
-    --pp-text-heading:#0f172a; --pp-text-body:#64748b; --pp-text-faint:#94a3b8;
-    --pp-sidebar-bg:#0f2b33; --pp-sidebar-text:#cbd5e1; --pp-sidebar-text-active:#ffffff;
-    --pp-sidebar-subtitle:#5eead4; --pp-sidebar-active-bg:rgba(20,184,166,0.16);
-    --pp-teal-900:#0f2b33; --pp-teal-700:#00796b; --pp-teal-600:#0d9488; --pp-teal-500:#14b8a6;
-    --pp-teal-300:#5eead4; --pp-teal-100:#ccfbf1;
-    --pp-indigo:#4338ca; --pp-indigo-bg:#e0e7ff;
-    --pp-orange:#e8590c; --pp-cyan:#0891b2;
-    --pp-amber:#d97706; --pp-amber-bg:#fef3c7; --pp-amber-border:#fcd34d; --pp-amber-text:#92400e;
-    --pp-green:#15803d; --pp-green-bg:#dcfce7; --pp-green-border:#86efac; --pp-green-text:#166534;
-    --pp-red:#dc2626; --pp-red-bg:#fee2e2; --pp-red-border:#fca5a5; --pp-red-text:#991b1b;
-    /* Shared certainty-layer token (CLAUDE.md) — same value the chart's
-       provisional/projected treatment uses; declared here too since a
-       fully-projected stat card needs it and nothing else in this file
-       defined it yet. */
+    /* PeakPower colour tokens — Paleta SB-2026, adopted 2026-08-18.
+       Read verbatim from the PeakPower Trading design system project
+       (peakpower-trading-design-system); replaces the teal palette shipped
+       2026-08-13. See CLAUDE.md "Design system sync (2026-08-18)" for the
+       full mapping and what changed. A bright hex is a fill, a mark or a
+       chart series; anything that becomes text or a numeral uses the
+       matching *-text/*-value tier. */
+    --pp-bg:#eef3f9; --pp-bg-2:#f7f9fc;
+    --pp-bg-gradient:linear-gradient(180deg,#eef3f9 0%,#f7f9fc 60%);
+    --pp-surface:#ffffff; --pp-surface-alt:#f2f5f9; --pp-surface-zebra:#fafcfe;
+    --pp-border:#dde4ed; --pp-border-strong:#c3cddb;
+    --pp-text-heading:#2D3F54; --pp-text-body:#52647A; --pp-text-faint:#8b98aa;
+    --pp-sidebar-bg:#2D3F54; --pp-sidebar-text:#c2ccd9; --pp-sidebar-text-active:#ffffff;
+    --pp-sidebar-subtitle:#43d3a6; --pp-sidebar-active-bg:rgba(255,255,255,0.10);
+    --pp-rail-spectrum:linear-gradient(90deg,#004C94 0 20%,#006ECF 20% 40%,#1DBD8E 40% 60%,#EEB72B 60% 80%,#FF8F5C 80% 100%);
+    --pp-blue-900:#003a72; --pp-blue-700:#004C94; --pp-blue-500:#006ECF; --pp-blue-300:#3C93FA;
+    --pp-blue-100:#e7f0fa; --pp-blue-050:#eaf2fb;
+    --pp-mint:#1DBD8E; --pp-mint-text:#016A6C; --pp-mint-bg:#e6f8f2; --pp-mint-border:#a6e3d1;
+    --pp-teal:#0FA69D; --pp-teal-text:#0A7A74; --pp-teal-deep:#028183;
+    --pp-cyan:#00D4C6;
+    --pp-violet:#9151B8; --pp-violet-text:#6F3A91; --pp-violet-bg:#f3eaf9; --pp-violet-border:#d6b7e8;
+    --pp-coral:#FF8F5C; --pp-coral-text:#B4531F; --pp-coral-bg:#fff0e8; --pp-coral-border:#ffc6a8;
+    --pp-pink:#FF57B0; --pp-pink-text:#A62E76; --pp-pink-bg:#ffeaf5; --pp-pink-border:#ffb8dc;
+    --pp-grass:#73CC80; --pp-grass-text:#1B7A4F;
+    --pp-amber:#EEB72B; --pp-amber-bg:#fdf5e0; --pp-amber-border:#eed591; --pp-amber-text:#8A6710;
+    --pp-green:#1DBD8E; --pp-green-bg:#e6f8f2; --pp-green-border:#a6e3d1; --pp-green-text:#016A6C;
+    --pp-red:#F24F4F; --pp-red-bg:#fdecec; --pp-red-border:#f7b8b8; --pp-red-text:#C22A2A;
+    --pp-red-value:#C22A2A;
+    /* Named chart-series roles, straight from the design system — the JS
+       chart builders below keep their own literal-hex constants (SVG string
+       templates can't read a CSS var), kept byte-identical to these. */
+    --pp-chart-usage:#006ECF; --pp-chart-hedge:#004C94;
+    --pp-chart-short:#FF8F5C; --pp-chart-short-stroke:#F24F4F;
+    --pp-chart-long:#0FA69D; --pp-chart-long-fill:#00D4C6;
+    --pp-chart-peak:#3C93FA;
+    /* legacy aliases — every var() written against these names keeps
+       working; write new code against the ramps above. */
+    --pp-teal-900:#2D3F54; --pp-teal-700:#004C94; --pp-teal-600:#004C94;
+    --pp-teal-500:#1DBD8E; --pp-teal-300:#43d3a6; --pp-teal-100:#e6f8f2;
+    --pp-indigo:#9151B8; --pp-indigo-bg:#f3eaf9;
+    --pp-orange:#FF8F5C; --pp-orange-text:#B4531F;
     --certainty-provisional-opacity:0.55;
     --font-sans:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
-    --font-mono:'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
+    --font-mono:'SF Mono',Menlo,Consolas,monospace;
     --text-2xs:10px; --text-xs:11px; --text-sm:12.5px; --text-base:13.5px; --text-md:15px; --text-lg:17px; --text-xl:23px; --text-hero:32px; --text-display:44px;
     --weight-regular:400; --weight-medium:500; --weight-semibold:600; --weight-bold:700;
     --tracking-eyebrow:0.05em;
     --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px; --space-10:40px;
-    --radius-sm:5px; --radius-md:7px; --radius-lg:10px; --radius-pill:999px;
-    --sidebar-width:218px; --topbar-height:56px;
+    --radius-sm:6px; --radius-md:8px; --radius-lg:12px; --radius-pill:999px;
+    --sidebar-width:236px; --topbar-height:64px;
+    --pp-shadow-card:0 1px 2px rgba(45,63,84,.06), 0 10px 28px -18px rgba(45,63,84,.28);
+    --pp-shadow-pop:0 12px 32px -12px rgba(45,63,84,.35);
   }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: var(--font-sans); background: var(--pp-bg); color: var(--pp-text-heading); }
+  body { margin:0; font-family: var(--font-sans); background: var(--pp-bg-gradient); background-attachment: fixed; color: var(--pp-text-heading); }
   .app { display:flex; height:100vh; width:100%; overflow:hidden; }
-  .sidebar { width:var(--sidebar-width); min-width:var(--sidebar-width); background:var(--pp-sidebar-bg); color:var(--pp-sidebar-text); display:flex; flex-direction:column; padding:20px 0; }
-  .sidebar .brand { padding:0 20px 20px; font-size:11px; letter-spacing:var(--tracking-eyebrow); color:var(--pp-sidebar-subtitle); font-weight:700; text-transform:uppercase; }
-  .sidebar nav { display:flex; flex-direction:column; gap:2px; padding:0 10px; }
-  .sidebar nav a { display:block; padding:9px 12px; border-radius:7px; font-size:13px; color:var(--pp-sidebar-text); text-decoration:none; cursor:pointer; transition:background-color .15s ease, color .15s ease; }
-  .sidebar nav a:hover:not(.active) { background:rgba(255,255,255,0.07); color:var(--pp-sidebar-text-active); }
+  /* Rail: grouped nav under Overview / Position / Market / Finance, each
+     item carrying its domain colour as a dot rather than the whole row —
+     the adopted SB-2026 nav (ui_kits/portal-2026), ported as markup/CSS
+     onto the existing goTo()/data-page wiring, which is untouched below. */
+  .sidebar { position:relative; width:var(--sidebar-width); min-width:var(--sidebar-width); background:var(--pp-sidebar-bg); color:var(--pp-sidebar-text); display:flex; flex-direction:column; padding:20px 0 16px; overflow-y:auto; }
+  .sidebar::before { content:""; position:absolute; left:0; right:0; top:0; height:3px; background:var(--pp-rail-spectrum); }
+  .sidebar .brand { display:flex; align-items:center; gap:10px; padding:16px 20px 22px; }
+  .sidebar .brand-name { color:#fff; font-size:15px; font-weight:700; letter-spacing:-.01em; }
+  .sidebar .brand-sub { color:var(--pp-sidebar-subtitle); font-size:10px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; margin-top:1px; }
+  .sidebar-group-label { padding:14px 20px 6px; font-size:9.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#7b8ba0; }
+  .sidebar-group-label:first-child { padding-top:10px; }
+  .sidebar nav { display:flex; flex-direction:column; gap:1px; }
+  .sidebar nav a { display:flex; align-items:center; gap:10px; margin:0 10px; padding:9px 12px; border-radius:8px; font-size:12.5px; color:var(--pp-sidebar-text); text-decoration:none; cursor:pointer; transition:background-color .15s ease, color .15s ease; }
+  .sidebar nav a .nav-dot { width:6px; height:6px; border-radius:2px; flex-shrink:0; opacity:.85; }
+  .sidebar nav a:hover:not(.active) { background:rgba(255,255,255,0.06); color:var(--pp-sidebar-text-active); }
   .sidebar nav a.active { background:var(--pp-sidebar-active-bg); color:var(--pp-sidebar-text-active); font-weight:600; }
-  .sidebar-footer { margin-top:auto; padding:14px 20px; border-top:1px solid rgba(255,255,255,0.08); font-size:11.5px; color:var(--pp-sidebar-text); }
-  .sidebar-footer span { display:block; margin-top:2px; font-size:10.5px; color:#5b7480; }
+  .sidebar nav a.active .nav-dot { opacity:1; box-shadow:0 0 0 3px rgba(255,255,255,.12); }
+  .sidebar-footer { margin-top:auto; display:flex; align-items:center; gap:10px; padding:16px 20px 0; margin-left:10px; margin-right:10px; border-top:1px solid rgba(255,255,255,.09); font-size:11.5px; color:var(--pp-sidebar-text); }
+  .sidebar-footer .avatar { width:28px; height:28px; border-radius:50%; background:var(--pp-mint); color:#08302a; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .sidebar-footer .who { font-size:12px; font-weight:600; color:#fff; }
+  .sidebar-footer span { display:block; margin-top:1px; font-size:10px; color:#93a2b5; }
   .main { flex:1; display:flex; flex-direction:column; overflow:auto; }
   .topbar { height:var(--topbar-height); min-height:var(--topbar-height); background:#fff; border-bottom:1px solid var(--pp-border); display:flex; align-items:center; justify-content:space-between; padding:0 28px; position:sticky; top:0; z-index:5; gap:16px; }
   .topbar .crumb { font-size:11px; color:var(--pp-text-body); }
@@ -53,7 +93,7 @@
   /* Badge — matches PeakPowerDesignSystem Badge.jsx exactly (11px/600,
      4px 12px, and every tone carries a real 1px border). */
   .badge { display:inline-block; padding:4px 12px; border-radius:var(--radius-pill); font-size:11px; font-weight:600; line-height:1.2; border:1px solid transparent; white-space:nowrap; }
-  .badge.info { background:var(--pp-indigo-bg); color:#4338ca; border-color:#c7d2fe; }
+  .badge.info { background:var(--pp-indigo-bg); color:var(--pp-violet-text); border-color:var(--pp-violet-border); }
   .badge.success { background:var(--pp-green-bg); color:var(--pp-green-text); border-color:var(--pp-green-border); }
   .badge.warning { background:var(--pp-amber-bg); color:var(--pp-amber-text); border-color:var(--pp-amber-border); }
   .badge.critical { background:var(--pp-red-bg); color:var(--pp-red-text); border-color:var(--pp-red-border); }
@@ -75,7 +115,7 @@
   select, input[type=date], input[type=text], input[type=number], textarea { border:1px solid var(--pp-border-strong); border-radius:7px; padding:7px 10px; font-size:12.5px; color:var(--pp-text-heading); background:#fff; font-family:var(--font-sans); transition:border-color .15s ease, box-shadow .15s ease; }
   textarea { width:100%; resize:vertical; min-height:56px; }
   select:disabled, input[type=date]:disabled { opacity:.5; cursor:not-allowed; }
-  select:focus, input[type=date]:focus, input[type=text]:focus, input[type=number]:focus, textarea:focus { outline:none; border-color:var(--pp-teal-500); box-shadow:0 0 0 3px rgba(20,184,166,0.15); }
+  select:focus, input[type=date]:focus, input[type=text]:focus, input[type=number]:focus, textarea:focus { outline:none; border-color:var(--pp-blue-300); box-shadow:0 0 0 3px rgba(60,147,250,.22); }
   .controls .ctl, .chart-toolbar .ctl { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
   .controls .spacer { flex:1; }
   /* In-card toolbar for the usage chart's own From/To + Day/Month/Quarter
@@ -181,7 +221,20 @@
      card's own actual share is (a component card is always the ~narrowest
      of the three, a result card ~1.2x it — group-relative cqw can't see
      that). Card-relative cqw does, directly. */
-  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; overflow:hidden; container-type:inline-size; container-name:statcard; }
+  .stat-card { position:relative; background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; overflow:hidden; container-type:inline-size; container-name:statcard; box-shadow:var(--pp-shadow-card); }
+  /* SB-2026's 3px accent cap, keyed by the same tone the value uses (see
+     statCardHtml's cardClass). Sits just inside the card's own border and
+     radius (absolute + the card's overflow:hidden crops its top corners to
+     match, so it needs no radius of its own). Untoned cards get a neutral
+     cap rather than none, so every card reads as "part of the same system"
+     even before its number is read. */
+  .stat-card::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:var(--pp-border-strong); }
+  .stat-card.brand::before { background:var(--pp-blue-700); }
+  .stat-card.critical::before, .stat-card.negative::before { background:var(--pp-red); }
+  .stat-card.warning::before { background:var(--pp-amber); }
+  .stat-card.success::before { background:var(--pp-green); }
+  .stat-card.export::before { background:var(--pp-teal); }
+  .stat-card.short::before { background:var(--pp-orange); }
   /* Auto-scales alongside the value (same card-relative cqw) — at the
      narrowest one-line widths this is what keeps "Total cost" legible
      instead of ellipsis-truncating to "TOT…", which rendering caught
@@ -255,21 +308,21 @@
   /* DS tone names: critical is ORANGE in the design system (Dashboard's
      "Uncovered volume"). Consumption's cost cards use .negative for red,
      so they keep their own red/green cost semantics. */
-  .stat-card .value.critical { color:var(--pp-orange); }
-  .stat-card .value.negative { color:var(--pp-red); }
-  .stat-card .value.success { color:var(--pp-green); }
+  .stat-card .value.critical { color:var(--pp-red-text); }
+  .stat-card .value.negative { color:var(--pp-red-text); }
+  .stat-card .value.success { color:var(--pp-green-text); }
   /* .export / .short match the chart's Long (cyan) and Short (orange) bars. */
-  .stat-card .value.export { color:var(--pp-cyan); }
-  .stat-card .value.short { color:var(--pp-orange); }
+  .stat-card .value.export { color:var(--pp-teal-text); }
+  .stat-card .value.short { color:var(--pp-orange-text); }
   .stat-card .value.brand { color:var(--pp-teal-600); }
-  .stat-card .value.warning { color:var(--pp-amber); }
+  .stat-card .value.warning { color:var(--pp-amber-text); }
   /* Fixed card height (above) can't fit an unbounded sublabel — clamped to
      2 lines with an ellipsis on overflow, same reasoning as .breakdown. */
   .stat-card .sublabel { font-size:11px; color:var(--pp-text-faint); margin-top:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .stat-card .sublabel.breakdown { -webkit-line-clamp:1; }
   /* Card — matches PeakPowerDesignSystem Card.jsx (18px 20px, title 13.5,
      subtitle 11.5 with margin-bottom 14 and no margin-top). */
-  .card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:18px 20px; }
+  .card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:18px 20px; box-shadow:var(--pp-shadow-card); }
   .card .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
   .card .card-title { font-size:13.5px; font-weight:700; color:var(--pp-text-heading); }
   .card .card-subtitle { font-size:11.5px; color:var(--pp-text-body); margin-bottom:14px; }
@@ -334,7 +387,7 @@
     border-right:1px solid var(--pp-border-strong);
     padding-right:var(--space-5);
   }
-  td.net-export { color:var(--pp-cyan); font-weight:600; }
+  td.net-export { color:var(--pp-teal-text); font-weight:600; }
   /* Certainty-layer text treatment for the table (see customer-portal.html's
      renderTable) — a projected row's numbers are real (historical-profile
      estimate) but must never read like a measurement. Placeholder-neutral
@@ -351,8 +404,8 @@
   .chart-tab.active { background:#fff; color:var(--pp-teal-700); box-shadow:0 1px 2px rgba(0,0,0,0.08); }
   .chart-tab:disabled { opacity:.5; cursor:not-allowed; }
   .chart-scroll { overflow-x:auto; }
-  .chart-tooltip { position:fixed; z-index:20; background:#0f172a; color:#fff; font-size:11px; line-height:1.6; padding:8px 10px; border-radius:6px; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,0.25); white-space:nowrap; display:none; }
-  .chart-tooltip .tt-head { font-weight:700; margin-bottom:4px; color:#5eead4; }
+  .chart-tooltip { position:fixed; z-index:20; background:#2D3F54; color:#fff; font-size:11px; line-height:1.6; padding:8px 10px; border-radius:6px; pointer-events:none; box-shadow:0 4px 12px rgba(0,0,0,0.25); white-space:nowrap; display:none; }
+  .chart-tooltip .tt-head { font-weight:700; margin-bottom:4px; color:#43d3a6; }
   /* Weekend marker in the tooltip head — peak blocks are Mon–Fri, so this is
      what explains hedge volume dropping to base-only on those intervals. */
   .chart-tooltip .tt-weekend { margin-left:6px; padding:1px 6px; border-radius:var(--radius-pill);
@@ -436,7 +489,7 @@
   .dq-cell .dq-label { font-size:8.5px; margin-top:1px; }
   .dq-final { background:var(--pp-green-bg); border-color:var(--pp-green-border); color:var(--pp-green-text); }
   .dq-prov { background:var(--pp-amber-bg); border-color:var(--pp-amber-border); color:var(--pp-amber-text); }
-  .dq-corr { background:var(--pp-indigo-bg); border-color:#a5b4fc; color:var(--pp-indigo); }
+  .dq-corr { background:var(--pp-indigo-bg); border-color:var(--pp-violet-border); color:var(--pp-violet-text); }
   .dq-none { background:var(--pp-red-bg); border-color:var(--pp-red-border); color:var(--pp-red-text); }
 
   /* Price cards */
@@ -452,8 +505,8 @@
   .price-card .pc-price { font-size:28px; font-weight:700; }
   .price-card .pc-price.faint { color:var(--pp-text-faint); }
   .price-card .pc-delta { font-size:14px; font-weight:700; }
-  .price-card .pc-delta.up { color:var(--pp-green); }
-  .price-card .pc-delta.down { color:var(--pp-red); }
+  .price-card .pc-delta.up { color:var(--pp-green-text); }
+  .price-card .pc-delta.down { color:var(--pp-red-text); }
   .price-card .pc-meta { display:flex; justify-content:space-between; font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
   .price-card .pc-foot { border-top:1px solid var(--pp-border); margin-top:12px; padding-top:10px; display:flex; justify-content:space-between; align-items:center; }
   .price-card .pc-foot .pc-note { font-size:10px; color:var(--pp-text-faint); }
@@ -464,15 +517,15 @@
   .offer-banner { background:var(--pp-teal-900); color:#fff; border-radius:var(--radius-lg); padding:18px 20px; }
   .offer-banner .ob-eyebrow { font-size:10.5px; font-weight:700; letter-spacing:.08em; color:var(--pp-teal-300); text-transform:uppercase; }
   .offer-banner .ob-price { font-size:32px; font-weight:700; margin-top:8px; }
-  .offer-banner .ob-price span { font-size:13px; font-weight:500; color:#cbd5e1; }
-  .offer-banner .ob-sub { font-size:12px; color:#cbd5e1; margin-top:4px; }
+  .offer-banner .ob-price span { font-size:13px; font-weight:500; color:#c2ccd9; }
+  .offer-banner .ob-sub { font-size:12px; color:#c2ccd9; margin-top:4px; }
   .offer-banner .ob-actions { display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; align-items:center; }
   .offer-banner .ob-countdown { font-family:var(--font-mono); font-size:15px; font-weight:700; color:var(--pp-teal-300); margin-left:auto; }
   .btn-accept { background:var(--pp-teal-500); color:var(--pp-teal-900); border:none; border-radius:var(--radius-md); padding:8px 18px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:var(--font-sans); transition:background-color .15s ease; }
-  .btn-accept:hover { background:#7dd8c9; }
+  .btn-accept:hover { background:#016A6C; }
   .btn-reject { background:transparent; color:#fff; border:1px solid rgba(255,255,255,0.4); border-radius:var(--radius-md); padding:8px 18px; font-size:12.5px; font-weight:700; cursor:pointer; font-family:var(--font-sans); transition:background-color .15s ease, border-color .15s ease; }
   .btn-reject:hover { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.65); }
-  .btn-ghost { background:transparent; color:#cbd5e1; border:none; padding:8px 4px; font-size:12px; font-weight:600; cursor:pointer; text-decoration:underline; font-family:var(--font-sans); transition:color .15s ease; }
+  .btn-ghost { background:transparent; color:#c2ccd9; border:none; padding:8px 4px; font-size:12px; font-weight:600; cursor:pointer; text-decoration:underline; font-family:var(--font-sans); transition:color .15s ease; }
   .btn-ghost:hover { color:#fff; }
 
   .timeline { display:flex; flex-direction:column; }
@@ -552,7 +605,7 @@
   .topup-card-title { font-size:20px; font-weight:700; color:var(--pp-text-heading); }
   .topup-card-subtitle { font-size:12.5px; color:var(--pp-text-body); margin-top:2px; }
   .amount-input-wrap { display:flex; align-items:center; border:1.5px solid var(--pp-teal-600); border-radius:var(--radius-md); padding:0 14px; transition:border-color .15s ease, box-shadow .15s ease; }
-  .amount-input-wrap:focus-within { border-color:var(--pp-teal-600); box-shadow:0 0 0 3px rgba(20,184,166,0.15); }
+  .amount-input-wrap:focus-within { border-color:var(--pp-blue-300); box-shadow:0 0 0 3px rgba(20,184,166,0.15); }
   .amount-input-wrap span { font-size:13px; font-weight:600; color:var(--pp-text-faint); padding-right:4px; user-select:none; }
   .amount-input-wrap input { border:none; outline:none; padding:9px 0; font-size:13px; font-weight:600; color:var(--pp-text-heading); font-family:inherit; background:transparent; flex:1; }
   .amount-chips { display:flex; gap:10px; flex-wrap:wrap; }
@@ -678,17 +731,24 @@
 <body>
 <div class="app">
   <div class="sidebar">
-    <div class="brand">Customer portal</div>
+    <div class="brand">
+      <svg width="24" height="24" viewBox="19 23 22 22"><circle cx="30" cy="34" r="11" fill="#1DBD8E"></circle><path d="M 26 34 L 30 27 L 30 33 L 34 33 L 30 41 L 30 35 Z" fill="#2D3F54"></path></svg>
+      <div><div class="brand-name">PeakPower</div><div class="brand-sub">Customer portal</div></div>
+    </div>
     <nav id="sidebar-nav">
-      <a href="#" data-page="dashboard" class="active">Dashboard</a>
-      <a href="#" data-page="connections">Connections</a>
-      <a href="#" data-page="consumption">Consumption</a>
-      <a href="#" data-page="prices">Prices</a>
-      <a href="#" data-page="trading">Trading</a>
-      <a href="#" data-page="wallet">Wallet</a>
-      <a href="#" data-page="invoices">Invoices</a>
+      <div class="sidebar-group-label">Overview</div>
+      <a href="#" data-page="dashboard" class="active"><span class="nav-dot" style="background:#004C94"></span>Dashboard</a>
+      <div class="sidebar-group-label">Position</div>
+      <a href="#" data-page="connections"><span class="nav-dot" style="background:#1DBD8E"></span>Connections</a>
+      <a href="#" data-page="consumption"><span class="nav-dot" style="background:#006ECF"></span>Consumption</a>
+      <div class="sidebar-group-label">Market</div>
+      <a href="#" data-page="prices"><span class="nav-dot" style="background:#EEB72B"></span>Prices</a>
+      <a href="#" data-page="trading"><span class="nav-dot" style="background:#3C93FA"></span>Trading</a>
+      <div class="sidebar-group-label">Finance</div>
+      <a href="#" data-page="wallet"><span class="nav-dot" style="background:#0FA69D"></span>Wallet</a>
+      <a href="#" data-page="invoices"><span class="nav-dot" style="background:#9151B8"></span>Invoices</a>
     </nav>
-    <div class="sidebar-footer">J. de Vries<span>Vandersteen Koeling B.V.</span></div>
+    <div class="sidebar-footer"><div class="avatar">JV</div><div><div class="who">J. de Vries</div><span>Vandersteen Koeling B.V.</span></div></div>
   </div>
   <div class="main">
     <div class="topbar">
@@ -743,8 +803,8 @@
           </div>
           <div class="legend">
             <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Actual usage</div>
-            <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed var(--pp-indigo)"></span>Hedge volume</div>
-            <div><span class="swatch" style="background:#facc15;opacity:.2"></span>Covered (min of actual &amp; hedge)</div>
+            <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed #004C94"></span>Hedge volume</div>
+            <div><span class="swatch" style="background:#EEB72B;opacity:.2"></span>Covered (min of actual &amp; hedge)</div>
             <div><span class="swatch" style="background:var(--pp-orange);opacity:.55"></span>Short — bought at day-ahead</div>
             <div><span class="swatch" style="background:var(--pp-cyan);opacity:.3"></span>Long — sold at day-ahead</div>
           </div>
@@ -770,7 +830,7 @@
           </div>
           <div class="legend">
             <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Total cost</div>
-            <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed var(--pp-indigo)"></span>Hedge cost</div>
+            <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed #004C94"></span>Hedge cost</div>
             <div><span class="swatch" style="background:var(--pp-orange);opacity:.55"></span>Buy — uncovered volume at day-ahead</div>
             <div><span class="swatch" style="background:var(--pp-cyan);opacity:.3"></span>Sell — surplus hedge at day-ahead</div>
           </div>
@@ -1713,9 +1773,9 @@
     }
     var hedgePoints = stepPoints(n, function (k) { return padLeft + k * stepX; }, stepX / 2,
       function (k) { return yFor(hedgeVolume[k]); });
-    return '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
-      '<polyline points="' + netPoints.trim() + '" fill="none" stroke="#059f8f" stroke-width="2"></polyline>' +
-      '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="2" stroke-dasharray="5,3"></polyline>';
+    return '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dde4ed"></line>' +
+      '<polyline points="' + netPoints.trim() + '" fill="none" stroke="#006ECF" stroke-width="2"></polyline>' +
+      '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#004C94" stroke-width="2" stroke-dasharray="5,3"></polyline>';
   }
 
   function overdueCount() {
@@ -1750,6 +1810,45 @@
       '<div class="banner-sub">The balance on a bought block falls due the day before delivery starts.</div></div>' +
       '<div class="banner-actions"><button type="button" class="btn-primary" onclick="PP.openTrade(\'' +
       esc(first.id) + '\')">Review &amp; pay</button></div></div>';
+  }
+
+  /**
+   * The Dashboard "position hero" — SB-2026's adopted layout for this screen
+   * (ui_kits/portal-2026), ported as the design project built it: literal
+   * demo figures, the same treatment as the two stat cards immediately below
+   * it ("Coverage — August" 78,4 %, "Uncovered volume" 214,4 MWh) which have
+   * always been hardcoded rather than computed — see CLAUDE.md "Dashboard |
+   * portal-seed-data.js... + a live mini chart" and the note on why an
+   * earlier attempt to derive these six screens from real data was reverted.
+   * A real portfolio-wide Hedged/Short/Long/Open aggregation across all 6
+   * connections is a genuine new feature, not a design-token sync, so it is
+   * deliberately out of scope here; this hero carries the same figures the
+   * two cards below it already show, just in the new layout.
+   */
+  function dashboardHeroHtml() {
+    return '<div style="display:grid;grid-template-columns:.85fr 1.15fr;gap:24px;background:#fff;border:1px solid var(--pp-border);border-radius:12px;box-shadow:var(--pp-shadow-card);padding:22px 24px">' +
+      '<div>' +
+        '<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--pp-text-faint)">August position</div>' +
+        '<div style="font-size:44px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:10px;color:#004C94">78,4 %</div>' +
+        '<div style="font-size:12px;color:var(--pp-text-body);margin-top:8px;line-height:1.5">of forecast volume covered by blocks.<br>1.291,4 MWh forecast across 6 connections.</div>' +
+        '<div style="margin-top:16px"><button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button></div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--pp-text-faint)"><span>Composition</span><span>1.291,4 MWh</span></div>' +
+        '<div style="display:flex;height:34px;border-radius:8px;overflow:hidden;margin-top:6px">' +
+          '<div style="width:63%;background:#004C94;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">Hedged 63 %</div>' +
+          '<div style="width:16.6%;background:#FF8F5C;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">Short</div>' +
+          '<div style="width:9.4%;background:#0FA69D;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">Long</div>' +
+          '<div style="width:11%;background:var(--pp-border-strong);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#43536b">Open</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:20px;margin-top:14px;flex-wrap:wrap">' +
+          '<div style="font-size:11px;color:var(--pp-text-body)"><span style="width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;background:#004C94"></span>Hedged<b style="display:block;font-size:14px;color:var(--pp-text-heading);margin-top:3px">812,8 MWh</b></div>' +
+          '<div style="font-size:11px;color:var(--pp-text-body)"><span style="width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;background:#FF8F5C"></span>Short — day-ahead<b style="display:block;font-size:14px;color:var(--pp-coral-text);margin-top:3px">214,4 MWh</b></div>' +
+          '<div style="font-size:11px;color:var(--pp-text-body)"><span style="width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;background:#0FA69D"></span>Long — sold<b style="display:block;font-size:14px;color:var(--pp-teal-text);margin-top:3px">121,3 MWh</b></div>' +
+          '<div style="font-size:11px;color:var(--pp-text-body)"><span style="width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;background:var(--pp-border-strong)"></span>Unpriced<b style="display:block;font-size:14px;color:var(--pp-text-heading);margin-top:3px">142,9 MWh</b></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
   }
 
   function renderDashboardPage() {
@@ -1791,7 +1890,7 @@
     }).join("");
 
     var activityHtml = PortalSeedData.DASHBOARD_RECENT_ACTIVITY.map(function (a, idx) {
-      var toneColor = PortalSeedData.TONE_COLOR[a[3]] || "#94a3b8";
+      var toneColor = PortalSeedData.TONE_COLOR[a[3]] || "#8b98aa";
       return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;' + (idx > 0 ? "border-top:1px solid var(--pp-border)" : "") + '">' +
         '<span style="width:8px;height:8px;border-radius:999px;margin-top:5px;flex-shrink:0;background:' + toneColor + '"></span>' +
         '<div style="flex:1"><div style="font-weight:600;font-size:12.5px">' + a[0] + '</div>' +
@@ -1815,6 +1914,7 @@
     }
 
     var html =
+      dashboardHeroHtml() +
       '<div class="stat-row">' + kpiHtml + '</div>' +
       balanceBannerHtml +
       offerBannerHtml +
@@ -1889,7 +1989,7 @@
     var dqLegend = '<div class="legend">' +
       '<div><span class="swatch" style="background:var(--pp-green-bg);border:1px solid var(--pp-green-border)"></span>Final</div>' +
       '<div><span class="swatch" style="background:var(--pp-amber-bg);border:1px solid var(--pp-amber-border)"></span>Provisional</div>' +
-      '<div><span class="swatch" style="background:var(--pp-indigo-bg);border:1px solid #a5b4fc"></span>Corrected</div>' +
+      '<div><span class="swatch" style="background:var(--pp-indigo-bg);border:1px solid var(--pp-violet-border)"></span>Corrected</div>' +
       '<div><span class="swatch" style="background:var(--pp-red-bg);border:1px solid var(--pp-red-border)"></span>None</div></div>';
     var dqCard = cardHtml("Data quality", "Last 14 delivery dates",
       '<div class="dq-grid">' + dqCells + '</div>' + dqLegend +
@@ -1903,9 +2003,9 @@
       var bhead = '<div class="gt-head" style="grid-template-columns:' + bcols + '"><div>TRADE</div><div>SHAPE</div><div>PERIOD</div>' +
         '<div class="gt-cell-num">ALLOCATED</div><div class="gt-cell-num">PRICE</div><div class="gt-cell-num">VOLUME</div><div>STATUS</div></div>';
       var brows = c.blocks.map(function (b) {
-        var negStyle = b.negative ? ' style="color:var(--pp-red)"' : "";
+        var negStyle = b.negative ? ' style="color:var(--pp-red-text)"' : "";
         return '<div class="gt-row" style="grid-template-columns:' + bcols + '">' +
-          '<div class="gt-mono" style="color:var(--pp-indigo);cursor:pointer" onclick="PP.openTrade(\'' + b.trade + '\')">' + b.trade + '</div>' +
+          '<div class="gt-mono" style="color:var(--pp-blue-500);cursor:pointer" onclick="PP.openTrade(\'' + b.trade + '\')">' + b.trade + '</div>' +
           '<div>' + b.shape + '</div><div>' + b.period + '</div>' +
           '<div class="gt-cell-num"' + negStyle + '>' + b.allocated + '</div>' +
           '<div class="gt-cell-num">' + b.price + '</div>' +
@@ -1957,17 +2057,17 @@
     var gridlines = "";
     for (var g = 0; g <= 4; g++) {
       var gy = padTop + g / 4 * plotH;
-      gridlines += '<line x1="' + padLeft + '" y1="' + gy.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + gy.toFixed(1) + '" stroke="#eef2f6"></line>';
+      gridlines += '<line x1="' + padLeft + '" y1="' + gy.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + gy.toFixed(1) + '" stroke="#eef3f9"></line>';
     }
     var monthLabels = "";
     var months = ["May", "Jun", "Jul", "Aug"];
     for (var m = 0; m < months.length; m++) {
       var mx = padLeft + (m / (months.length - 1)) * plotW;
-      monthLabels += '<text x="' + mx.toFixed(1) + '" y="' + (height - 6) + '" font-size="10" fill="#64748b">' + months[m] + '</text>';
+      monthLabels += '<text x="' + mx.toFixed(1) + '" y="' + (height - 6) + '" font-size="10" fill="#52647A">' + months[m] + '</text>';
     }
     return '<svg viewBox="0 0 ' + width + ' ' + height + '" style="width:100%;height:200px;display:block">' + gridlines +
-      '<polygon points="' + areaPts + '" fill="#ccfbf1" opacity="0.6"></polygon>' +
-      '<polyline points="' + linePts.trim() + '" fill="none" stroke="#0d9488" stroke-width="2"></polyline>' +
+      '<polygon points="' + areaPts + '" fill="#e6f8f2" opacity="0.6"></polygon>' +
+      '<polyline points="' + linePts.trim() + '" fill="none" stroke="#006ECF" stroke-width="2"></polyline>' +
       monthLabels + '</svg>';
   }
 
@@ -2011,7 +2111,7 @@
       // Linked trades come off the cross-portal link, so every field is treated
       // as untrusted here, not just the free-text ones.
       return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openTrade(\'' + esc(t.id) + '\')">' +
-        '<div class="gt-mono" style="color:var(--pp-indigo)">' + esc(t.id) + '</div>' +
+        '<div class="gt-mono" style="color:var(--pp-blue-500)">' + esc(t.id) + '</div>' +
         '<div>' + esc(t.shape) + '</div><div>' + esc(t.period) + '</div><div>' + esc(t.direction) + '</div>' +
         '<div class="gt-cell-num">' + esc(t.power) + '</div>' +
         '<div class="gt-cell-num">' + esc(t.value || "—") + '</div>' +
@@ -2036,7 +2136,7 @@
           pctLabel(quote.depositPct) + ') now · balance ' + eur(quote.balanceEur) + ' due ' +
           (quote.dueDate ? formatDateShort(quote.dueDate) : "before delivery") + '</div>' +
           (quote.affordable ? '' :
-            '<div class="ob-sub" style="margin-top:6px;color:#fca5a5">Available balance is ' + eur(state.walletAvailable) +
+            '<div class="ob-sub" style="margin-top:6px;color:#f7b8b8">Available balance is ' + eur(state.walletAvailable) +
             ' — add ' + eur(quote.shortfallEur) + ' to your wallet to accept this offer.</div>')
         : "";
       offerHtml = '<div class="offer-banner">' +
@@ -2062,7 +2162,7 @@
     // Escaped at the sink rather than where the note is built: a linked trade's
     // events come off the cross-portal link, so treat every field as untrusted.
     var timelineHtml = t.events.map(function (e) {
-      var color = PortalSeedData.TONE_COLOR[e.tone] || "#94a3b8";
+      var color = PortalSeedData.TONE_COLOR[e.tone] || "#8b98aa";
       return '<div class="timeline-item"><div class="timeline-dot" style="background:' + color + '"></div>' +
         '<div style="flex:1"><div class="timeline-title">' + esc(e.title) + '</div>' +
         '<div class="timeline-actor">' + esc(e.actor) + '</div>' +
@@ -2158,9 +2258,9 @@
     var rows =
       '<div class="kv-row"><span class="k">Trade value</span><span class="v">' + eur(st.valueEur) + '</span></div>' +
       '<div class="kv-row"><span class="k">Deposit (' + pctLabel(st.depositPct) + ')</span>' +
-        '<span class="v" style="color:var(--pp-green)">' + eur(st.depositEur) + ' · paid</span></div>' +
+        '<span class="v" style="color:var(--pp-green-text)">' + eur(st.depositEur) + ' · paid</span></div>' +
       '<div class="kv-row"><span class="k">Balance (' + pctLabel(100 - st.depositPct) + ')</span>' +
-        '<span class="v"' + (paid ? ' style="color:var(--pp-green)"' : (overdue ? ' style="color:var(--pp-red)"' : '')) + '>' +
+        '<span class="v"' + (paid ? ' style="color:var(--pp-green-text)"' : (overdue ? ' style="color:var(--pp-red-text)"' : '')) + '>' +
         eur(st.balanceEur) + '</span></div>' +
       '<div class="kv-row"><span class="k">' + (paid ? "Settled" : "Payment due") + '</span>' +
         '<span class="v" style="color:' + dueTone + '">' + esc(dueText) + '</span></div>';
@@ -2189,7 +2289,7 @@
         ' onclick="PP.payTradeBalance(\'' + esc(t.id) + '\')">Pay balance ' + eur(st.balanceEur) + '</button>' +
         (afford
           ? ''
-          : '<div style="font-size:11px;color:var(--pp-red);margin-top:8px">Available balance is ' +
+          : '<div style="font-size:11px;color:var(--pp-red-text);margin-top:8px">Available balance is ' +
             eur(state.walletAvailable) + ' — add ' + eur(st.balanceEur - state.walletAvailable) +
             ' to cover this. <a class="btn-link" onclick="PP.topUpWallet()">Deposit funds →</a></div>') +
         '</div>';
@@ -2426,7 +2526,7 @@
       // instruction — and it is the deposit's shortfall, not the block's, so
       // it stays consistent with what the request actually requires.
       (sufficient ? "" :
-        '<div style="font-size:11px;color:var(--pp-red);margin-top:8px;line-height:1.5">' +
+        '<div style="font-size:11px;color:var(--pp-red-text);margin-top:8px;line-height:1.5">' +
         'Add ' + eur(-afterReservation) + ' to your wallet to cover the ' + pctLabel(st.depositPct) +
         ' deposit on this block. <a class="btn-link" onclick="PP.topUpWallet()">Deposit funds →</a></div>');
 
@@ -2522,7 +2622,7 @@
         '<div class="gt-mono" style="color:var(--pp-teal-700)">' + esc(r.id) + '</div>' +
         '<div>' + esc((r.shape || "") + " " + (r.period || "")) + '</div>' +
         '<div class="gt-cell-num">' + eur(st.valueEur) + '</div>' +
-        '<div class="gt-cell-num" style="color:var(--pp-green)">' + eur(st.depositEur) + '</div>' +
+        '<div class="gt-cell-num" style="color:var(--pp-green-text)">' + eur(st.depositEur) + '</div>' +
         '<div class="gt-cell-num" style="font-weight:600">' + eur(st.balanceEur) + '</div>' +
         '<div>' + badge(dueText, dueTone) + '</div></div>';
     }).join("");
@@ -2570,7 +2670,7 @@
         '<div>' + l.by + (l.byNote ? ' <span style="color:var(--pp-text-faint)">(' + l.byNote + ')</span>' : "") + '</div>' +
         '<div>' + refHtml + '</div>' +
         '<div class="gt-cell-num">' + (l.debit || "—") + '</div>' +
-        '<div class="gt-cell-num"' + (l.credit ? ' style="color:var(--pp-green);font-weight:600"' : "") + '>' + (l.credit || "—") + '</div>' +
+        '<div class="gt-cell-num"' + (l.credit ? ' style="color:var(--pp-green-text);font-weight:600"' : "") + '>' + (l.credit || "—") + '</div>' +
         '<div class="gt-cell-num">' + l.after + '</div></div>';
     }).join("");
     var ledgerCard = cardHtml("Ledger", "Every movement, newest first", '<div class="grid-table dense">' + head + '<div class="gt-scroll">' + rows + '</div></div>' +
@@ -2654,7 +2754,7 @@
         '<div class="fg-label"' + fgLabelStyle + '>Amount</div>' +
         '<div class="amount-input-wrap"><span>€</span><input id="topup-amount-input" type="text" inputmode="decimal" value="' + ConsumptionCalc.formatNL(state.topupAmount, 0) +
           '" oninput="PP.onTopupAmountInput(this.value)" onchange="PP.setTopupAmount(this.value)"></div>' +
-        '<div id="topup-validation" class="fg-hint" style="margin-top:6px;color:var(--pp-red)">' +
+        '<div id="topup-validation" class="fg-hint" style="margin-top:6px;color:var(--pp-red-text)">' +
           (topupAmountValid() ? "" : "Minimum deposit is € " + ConsumptionCalc.formatNL(MIN_TOPUP_EUR, 2) + ".") + '</div>' +
       '</div>' +
       smartChipHtml + '<div class="amount-chips">' + chipsHtml + '</div>' +
@@ -2718,7 +2818,7 @@
 
     var summaryCard = cardHtml("New balance", "", '<div class="balance-box">' +
       '<div class="bb-row"><span>Amount paid</span><span>€ ' + ConsumptionCalc.formatNL(t.amount, 2) + '</span></div>' +
-      '<div class="bb-row total"><span>Available balance</span><span style="color:var(--pp-green)">€ ' + ConsumptionCalc.formatNL(t.newAvailable, 2) + '</span></div>' +
+      '<div class="bb-row total"><span>Available balance</span><span style="color:var(--pp-green-text)">€ ' + ConsumptionCalc.formatNL(t.newAvailable, 2) + '</span></div>' +
       '</div>' +
       '<button type="button" class="btn-primary" style="width:100%;margin-top:14px" onclick="PP.closeTopupSuccess()">Back to wallet</button>');
 
@@ -2760,7 +2860,7 @@
     var rows = inv.lines.map(function (l) {
       var faintStyle = l.faint ? ' style="color:var(--pp-text-faint)"' : "";
       var refColor = (l.ref.indexOf("TRD") === 0 || l.ref.indexOf("SUR") === 0) ? "var(--pp-teal-700)" : "var(--pp-text-faint)";
-      var amountStyle = l.green ? ' style="color:var(--pp-green);font-weight:600"' : (l.faint ? ' style="color:var(--pp-text-faint)"' : "");
+      var amountStyle = l.green ? ' style="color:var(--pp-green-text);font-weight:600"' : (l.faint ? ' style="color:var(--pp-text-faint)"' : "");
       return '<div class="gt-row" style="grid-template-columns:' + cols + '"' + faintStyle + '>' +
         '<div>' + l.n + '</div>' +
         '<div><div>' + l.desc + '</div><div class="gt-cell-sub">' + l.sub + '</div></div>' +
@@ -2772,7 +2872,7 @@
     var lineTable = '<div class="grid-table dense">' + head + rows + '</div>';
 
     var footer = '<div style="display:flex;justify-content:space-between;gap:16px;margin-top:12px;flex-wrap:wrap">' +
-      '<div><div class="caption">Volume check</div><div style="color:var(--pp-green);font-size:12px;margin-top:2px">' + inv.volumeCheck + '</div>' + badge("✓ RECONCILED", "success") + '</div>' +
+      '<div><div class="caption">Volume check</div><div style="color:var(--pp-green-text);font-size:12px;margin-top:2px">' + inv.volumeCheck + '</div>' + badge("✓ RECONCILED", "success") + '</div>' +
       '<div style="text-align:right"><div class="caption">Section subtotal</div><div style="font-size:20px;font-weight:700">' + inv.subtotal + '</div></div></div>';
 
     var sectionCard = cardHtml(inv.sectionTitle, inv.sectionSubtitle, lineTable + footer, "Expand");
@@ -2813,7 +2913,10 @@
   function statCardHtml(label, value, tone, sublabel, opts) {
     opts = opts || {};
     var toneClass = tone ? " " + tone : "";
-    var cardClass = "stat-card" + (opts.result ? " result" : "") + (opts.projected ? " projected" : "") +
+    // The tone rides on the outer card too, not just .value — that is what
+    // the accent-cap rule (see .stat-card::before) keys off, so a card's top
+    // edge names its domain colour before a reader gets to the number.
+    var cardClass = "stat-card" + toneClass + (opts.result ? " result" : "") + (opts.projected ? " projected" : "") +
       (opts.projected && !opts.breakdown ? " all-projected" : "");
     var headHtml = opts.projected
       ? '<div class="stat-card-head"><div class="label">' + label + '</div>' + badge("Projected", "neutral") + '</div>'
@@ -3185,7 +3288,7 @@
   /** The 3 hues the covered/short/long bars hatch with, all at the one pitch this chart's bars actually render at. */
   function usageChartHatchEntries(rbw) {
     var pitch = hatchPitchFor(rbw);
-    return ["#e8590c", "#0891b2", "#facc15"].map(function (hue) { return { hue: hue, pitch: pitch }; });
+    return ["#FF8F5C", "#00D4C6", "#EEB72B"].map(function (hue) { return { hue: hue, pitch: pitch }; });
   }
 
   /**
@@ -3196,9 +3299,9 @@
   function boundaryMarkerMarkup(x, padTop, plotH, labelLeft, labelRight) {
     var xr = x.toFixed(1);
     return '<line x1="' + xr + '" y1="' + padTop + '" x2="' + xr + '" y2="' + (padTop + plotH) +
-      '" stroke="#94a3b8" stroke-width="1"></line>' +
-      '<text x="' + (x - 4).toFixed(1) + '" y="' + (padTop - 2) + '" font-size="10" fill="#94a3b8" text-anchor="end">' + labelLeft + '</text>' +
-      '<text x="' + (x + 4).toFixed(1) + '" y="' + (padTop - 2) + '" font-size="10" fill="#94a3b8" text-anchor="start">' + labelRight + '</text>';
+      '" stroke="#8b98aa" stroke-width="1"></line>' +
+      '<text x="' + (x - 4).toFixed(1) + '" y="' + (padTop - 2) + '" font-size="10" fill="#8b98aa" text-anchor="end">' + labelLeft + '</text>' +
+      '<text x="' + (x + 4).toFixed(1) + '" y="' + (padTop - 2) + '" font-size="10" fill="#8b98aa" text-anchor="start">' + labelRight + '</text>';
   }
 
   /**
@@ -3262,13 +3365,13 @@
       var yHedge = yFor(hedgeVolume[i]);
       var barTop = Math.min(yNet, yHedge);
       var barH = Math.abs(yNet - yHedge);
-      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#e8590c" : "#0891b2", uncovered[i] >= 0 ? 0.55 : 0.3, measured, rbw);
+      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#FF8F5C" : "#00D4C6", uncovered[i] >= 0 ? 0.55 : 0.3, measured, rbw);
 
       var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      var covAttrs = barFillAttrs("#facc15", 0.2, measured, rbw);
+      var covAttrs = barFillAttrs("#EEB72B", 0.2, measured, rbw);
       coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
 
@@ -3302,7 +3405,7 @@
       }
     }
     var netLines = netSegments.map(function (s) {
-      return '<polyline points="' + s.pts.join(" ") + '" fill="none" stroke="#059f8f" stroke-width="2"' +
+      return '<polyline points="' + s.pts.join(" ") + '" fill="none" stroke="#006ECF" stroke-width="2"' +
         (s.measured ? "" : ' stroke-dasharray="1,3"') + '></polyline>';
     }).join("");
     // Ticks name the instant an interval ENDS (see intervalEndLabel), so the
@@ -3315,7 +3418,7 @@
       if (endLabel.slice(3) === "00" && parseInt(endLabel.slice(0, 2), 10) % 4 === 0) {
         var lx = padLeft + (i + 1) * barW;
         axisLabels += '<text x="' + lx.toFixed(1) + '" y="' + (height - 6) +
-          '" font-size="10" fill="#64748b">' + endLabel + '</text>';
+          '" font-size="10" fill="#52647A">' + endLabel + '</text>';
       }
     }
     var boundaries = certaintyBoundaries(hasUsage, barX).map(function (m) {
@@ -3324,15 +3427,15 @@
     lastChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
     return '<defs>' + hatchDefs(usageChartHatchEntries(rbw)) + '</defs>' +
       '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
-      '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
+      '" y2="' + zeroY.toFixed(1) + '" stroke="#dde4ed"></line>' +
       coveredBars +
       bars +
       netLines +
-      '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="2" stroke-dasharray="5,3"></polyline>' +
+      '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#004C94" stroke-width="2" stroke-dasharray="5,3"></polyline>' +
       axisLabels +
       boundaries +
       '<line id="chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
-      '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
+      '" stroke="#2D3F54" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
   }
 
   function resolveDate(dates, i) {
@@ -3869,13 +3972,13 @@
       var yHedge = yFor(hedgeVolume[i]);
       var barTop = Math.min(yNet, yHedge);
       var barH = Math.abs(yNet - yHedge);
-      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#e8590c" : "#0891b2", uncovered[i] >= 0 ? 0.55 : 0.3, measured, rbw);
+      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#FF8F5C" : "#00D4C6", uncovered[i] >= 0 ? 0.55 : 0.3, measured, rbw);
 
       var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      var covAttrs = barFillAttrs("#facc15", 0.2, measured, rbw);
+      var covAttrs = barFillAttrs("#EEB72B", 0.2, measured, rbw);
       coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
 
@@ -3905,7 +4008,7 @@
       }
     }
     var netLines = netSegments.map(function (s) {
-      return '<polyline points="' + s.pts.join(" ") + '" fill="none" stroke="#059f8f" stroke-width="1.5"' +
+      return '<polyline points="' + s.pts.join(" ") + '" fill="none" stroke="#006ECF" stroke-width="1.5"' +
         (s.measured ? "" : ' stroke-dasharray="1,3"') + '></polyline>';
     }).join("");
 
@@ -3915,8 +4018,8 @@
     for (i = 0; i < n; i++) {
       if (dates[i] !== prevDate) {
         var lx = (padLeft + i * stepX).toFixed(1);
-        dayGridlines += '<line x1="' + lx + '" y1="' + padTop + '" x2="' + lx + '" y2="' + (padTop + plotH) + '" stroke="#eef2f6"></line>';
-        dayLabels += '<text x="' + lx + '" y="' + (height - 6) + '" font-size="9" fill="#64748b">' + dates[i].slice(8, 10) + "</text>";
+        dayGridlines += '<line x1="' + lx + '" y1="' + padTop + '" x2="' + lx + '" y2="' + (padTop + plotH) + '" stroke="#eef3f9"></line>';
+        dayLabels += '<text x="' + lx + '" y="' + (height - 6) + '" font-size="9" fill="#52647A">' + dates[i].slice(8, 10) + "</text>";
         prevDate = dates[i];
       }
     }
@@ -3929,15 +4032,15 @@
 
     return '<defs>' + hatchDefs(usageChartHatchEntries(rbw)) + '</defs>' +
       dayGridlines +
-      '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
+      '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dde4ed"></line>' +
       coveredBars +
       bars +
       netLines +
-      '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="1.5" stroke-dasharray="5,3"></polyline>' +
+      '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#004C94" stroke-width="1.5" stroke-dasharray="5,3"></polyline>' +
       dayLabels +
       boundaries +
       '<line id="month-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
-      '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
+      '" stroke="#2D3F54" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
   }
 
   var lastMonthContext = null;
@@ -3962,10 +4065,10 @@
   // "covered" band marks a real quantity, whereas MIN(hedge, total) is not a
   // meaningful figure — every mark on this chart means something.
 
-  var COST_HEDGE_LINE = "#4338ca";   // indigo, matching the hedge-volume line
-  var COST_TOTAL_LINE = "#059f8f";   // teal, matching the actual-usage line
-  var COST_BUY_FILL = "#e8590c";     // orange, matching Short
-  var COST_SELL_FILL = "#0891b2";    // cyan, matching Long
+  var COST_HEDGE_LINE = "#004C94";   // blue-700, matching the hedge-volume line
+  var COST_TOTAL_LINE = "#006ECF";   // blue-500, matching the actual-usage line
+  var COST_BUY_FILL = "#FF8F5C";     // coral, matching Short
+  var COST_SELL_FILL = "#00D4C6";    // bright cyan, matching Long
 
   /**
    * Shared bar/line geometry for both cost charts.
@@ -4030,7 +4133,7 @@
     return {
       zeroY: zeroY,
       markup: '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
-        '" y2="' + zeroY.toFixed(1) + '" stroke="#dbe3ec"></line>' +
+        '" y2="' + zeroY.toFixed(1) + '" stroke="#dde4ed"></line>' +
         deltaBars +
         totalLines +
         '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="' + COST_HEDGE_LINE +
@@ -4064,13 +4167,13 @@
       var endLabel = ConsumptionCalc.intervalEndLabel(times[i]);
       if (endLabel.slice(3) === "00" && parseInt(endLabel.slice(0, 2), 10) % 4 === 0) {
         axisLabels += '<text x="' + (padLeft + (i + 1) * barW).toFixed(1) + '" y="' + (height - 6) +
-          '" font-size="10" fill="#64748b">' + endLabel + "</text>";
+          '" font-size="10" fill="#52647A">' + endLabel + "</text>";
       }
     }
     lastCostChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
     return body.markup + axisLabels +
       '<line id="cost-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
-      '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
+      '" stroke="#2D3F54" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
   }
 
   var lastMonthCostChartGeom = null;
@@ -4097,15 +4200,15 @@
     for (var i = 0; i < n; i++) {
       if (dates[i] !== prevDate) {
         var lx = (padLeft + i * stepX).toFixed(1);
-        dayGridlines += '<line x1="' + lx + '" y1="' + padTop + '" x2="' + lx + '" y2="' + (padTop + plotH) + '" stroke="#eef2f6"></line>';
-        dayLabels += '<text x="' + lx + '" y="' + (height - 6) + '" font-size="9" fill="#64748b">' + dates[i].slice(8, 10) + "</text>";
+        dayGridlines += '<line x1="' + lx + '" y1="' + padTop + '" x2="' + lx + '" y2="' + (padTop + plotH) + '" stroke="#eef3f9"></line>';
+        dayLabels += '<text x="' + lx + '" y="' + (height - 6) + '" font-size="9" fill="#52647A">' + dates[i].slice(8, 10) + "</text>";
         prevDate = dates[i];
       }
     }
     lastMonthCostChartGeom = { padLeft: padLeft, spacing: stepX, offset: 0, n: n, width: width };
     return dayGridlines + body.markup + dayLabels +
       '<line id="cost-month-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
-      '" stroke="#0f172a" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
+      '" stroke="#2D3F54" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
   }
 
   var lastCostDayContext = null, lastCostMonthContext = null;

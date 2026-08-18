@@ -5,30 +5,62 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PeakPower — Back Office Trade desk (Live Data)</title>
 <style>
-:root {
-    --pp-bg:#eef2f6; --pp-surface:#ffffff; --pp-surface-alt:#f8fafc; --pp-surface-zebra:#fbfdff;
-    --pp-border:#dbe3ec; --pp-border-strong:#c3cede;
-    --pp-text-heading:#0f172a; --pp-text-body:#64748b; --pp-text-faint:#94a3b8;
-    --pp-sidebar-bg:#0f2b33; --pp-sidebar-text:#cbd5e1; --pp-sidebar-text-active:#ffffff;
-    --pp-sidebar-subtitle:#5eead4; --pp-sidebar-active-bg:rgba(20,184,166,0.16);
-    --pp-teal-900:#0f2b33; --pp-teal-700:#00796b; --pp-teal-600:#0d9488; --pp-teal-500:#14b8a6;
-    --pp-teal-300:#5eead4; --pp-teal-100:#ccfbf1;
-    --pp-indigo:#4338ca; --pp-indigo-bg:#e0e7ff;
-    --pp-orange:#e8590c; --pp-cyan:#0891b2;
-    --pp-amber:#d97706; --pp-amber-bg:#fef3c7; --pp-amber-border:#fcd34d; --pp-amber-text:#92400e;
-    --pp-green:#15803d; --pp-green-bg:#dcfce7; --pp-green-border:#86efac; --pp-green-text:#166534;
-    --pp-red:#dc2626; --pp-red-bg:#fee2e2; --pp-red-border:#fca5a5; --pp-red-text:#991b1b;
+  :root {
+    /* PeakPower colour tokens — Paleta SB-2026, adopted 2026-08-18.
+       Read verbatim from the PeakPower Trading design system project
+       (peakpower-trading-design-system); replaces the teal palette shipped
+       2026-08-13. See CLAUDE.md "Design system sync (2026-08-18)" for the
+       full mapping and what changed. A bright hex is a fill, a mark or a
+       chart series; anything that becomes text or a numeral uses the
+       matching *-text/*-value tier. */
+    --pp-bg:#eef3f9; --pp-bg-2:#f7f9fc;
+    --pp-bg-gradient:linear-gradient(180deg,#eef3f9 0%,#f7f9fc 60%);
+    --pp-surface:#ffffff; --pp-surface-alt:#f2f5f9; --pp-surface-zebra:#fafcfe;
+    --pp-border:#dde4ed; --pp-border-strong:#c3cddb;
+    --pp-text-heading:#2D3F54; --pp-text-body:#52647A; --pp-text-faint:#8b98aa;
+    --pp-sidebar-bg:#2D3F54; --pp-sidebar-text:#c2ccd9; --pp-sidebar-text-active:#ffffff;
+    --pp-sidebar-subtitle:#43d3a6; --pp-sidebar-active-bg:rgba(255,255,255,0.10);
+    --pp-rail-spectrum:linear-gradient(90deg,#004C94 0 20%,#006ECF 20% 40%,#1DBD8E 40% 60%,#EEB72B 60% 80%,#FF8F5C 80% 100%);
+    --pp-blue-900:#003a72; --pp-blue-700:#004C94; --pp-blue-500:#006ECF; --pp-blue-300:#3C93FA;
+    --pp-blue-100:#e7f0fa; --pp-blue-050:#eaf2fb;
+    --pp-mint:#1DBD8E; --pp-mint-text:#016A6C; --pp-mint-bg:#e6f8f2; --pp-mint-border:#a6e3d1;
+    --pp-teal:#0FA69D; --pp-teal-text:#0A7A74; --pp-teal-deep:#028183;
+    --pp-cyan:#00D4C6;
+    --pp-violet:#9151B8; --pp-violet-text:#6F3A91; --pp-violet-bg:#f3eaf9; --pp-violet-border:#d6b7e8;
+    --pp-coral:#FF8F5C; --pp-coral-text:#B4531F; --pp-coral-bg:#fff0e8; --pp-coral-border:#ffc6a8;
+    --pp-pink:#FF57B0; --pp-pink-text:#A62E76; --pp-pink-bg:#ffeaf5; --pp-pink-border:#ffb8dc;
+    --pp-grass:#73CC80; --pp-grass-text:#1B7A4F;
+    --pp-amber:#EEB72B; --pp-amber-bg:#fdf5e0; --pp-amber-border:#eed591; --pp-amber-text:#8A6710;
+    --pp-green:#1DBD8E; --pp-green-bg:#e6f8f2; --pp-green-border:#a6e3d1; --pp-green-text:#016A6C;
+    --pp-red:#F24F4F; --pp-red-bg:#fdecec; --pp-red-border:#f7b8b8; --pp-red-text:#C22A2A;
+    --pp-red-value:#C22A2A;
+    /* Named chart-series roles, straight from the design system — the JS
+       chart builders below keep their own literal-hex constants (SVG string
+       templates can't read a CSS var), kept byte-identical to these. */
+    --pp-chart-usage:#006ECF; --pp-chart-hedge:#004C94;
+    --pp-chart-short:#FF8F5C; --pp-chart-short-stroke:#F24F4F;
+    --pp-chart-long:#0FA69D; --pp-chart-long-fill:#00D4C6;
+    --pp-chart-peak:#3C93FA;
+    /* legacy aliases — every var() written against these names keeps
+       working; write new code against the ramps above. */
+    --pp-teal-900:#2D3F54; --pp-teal-700:#004C94; --pp-teal-600:#004C94;
+    --pp-teal-500:#1DBD8E; --pp-teal-300:#43d3a6; --pp-teal-100:#e6f8f2;
+    --pp-indigo:#9151B8; --pp-indigo-bg:#f3eaf9;
+    --pp-orange:#FF8F5C; --pp-orange-text:#B4531F;
+    --certainty-provisional-opacity:0.55;
     --font-sans:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
-    --font-mono:'SF Mono','Cascadia Mono',Menlo,Consolas,monospace;
-    --text-2xs:10px; --text-xs:11px; --text-sm:12.5px; --text-base:13.5px; --text-md:15px; --text-lg:17px; --text-xl:23px; --text-display:44px;
+    --font-mono:'SF Mono',Menlo,Consolas,monospace;
+    --text-2xs:10px; --text-xs:11px; --text-sm:12.5px; --text-base:13.5px; --text-md:15px; --text-lg:17px; --text-xl:23px; --text-hero:32px; --text-display:44px;
     --weight-regular:400; --weight-medium:500; --weight-semibold:600; --weight-bold:700;
     --tracking-eyebrow:0.05em;
     --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px; --space-10:40px;
-    --radius-sm:5px; --radius-md:7px; --radius-lg:10px; --radius-pill:999px;
-    --sidebar-width:218px; --topbar-height:56px;
+    --radius-sm:6px; --radius-md:8px; --radius-lg:12px; --radius-pill:999px;
+    --sidebar-width:236px; --topbar-height:64px;
+    --pp-shadow-card:0 1px 2px rgba(45,63,84,.06), 0 10px 28px -18px rgba(45,63,84,.28);
+    --pp-shadow-pop:0 12px 32px -12px rgba(45,63,84,.35);
   }
   * { box-sizing: border-box; }
-  body { margin:0; font-family: var(--font-sans); background: var(--pp-bg); color: var(--pp-text-heading); }
+  body { margin:0; font-family: var(--font-sans); background: var(--pp-bg-gradient); background-attachment: fixed; color: var(--pp-text-heading); }
   .app { display:flex; height:100vh; width:100%; overflow:hidden; }
   .sidebar { width:var(--sidebar-width); min-width:var(--sidebar-width); background:var(--pp-sidebar-bg); color:var(--pp-sidebar-text); display:flex; flex-direction:column; padding:20px 0; }
   .sidebar .brand { padding:0 20px 20px; font-size:11px; letter-spacing:var(--tracking-eyebrow); color:var(--pp-sidebar-subtitle); font-weight:700; text-transform:uppercase; }
@@ -37,7 +69,7 @@
   .sidebar nav a:hover:not(.active) { background:rgba(255,255,255,0.07); color:var(--pp-sidebar-text-active); }
   .sidebar nav a.active { background:var(--pp-sidebar-active-bg); color:var(--pp-sidebar-text-active); font-weight:600; }
   .sidebar-footer { margin-top:auto; padding:14px 20px; border-top:1px solid rgba(255,255,255,0.08); font-size:11.5px; color:var(--pp-sidebar-text); }
-  .sidebar-footer span { display:block; margin-top:2px; font-size:10.5px; color:#5b7480; }
+  .sidebar-footer span { display:block; margin-top:2px; font-size:10.5px; color:#93a2b5; }
   .main { flex:1; display:flex; flex-direction:column; overflow:auto; }
   .topbar { height:var(--topbar-height); min-height:var(--topbar-height); background:#fff; border-bottom:1px solid var(--pp-border); display:flex; align-items:center; justify-content:space-between; padding:0 28px; position:sticky; top:0; z-index:5; gap:16px; }
   .topbar .crumb { font-size:11px; color:var(--pp-text-body); }
@@ -49,7 +81,7 @@
   /* Badge — matches PeakPowerDesignSystem Badge.jsx exactly (11px/600,
      4px 12px, and every tone carries a real 1px border). */
   .badge { display:inline-block; padding:4px 12px; border-radius:var(--radius-pill); font-size:11px; font-weight:600; line-height:1.2; border:1px solid transparent; white-space:nowrap; }
-  .badge.info { background:var(--pp-indigo-bg); color:#4338ca; border-color:#c7d2fe; }
+  .badge.info { background:var(--pp-indigo-bg); color:var(--pp-violet-text); border-color:var(--pp-violet-border); }
   .badge.success { background:var(--pp-green-bg); color:var(--pp-green-text); border-color:var(--pp-green-border); }
   .badge.warning { background:var(--pp-amber-bg); color:var(--pp-amber-text); border-color:var(--pp-amber-border); }
   .badge.critical { background:var(--pp-red-bg); color:var(--pp-red-text); border-color:var(--pp-red-border); }
@@ -74,7 +106,7 @@
      margin-bottom is 14px, dropping to 4px when a subtitle follows it (the
      subtitle is a SIBLING of the head in the DS, not a child, and carries the
      remaining 14px itself). */
-  .card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:18px 20px; }
+  .card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:18px 20px; box-shadow:var(--pp-shadow-card); }
   .card .card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:14px; }
   .card .card-head.has-subtitle { margin-bottom:4px; }
   .card .card-title { font-size:13.5px; font-weight:700; color:var(--pp-text-heading); }
@@ -83,13 +115,20 @@
   .stat-row { display:flex; gap:16px; flex-wrap:wrap; }
   /* No flex-grow: StatCard.jsx sets only min-width, so the mockup's stat rows
      size to content and pack left rather than stretching edge to edge. */
-  .stat-card { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; min-width:160px; }
+  .stat-card { position:relative; overflow:hidden; background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:14px 16px; min-width:160px; box-shadow:var(--pp-shadow-card); }
+  /* SB-2026's 3px accent cap — see customer-portal.html's identical rule for
+     the full rationale. Untoned cards get a neutral cap rather than none. */
+  .stat-card::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:var(--pp-border-strong); }
+  .stat-card.brand::before { background:var(--pp-blue-700); }
+  .stat-card.critical::before { background:var(--pp-red); }
+  .stat-card.warning::before { background:var(--pp-amber); }
+  .stat-card.success::before { background:var(--pp-green); }
   .stat-card.highlight { background:var(--pp-amber-bg); border-color:var(--pp-amber-border); }
   .stat-card .label { font-size:11px; font-weight:600; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
   .stat-card .value { font-size:23px; font-weight:700; margin-top:8px; color:var(--pp-text-heading); }
-  .stat-card .value.critical { color:var(--pp-orange); }
-  .stat-card .value.warning { color:var(--pp-amber); }
-  .stat-card .value.success { color:var(--pp-green); }
+  .stat-card .value.critical { color:var(--pp-red-text); }
+  .stat-card .value.warning { color:var(--pp-amber-text); }
+  .stat-card .value.success { color:var(--pp-green-text); }
   .stat-card .value.brand { color:var(--pp-teal-600); }
   .stat-card .sublabel { font-size:11px; color:var(--pp-text-faint); margin-top:6px; }
   
@@ -109,8 +148,8 @@
      border-color without border-style paints nothing, wrong font) sitting
      beside a Confirm button that is a rounded pill. A tone variant sets
      colour; the shape always comes from the shared rule. */
-  .btn-danger { background:var(--pp-red); border-color:var(--pp-red); color:#fff; }
-  .btn-danger:hover:not(:disabled) { background:var(--pp-red-text); border-color:var(--pp-red-text); }
+  .btn-danger { background:var(--pp-red-value); border-color:var(--pp-red-value); color:#fff; }
+  .btn-danger:hover:not(:disabled) { background:#9b2222; border-color:#9b2222; }
   .btn-danger:disabled { opacity:.5; cursor:not-allowed; }
   /* Timeline — matches PeakPowerDesignSystem Timeline.jsx (6px dot, 13px 0
      row padding, top rule between entries, title 12.5/600, subtitle 10.5/
@@ -188,10 +227,10 @@
   .price-form .pf-row { display:flex; flex-direction:column; gap:6px; }
   .price-form .pf-label { font-size:10.5px; font-weight:600; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; }
   .price-form .pf-input { border:1.5px solid var(--pp-teal-600); border-radius:var(--radius-md); padding:9px 12px; font-size:13px; font-weight:600; font-family:var(--font-mono); color:var(--pp-teal-700); background:#fff; width:100%; }
-  .price-form .pf-input:focus { outline:none; box-shadow:0 0 0 3px rgba(20,184,166,0.15); }
+  .price-form .pf-input:focus { outline:none; border-color:var(--pp-blue-300); box-shadow:0 0 0 3px rgba(60,147,250,.22); }
   .price-form .pf-total { font-size:12px; color:var(--pp-text-body); background:var(--pp-surface-alt); border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:10px 12px; }
   .price-form .pf-total strong { color:var(--pp-text-heading); font-size:13.5px; }
-  .price-form .pf-error { font-size:11.5px; color:var(--pp-red); min-height:14px; }
+  .price-form .pf-error { font-size:11.5px; color:var(--pp-red-text); min-height:14px; }
   .price-form .pf-actions { display:flex; gap:10px; }
 
   .crumb-back { cursor:pointer; color:var(--pp-teal-600); font-weight:600; }
@@ -317,9 +356,12 @@
 
   /** The DS StatCard. `tone` colours the value; `highlight` tints the card. */
   function statCard(label, value, tone, sublabel, highlight) {
-    return '<div class="stat-card' + (highlight ? " highlight" : "") + '">' +
+    // The tone rides on the outer card too — see .stat-card::before — so a
+    // card's top edge names its domain colour, not just the numeral itself.
+    var toneClass = (tone && tone !== "default") ? " " + tone : "";
+    return '<div class="stat-card' + toneClass + (highlight ? " highlight" : "") + '">' +
       '<div class="label">' + esc(label) + "</div>" +
-      '<div class="value' + (tone && tone !== "default" ? " " + tone : "") + '">' + esc(value) + "</div>" +
+      '<div class="value' + toneClass + '">' + esc(value) + "</div>" +
       (sublabel ? '<div class="sublabel">' + esc(sublabel) + "</div>" : "") +
       "</div>";
   }
@@ -990,18 +1032,18 @@
           '<text x="300" y="' + g.ly + '" font-size="10" fill="var(--pp-text-faint)" text-anchor="end">' + esc(g.label) + "</text>";
       }).join("") +
       r.chartBars.map(function (b) {
-        return '<rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h + '" fill="#ea580c"></rect>';
+        return '<rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h + '" fill="#FF8F5C"></rect>';
       }).join("") +
-      '<line x1="308" x2="912" y1="560" y2="560" stroke="#4f46e5" stroke-width="2"></line>' +
-      '<line x1="308" x2="912" y1="440" y2="440" stroke="#0d9488" stroke-width="2"></line>' +
+      '<line x1="308" x2="912" y1="560" y2="560" stroke="#004C94" stroke-width="2"></line>' +
+      '<line x1="308" x2="912" y1="440" y2="440" stroke="#004C94" stroke-width="2"></line>' +
       r.xLabels.map(function (xl) {
         return '<text x="' + xl.x + '" y="602" font-size="10" fill="var(--pp-text-faint)" text-anchor="' + xl.anchor + '">' + esc(xl.label) + "</text>";
       }).join("") +
       "</svg>";
     var chartLegend = '<div style="display:flex;gap:22px;margin-top:10px;flex-wrap:wrap">' +
-      '<div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:10px;border-radius:2px;background:#0f766e"></div><span style="font-size:11px;color:var(--pp-text-body)">Typical day</span></div>' +
-      '<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#4f46e5"></div><span style="font-size:11px;color:var(--pp-text-body)">Existing cover 0,4 MW</span></div>' +
-      '<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#0d9488"></div><span style="font-size:11px;color:var(--pp-text-body)">After this trade 2,4 MW</span></div>' +
+      '<div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:10px;border-radius:2px;background:#006ECF"></div><span style="font-size:11px;color:var(--pp-text-body)">Typical day</span></div>' +
+      '<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#004C94"></div><span style="font-size:11px;color:var(--pp-text-body)">Existing cover 0,4 MW</span></div>' +
+      '<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#004C94"></div><span style="font-size:11px;color:var(--pp-text-body)">After this trade 2,4 MW</span></div>' +
     "</div>";
 
     var marketRows = r.marketRows.map(function (row) {
@@ -1023,7 +1065,7 @@
       "</div>" +
       '<div style="background:var(--pp-surface-alt);border:1px solid var(--pp-border);border-radius:8px;padding:12px 14px;margin-top:16px">' +
         '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--pp-text-body)"><span>Offer value</span><span style="font-weight:700;color:var(--pp-text-heading)">' + esc(r.offerValue) + "</span></div>" +
-        '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--pp-text-body);margin-top:6px"><span>Will be reserved on acceptance</span><span style="font-weight:600;color:var(--pp-amber)">' + esc(r.offerValue) + "</span></div>" +
+        '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--pp-text-body);margin-top:6px"><span>Will be reserved on acceptance</span><span style="font-weight:600;color:var(--pp-amber-text)">' + esc(r.offerValue) + "</span></div>" +
         '<div style="font-size:10px;color:var(--pp-text-faint);margin-top:8px">' + esc(r.offerExpiry) + "</div>" +
       "</div>" +
       '<div style="margin-top:16px"><button type="button" class="btn-primary" style="width:100%;justify-content:center" onclick="BO.noop()">Publish offer</button></div>' +
@@ -1633,7 +1675,7 @@
       '<div style="text-align:right">' + esc(w.minimum) + "</div>" +
       '<div style="text-align:right;color:' + (o.overdueCount ? "var(--pp-red)" : "var(--pp-text-body)") +
         (o.count ? ';font-weight:600' : '') + '">' + esc(outstandingLabel(o)) +
-        (o.overdueCount ? '<div style="font-size:10px;font-weight:600;color:var(--pp-red)">' + o.overdueCount + ' overdue</div>' : '') +
+        (o.overdueCount ? '<div style="font-size:10px;font-weight:600;color:var(--pp-red-text)">' + o.overdueCount + ' overdue</div>' : '') +
       "</div>" +
       "<div>" + badge(w.statusLabel, w.statusTone) + "</div>" +
       '<div style="color:var(--pp-text-body)">' + esc(w.lastMovement) + "</div>" +
@@ -1753,7 +1795,7 @@
     var rows = SKIPPED.map(function (s) {
       return '<div style="display:grid;grid-template-columns:' + INVOICING_SKIPPED_COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
         '<div style="font-weight:600;color:var(--pp-text-heading)">' + esc(s.customer) + '</div>' +
-        '<div style="font-family:var(--font-mono);font-size:10.5px;color:var(--pp-amber)">' + esc(s.reason) + '</div>' +
+        '<div style="font-family:var(--font-mono);font-size:10.5px;color:var(--pp-amber-text)">' + esc(s.reason) + '</div>' +
         '<div style="color:var(--pp-text-body)">' + esc(s.detail) + '</div>' +
         '<div>' + esc(s.fixOwner) + '</div>' +
         '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer">re-run</div>' +
@@ -1905,10 +1947,10 @@
 
     var quarantineBody =
       '<div style="background:var(--pp-amber-bg);border:1px solid var(--pp-amber-border);border-radius:8px;padding:14px 16px;margin-top:4px">' +
-        '<div style="font-size:12.5px;font-weight:700;color:#92400e">EAN 8716 8710 0000 0006 44</div>' +
-        '<div style="font-size:11px;color:#92400e;margin-top:8px">Consumption + production, 12 Aug 2026</div>' +
-        '<div style="font-size:11px;color:#92400e;margin-top:6px">192 points held · first seen 3 days ago</div>' +
-        '<div style="font-size:10.5px;color:#b45309;margin-top:10px">Sender GLN matches PVNed. Likely a new connection.</div>' +
+        '<div style="font-size:12.5px;font-weight:700;color:#8A6710">EAN 8716 8710 0000 0006 44</div>' +
+        '<div style="font-size:11px;color:#8A6710;margin-top:8px">Consumption + production, 12 Aug 2026</div>' +
+        '<div style="font-size:11px;color:#8A6710;margin-top:6px">192 points held · first seen 3 days ago</div>' +
+        '<div style="font-size:10.5px;color:#8A6710;margin-top:10px">Sender GLN matches PVNed. Likely a new connection.</div>' +
       "</div>" +
       '<div style="display:flex;gap:12px;margin-top:14px">' +
         '<button type="button" class="btn-primary" onclick="BO.noop()">Register EAN</button>' +

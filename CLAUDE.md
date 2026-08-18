@@ -375,13 +375,15 @@ it automatically.
 `Customer Portal - Preview.html`'s `:root` defines **only color tokens** (36
 of them) — no spacing/radius/typography scale. The rebuild's `--space-*`,
 `--radius-*`, `--text-*` tokens are its own addition. Color tokens **used to**
-match the mockup exactly; as of **2026-08-13** that is no longer true — see
-"Palette modernization (2026-08-13)" below for what changed and why. The two
-`*Preview.html` mockups themselves were **not** edited and remain pure design
-references frozen at the original palette; only `customer-portal.html`,
-`back-office-portal.html` and `index.html` carry the new tokens. Don't
-"fix" a live-page color back to the mockup's value — that would undo this
-change.
+match the mockup exactly; as of **2026-08-13** that is no longer true, and as
+of **2026-08-18** the palette changed again, wholesale — see "Palette
+modernization (2026-08-13)" and then "Design system sync (2026-08-18)" below,
+in that order, for what changed and why each time. The two `*Preview.html`
+mockups themselves were **not** edited and remain pure design references
+frozen at the *original* (pre-08-13) palette; only `customer-portal.html`,
+`back-office-portal.html` and `index.html` carry the current tokens. Don't
+"fix" a live-page color back to either mockup's value — that would undo two
+rounds of deliberate change.
 
 #### Palette modernization (2026-08-13)
 
@@ -438,6 +440,202 @@ re-validation was needed. Rendered before/after (Dashboard mini-chart,
 sidebar, badges, buttons) via headless Chrome screenshots before landing —
 see the design agent's session for the images if picking this back up.
 
+#### Design system sync (2026-08-18)
+
+Product direction: "Force sync all UI/UX components to update the latest
+professional design." The "latest design" is a Claude Design project —
+**peakpower-trading-design-system** — read directly (via the `claude-design`
+MCP tools) rather than guessed at: 15 project files including the token CSS,
+two `.dc.html` screen recreations (`Customer Portal.dc.html`,
+`Back Office Portal.dc.html`), and the project's own `readme.md`, which is a
+complete, prose design-system spec (palette with exact hex triplets,
+typography/spacing/radii scale, layout, shadow, interaction states, content
+rules). That readme states plainly: *"The portals published at the GitHub
+Pages URLs above still ship the earlier teal palette; where the two
+disagree, SB-2026 wins and this design system is the reference."* — this
+sync is closing exactly that gap.
+
+**What SB-2026 is, and how it differs from 2026-08-13's fix.** That earlier
+pass kept the same hue family (teal/indigo/orange/cyan) and only fixed two
+validator failures in it. SB-2026 is a different, complete 15-colour system
+(a blue ramp, a mint/teal-green ramp, and five accent hues — violet, coral,
+pink, grass, plus status amber/green/red) — every token in `:root` changed,
+not just the ones that had failed a check.
+
+**What was — and was not — adopted.** The design project's `.dc.html` files
+render through a componentised runtime (`_ds_bundle.js`, ~266 KB, loaded via
+`<script src="./support.js">`) — a different architecture from this folder's
+plain hand-templated HTML/JS. That runtime, and the build tooling implied by
+it, was **not** brought in: this folder is Python-free and build-free by
+design (see "What this is" at the top of this file), and staying that way
+outranks matching the design project byte-for-byte. What *was* ported is the
+**design itself** — every colour, the new shadow, the accent-cap treatment,
+and (for Customer Portal specifically) the new grouped sidebar and Dashboard
+hero — reimplemented directly in this file's existing vanilla-JS/CSS
+architecture, keeping every id, class name, state-machine function and test
+contract this file already documents untouched. Read the design project's
+`readme.md` again before touching visuals here; it is the fuller spec this
+section only summarises.
+
+**The palette, in full** (`:root` in both `customer-portal.html` and
+`back-office-portal.html`; identical in both files):
+
+| Role | Old (2026-08-13) | New (SB-2026) |
+|---|---|---|
+| App canvas | flat `#eef2f6` | gradient `#eef3f9 → #f7f9fc` (`--pp-bg-gradient`, `background-attachment:fixed`) |
+| Surface / border / text (heading·body·faint) | `#fff`/`#dbe3ec`/`#0f172a`·`#64748b`·`#94a3b8` | `#fff`/`#dde4ed`/`#2D3F54`·`#52647A`·`#8b98aa` |
+| Sidebar chrome | `#0f2b33` bg, teal-tinted active row | `#2D3F54` bg, `rgba(255,255,255,.10)` active row (colour now carried by the nav dot, not the row) |
+| Brand / primary / hedge line | `#00796b` / `#0d9488` (two close teals) | **one** value, `#004C94` (blue-700) — brand, primary-button fill, brand figures *and* the hedge line are deliberately the same hex now |
+| Actual-usage / links | `#059f8f` | `#006ECF` (blue-500) |
+| Confirmed / coverage / accept | `#14b8a6`-ish teal-500 | `#1DBD8E` (mint) |
+| Long / surplus | `#0891b2` (one value, used as both stroke and fill) | split: `#0FA69D` (stroke/text-safe) vs `#00D4C6` (fill-only — see the contrast note below) |
+| Short / uncovered | `#e8590c` | `#FF8F5C` (coral), text-tier `#B4531F` |
+| "Corrected" / info badges | `#4338ca` (shared with hedge) | `#9151B8` (violet) — **no longer shared with hedge**, see below |
+| Status (amber/green/red) triplets | `#d97706`/`#15803d`/`#dc2626` families | `#EEB72B`/`#1DBD8E`/`#F24F4F` families, each with its own `-bg`/`-border`/`-text` |
+| Card / stat-card | no shadow, flat border | `+ box-shadow:var(--pp-shadow-card)` (`0 1px 2px rgba(45,63,84,.06), 0 10px 28px -18px rgba(45,63,84,.28)`) — "the one change SB-2026 makes to the shipped flat treatment" per the source readme |
+| Radii | sm 5 / md 7 / lg 10 | sm 6 / md 8 / lg 12 |
+| Layout | sidebar 218px / topbar 56px | sidebar 236px / topbar 64px |
+| Focus ring | teal border + teal-tinted glow | `var(--pp-blue-300)` border + `rgba(60,147,250,.22)` glow |
+
+Typography (`--text-*`, the 10/11/12.5/13.5/15/17/23/32/44 half-pixel scale)
+and spacing (`--space-*`, 4/8/12/16/20/24/32/40) are **unchanged** — SB-2026
+specifies the identical scale, so there was nothing to update there.
+
+**Legacy aliases carry old variable names forward on purpose.** `:root` still
+defines `--pp-teal-700`, `--pp-orange`, `--pp-cyan`, etc. — every one of them
+now holding an SB-2026 value — so code written against the old names (and
+there is a lot of it: badges, links, chart legends) kept working with a
+single `:root` rewrite rather than a rename sweep everywhere. Two things this
+convenience does **not** cover, both real bugs caught while doing this:
+
+1. **`--pp-indigo` used to mean two different things, and the alias only
+   fixes one of them.** In the old palette, `#4338ca` was both "the hedge
+   line" (`COST_HEDGE_LINE`, the Hedge-Volume/Hedge-Cost dashed line, its own
+   chart legend swatches) *and* "corrected/info" (`.badge.info`, `.dq-corr`).
+   SB-2026 splits these — hedge is blue-700, "corrected" is violet — so
+   `--pp-indigo` was repointed to **violet only**, and the hedge-role
+   literals (the JS chart-builder strings, the two legend swatches, the two
+   mono trade-reference links which are really the *link* role, blue-500)
+   were hand-fixed to blue-700/blue-500 rather than left riding the now-wrong
+   alias. Extend **this** split if a new indigo-ish usage turns up — don't
+   assume `var(--pp-indigo)` still means "hedge."
+2. **A bright hex is a fill; anything that becomes text needs the darker
+   tier — and several existing rules were reading the fill tier directly.**
+   SB-2026 states this as a hard rule (a `#00D4C6` cyan fill is only 1,9:1
+   contrast as text) and it is enforced strictly: every bare
+   `color:var(--pp-green|red|amber|orange)` in both files (stat-card values,
+   money amounts, delta text — 26 occurrences total) now reads the paired
+   `-text` token instead (`--pp-green-text`, `--pp-red-text`,
+   `--pp-amber-text`, `--pp-orange-text`); `color:var(--pp-cyan)` reads
+   `--pp-teal-text` (cyan has no `-text` pair of its own — teal is the same
+   "long" role one tier darker). This was **not** a risk under the old
+   palette (its fill-tier hexes were already dark enough to read as text);
+   it is a real, silent contrast regression under SB-2026 if skipped. The
+   one exception deliberately left alone: `--pp-teal-600`/`--pp-teal-700`
+   alias to blue-700, which the source spec explicitly allows as text
+   ("brand figures" is one of its stated jobs).
+   `.stat-card .value.critical` additionally changed **role**, not just
+   tier — SB-2026's "critical" status colour is red, where the old system's
+   was orange (the entire reason `.negative` existed as a separate
+   rebuild-only tone, per the note further down this file, was to get red
+   where the old DS insisted on orange; that reason is now gone, since
+   `.critical` and `.negative` resolve to the same red, but both class names
+   are kept rather than merged, to avoid touching every call site for a
+   cosmetic no-op).
+3. **`.btn-danger`'s fill needed the button-safe red, not the badge red.**
+   `--pp-red` (`#F24F4F`) is only 3,5:1 for white text — explicitly flagged
+   in the source readme — so the button fill/border use `--pp-red-value`
+   (`#C22A2A`) instead. Its hover state needed a genuinely different hex too:
+   `--pp-red-value` and `--pp-red-text` are the *same* `#C22A2A`, so the
+   button's old hover rule (which pointed at `-text`) would have produced no
+   visible hover at all once the base colour moved onto that same value; the
+   hover is now a hand-picked darker `#9b2222`.
+
+**Pre-existing orphans, fixed as a side effect.** A handful of literal hexes
+in `back-office-portal.html` (the Home screen's "Exposure" mini-chart: a
+bars/lines/legend trio at `#ea580c`/`#4f46e5`/`#0f766e`/`#0d9488`, one data
+row's `#92400e`/`#b45309`) and one in the Dashboard mini-chart
+(`#0d9488`/`#ccfbf1`) were never touched by the 2026-08-13 pass — that pass
+covered only `customer-portal.html`'s main Consumption charts. They carried
+the *original*, pre-08-13 hexes forward untouched for five days. All are now
+on SB-2026 values too, mapped by the same role rules as everywhere else
+(bars/rects = coral "requested/short," reference lines = blue-700 "hedge/
+cover," the mini-chart's own usage line = blue-500).
+
+**StatCard's 3px accent cap.** SB-2026 states "Stat cards additionally carry
+a 3px accent cap in their domain colour." `statCardHtml()` (Customer Portal)
+and `statCard()` (Back Office) now put the `tone` class on the **outer**
+card, not only on `.value` as before; `.stat-card::before` paints a 3px bar
+at the top, coloured per tone (`.stat-card::before` itself defaults to
+`--pp-border-strong` for an untoned card, so every card gets a cap, not just
+the ones with something to say). The card's own `overflow:hidden` crops the
+bar's corners to the card's radius for free — no separate radius needed on
+the pseudo-element.
+
+**Customer Portal's sidebar: grouped nav with a domain-coloured dot per
+item.** The design project's *adopted* layout for this screen
+(`ui_kits/portal-2026`, distinct from the *re-tokenised-but-otherwise-
+unchanged* recreations the other six screens and the whole Back Office use)
+replaces the flat seven-link list with four labelled groups — **Overview**
+(Dashboard), **Position** (Connections, Consumption), **Market** (Prices,
+Trading), **Finance** (Wallet, Invoices) — each link carrying a small
+domain-coloured square dot (Dashboard blue-700, Connections mint,
+Consumption blue-500, Prices amber, Trading blue-300, Wallet teal, Invoices
+violet) instead of the whole row tinting on hover/active. Back Office
+**keeps its flat list** — the source project's own back-office recreation is
+explicitly "re-tokenised," not restructured, so only its colours moved (via
+the same `:root` rewrite, nothing else).
+
+The grouping is **markup and CSS only** — `attachSidebarNav()`'s click
+wiring and `goTo()`'s active-link toggle both still work by
+`document.querySelectorAll("#sidebar-nav a")`, completely unaware anything
+changed. That scoping is exactly what nearly broke: the first pass split the
+nav into **four separate `<nav>` elements** (one per group, matching the
+source markup's own structure), and only the first carried `id="sidebar-nav"`
+— the other three groups' six links got no click handler and never toggled
+`.active`, silently. The fix is one `<nav id="sidebar-nav">` wrapping *every*
+group, with each `<div class="sidebar-group-label">` as a plain, non-`<a>`
+sibling inside it — `querySelectorAll("#sidebar-nav a")` already skips a
+`<div>` correctly, so one id continues to scope every link. If this nav is
+touched again, keep it to **one** `<nav id="sidebar-nav">` — splitting it a
+second time reintroduces the exact same silent breakage.
+
+**The Dashboard "position hero."** A large two-column panel above the
+existing stat-card row: a 44px "August position" headline (`78,4 %`) with a
+"Request a trade" button on the left, a segmented Hedged/Short/Long/Open
+composition bar with a value legend on the right. `dashboardHeroHtml()`
+renders it with the **same literal demo figures** the design project's own
+recreation carries (`78,4 %`, `1.291,4 MWh`, `812,8`/`214,4`/`121,3`/`142,9`
+MWh) — deliberately, not computed. This matches how the two stat cards
+immediately below it already work ("Coverage — August" `78,4 %`,
+"Uncovered volume" `214,4 MWh` have always been hardcoded, not derived — see
+the Dashboard row in the screen-source table above) and the wider,
+explicitly-stated policy for these six screens: match the reference's copy
+and numbers exactly rather than deriving them, a policy adopted after an
+earlier attempt to compute Dashboard content from real data was reverted (see
+"Customer Portal (Live Data) page" above). A real portfolio-wide
+Hedged/Short/Long/Open aggregation across all 6 connections — which the hero
+visually promises — is a genuine new feature (it would need per-site
+`computeDayStats` summed across sites, a definition for "Open"/"unpriced"
+that doesn't currently exist anywhere in this model, and projection for the
+un-measured part of the month), not a design-token sync; it was intentionally
+not built here. If it is built later, this hero is exactly where its real
+numbers replace these placeholder ones — no other change to the panel should
+be needed.
+
+**Verification.** Every screen of both portals was screenshotted in a real
+browser (Chrome via Playwright) before and after; a second Playwright pass
+drove the wizard, connection/trade/invoice detail views, the top-up flow, and
+every Back Office nav entry including the commercial-settings edit/cancel
+path, watching for console errors (none, beyond one unrelated 404 for a
+missing favicon). All five Node suites and the ad hoc chart/certainty/
+button-shape audits from earlier in this project's history were re-run;
+three of the latter hardcoded old hex values in their own assertions
+(`stroke="#4338ca"`, a `hatch-facc15-` id fragment, `.btn-danger`'s expected
+fill) and were updated to match — none of that is checked into the repo, so
+nothing here depends on it, but it is the fastest way to re-verify this sync
+if it needs revisiting.
+
 #### Certainty layer — provisional offers & projected data (vocabulary, 2026-08-13)
 
 > **Status (2026-08-18):** the *projected data* half of this vocabulary is
@@ -490,10 +688,13 @@ CVD, so no single cue carries it):**
 
    | Fill | Hatch ink (`darkenHex(·, 0.22)`) | Contrast vs white |
    |---|---|---|
-   | `#059f8f` teal | `#047c70` | 5.09:1 |
-   | `#4338ca` indigo | `#342c9e` | 10.50:1 |
-   | `#e8590c` orange | `#b54509` | 5.50:1 |
-   | `#0891b2` cyan | `#06718b` | 5.61:1 |
+   | `#006ECF` usage (blue-500) | `#0056a1` | 7.38:1 |
+   | `#004C94` hedge (blue-700) | `#003b73` | 11.21:1 |
+   | `#FF8F5C` short (coral) | `#c77048` | 3.60:1 |
+   | `#00D4C6` long (bright cyan) | `#00a59a` | 3.07:1 |
+
+   (SB-2026 values, 2026-08-18 — see "Design system sync" above. Recomputed
+   the same way, not hand-picked; `darkenHex()` needed no code change.)
 3. **Stroke pattern, lines only, and only for hues with no existing
    category dash** — the projected segment of the teal Actual-Usage/
    Total-Cost line switches from solid to a fine dot (`stroke-dasharray:
