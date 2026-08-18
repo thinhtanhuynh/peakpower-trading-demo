@@ -283,7 +283,7 @@ functional fidelity to the mockup for these six screens):
 | **Connections** | `portal-seed-data.js` (`CONNECTIONS`) | **list** / **detail** (`state.connId`). List is a CSS-grid table with status badges and a coverage bar; detail shows editable-looking name/description fields, connection facts, a 14-day data-quality grid, and any block positions (each linking to its Trading detail). |
 | **Consumption** | Fully real, unchanged from before — see below | Single view, filtered by an arbitrary From/To date range with Day/Month/Quarter presets and CSV export (see "Scope" and "Date-range filter" below). |
 | **Prices** | `portal-seed-data.js` (`PRICES`) | Single view. Six indicative Base/Peak price cards (month/quarter/calendar-year) each with a "Request a price →" link that jumps straight into the Trading wizard (`startWizardFromPrice`), plus a synthetic 90-day trend chart. |
-| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`, `WIZARD_YEAR`) + in-memory `state.trades` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView`. Detail shows a dark firm-offer banner with a live mm:ss countdown for the one pending trade, a timeline of `events`, and `facts`/`linked` records. The 3-step wizard (product & period → **connection & volume** → review & submit) mirrors the mockup's flow, including its bar-chart period picker and a wallet-balance-sufficiency check gating step 2; `submitWizard()` publishes the wizard's real selections (see "Cross-portal trade flow") and prepends a new `TRD-1079`-style row. See "One block, one connection" below for how step 2 diverges from the mockup. |
+| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`) + in-memory `state.trades` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView`. Detail shows a dark firm-offer banner with a live mm:ss countdown for the one pending trade, a timeline of `events`, and `facts`/`linked` records. The 3-step wizard (product & period → **connection & volume** → review & submit) mirrors the mockup's flow, including its three-row period picker (see "Three period rows, one selection" below) and a wallet-balance-sufficiency check gating step 2; `submitWizard()` publishes the wizard's real selections (see "Cross-portal trade flow") and prepends a new `TRD-1079`-style row. See "One block, one connection" below for how step 2 diverges from the mockup. |
 | **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `TOPUPS`, `BANK_DETAILS`) + in-memory `state.walletAvailable/Settled/Reserved` | **ledger** / **topup**, via `state.walletView`. Ledger is a stat-card row + full CSS-grid ledger table (trade/invoice references are clickable links into those screens' detail views). The deposit view has a working iDEAL amount input + preset chips + bank-transfer details; `performTopup()` mutates the in-memory balances and prepends a ledger + deposit-history row, matching the mockup's `performTopup()` transition — genuinely interactive, just not persisted across a page reload. **The copy says "Deposit", the code says `topup`** — see "Two things called deposit" below. |
 | **Invoices** | `portal-seed-data.js` (`INVOICES`) | **list** / **detail** (`state.invoiceId`). Detail shows stat cards, a provisional-data banner where applicable, and a full line-item CSS-grid table with a volume-check/reconciliation footer. Static, ported line-for-line from the mockup; no live invoice generation exists in this POC. |
 
@@ -350,6 +350,61 @@ the derived readouts in place (`#wizard-total-line`, `#wizard-volume-note`,
 `#wizard-continue`) via `refreshWizardVolumeUi()` and leaves the input alone.
 Any new live-edit field on this page needs the same treatment; those three ids
 are what makes the targeted update possible, so keep them.
+
+### Three period rows, one selection (trading wizard, step 1, 2026-08-18)
+
+Step 1 ("Product & period") used to switch between Month / Quarter / "Next
+calendar year" with a tab control, showing one row of bars at a time.
+Product direction: show all three periods **at once**, as three permanently-
+visible rows — 6 months, 4 quarters, 2 calendar years — with the customer
+choosing exactly one item across all three.
+
+- `PortalSeedData.WIZARD_PERIODS` gained a third array, `year` (2 rows, Cal
+  2027 and Cal 2028), sitting alongside `month`/`quarter` with the identical
+  `{period, base, peak, observed, start, end}` shape. The previous standalone
+  `WIZARD_YEAR` object (one row, Cal 2027 only) is gone — every reader that
+  already did `WIZARD_PERIODS[type][idx]` for month/quarter now does the same
+  for year, no special case. Cal 2028's base/peak continue the Q2/Q3-2027
+  rows' own downward drift rather than being an arbitrary new number.
+- `state.wizard` already carried `periodType` + a per-type index
+  (`monthIdx`/`quarterIdx`); it gained a third, `yearIdx`. That pair —
+  "which row is active" plus "which item in it" — is what makes "exactly one
+  selection across three lists" fall out for free: `getSelectedWizardPeriod()`
+  is one generic lookup into `WIZARD_PERIODS[periodType]`, indexed by
+  `w[periodType + "Idx"]`, not a three-way branch.
+- The exclusivity itself lives entirely in `selectWizardBar(type, i)`, which
+  sets **both** `state.wizard.periodType = type` and the matching index
+  together. Before this change only one row was ever rendered at a time, so
+  `periodType` only changed via the tab control and a bar click never needed
+  to touch it. With all three rows clickable simultaneously, every bar click
+  now has to declare "I am the selection" by claiming `periodType` for its
+  own row — that's the one behavioural change this redesign required beyond
+  swapping the markup.
+- `buildWizardBarChart()` (singular, rendered once for whichever row was
+  active) became `buildWizardPeriodRow(type, label)`, called three times —
+  once per type — each with its own independent min/max bar-height
+  normalisation, same as before, just scoped per-row instead of globally.
+- CSS: `.bar-chart-col` was `flex:1` (stretch to fill its row). That's wrong
+  once row length varies — a 2-item year row would stretch its bars to
+  double a 6-item month row's width for the same underlying data, so the
+  same price would carry different visual weight depending which row it sat
+  in. Fixed to `flex:0 0 60px`: every bar is the same size regardless of row,
+  and a shorter row is simply narrower, not stretched.
+- `portal-trade-link.js`'s `resolvePeriod(wizard, opts)` had its own,
+  independent year special-case (`if (type === "year") { ... opts.year ... }`)
+  reading the old standalone object. Unified the same way: `periods[type]`
+  indexed by `wizard[type + "Idx"]`, no branch. `buildRequest()`'s `opts` no
+  longer takes a `year` field — `opts.periods` (i.e. `WIZARD_PERIODS`) carries
+  it now, so `submitWizard()` no longer passes one.
+- Three call sites read the old `PortalSeedData.WIZARD_YEAR` directly and
+  broke silently (no throw, just a `null`/`undefined` read) when it was
+  removed: `indicativeEpexFor()` in `customer-portal.html`, and
+  `wizardRowFor()` / `liveMarketReferenceCardHtml()` in
+  `back-office-portal.html`. All three now scan `month.concat(quarter).concat(year)`
+  in that order — most-specific-quote-wins, since a month and its containing
+  quarter and year can all cover the same date. Grep for `WIZARD_YEAR` before
+  assuming a future change here is complete; it should only ever match dated
+  historical prose, never a live reference.
 
 ### Vertical spacing between sections — a footgun
 
@@ -689,6 +744,94 @@ fill) and were updated to match — none of that is checked into the repo, so
 nothing here depends on it, but it is the fastest way to re-verify this sync
 if it needs revisiting.
 
+#### Short/Covered/Hedge recolor (2026-08-18)
+
+Later the same day as the SB-2026 sync above: product direction to move
+three of the Consumption chart's roles off the hues SB-2026 had just given
+them — **Short**: coral `#FF8F5C` → red `#F24F4F`. **Covered**: amber
+`#EEB72B` → blue-700 `#004C94` (the exact hex the hedge line vacates, one
+line below). **Hedge volume / Hedge cost**: blue-700 `#004C94` → violet
+`#9151B8`. **Long stayed teal** — not mentioned in the request, and nothing
+about it needed to change for the other three to make sense.
+
+**Every touch point, all in `customer-portal.html` unless noted:** the
+`--pp-chart-hedge`/`--pp-chart-short` reference tokens (plus a new
+`--pp-chart-covered` token — covered never had one before); `.stat-card.short`
+and `.value.short` (now `var(--pp-red)`/`var(--pp-red-text)`, was
+`var(--pp-orange)`/`var(--pp-orange-text)`); a new `.stat-card.hedge`/
+`.value.hedge` tone pair (`var(--pp-violet)`/`var(--pp-violet-text)`) that the
+Hedge cost/Hedge volume `statCardHtml()` calls switched to; `td.short` and its
+neighbouring contrast-ratio comment (recomputed: red fill vs white is
+3,50:1, was coral's 2,25:1); both usage-chart legends' dashed hedge swatch,
+covered swatch and short swatch, and the cost chart's matching hedge/buy
+swatches; `usageChartHatchEntries()`'s three-hue array; `COST_HEDGE_LINE` and
+`COST_BUY_FILL`; and the literal fill/stroke hexes inside `buildChartSvg()`
+and `buildMonthChartSvg()` (both the day and range usage charts). `COST_TOTAL_LINE`
+(Total Cost's blue-500 line, mirroring Actual Usage) was **not** touched — the
+user asked to recolor Short, Covered and Hedge, not Actual Usage/Total Cost.
+
+**Why a new `.hedge` tone instead of recolouring `.brand` in place:** Hedge
+cost/Hedge volume carried `tone="brand"` (see "Card tones" below), but
+`.brand` is also the Dashboard's "Coverage — August" stat card's tone — a
+different figure (a ratio, not a hedge position) that was never part of this
+request. Recolouring `.brand` itself would have silently changed that card
+too. A dedicated `hedge` tone keeps the two independent, the same reasoning
+`.export`/`.short` already follow for Long/Short rather than reusing `.success`/
+`.critical`.
+
+**Propagated to the Dashboard hero, beyond the literal request.** The
+Dashboard's composition bar (`dashboardHeroHtml()`) hardcodes the same
+Hedged/Short/Long/Open figures the Consumption chart was made to match one
+turn earlier (2026-08-18, same day — see "Card tones" below), and the
+Dashboard mini-chart (`buildMiniChartSvg()`) draws the same hedge-volume line
+the Consumption usage chart does. Leaving those on the old blue/coral would
+have broken that just-established consistency the moment the Consumption
+chart moved, so both were recoloured the same way: composition bar Hedged
+segment + swatch + border color → violet, Short segment + swatch + value text
+(`--pp-coral-text` → `--pp-red-text`) → red, mini-chart hedge line stroke →
+violet. The composition bar's big "78,4 %" Coverage figure and the "Coverage
+— August" stat card were deliberately **left blue** — same reasoning as the
+`.brand`/`.hedge` split above, a ratio is not a hedge position. This was a
+judgement call, not something the request named explicitly; flagged to the
+user rather than left silent.
+
+**Picking blue-700 for Covered, specifically.** The freed-up hedge hex
+(`#004C94`) was reused rather than minting a fourth blue, for two reasons:
+it keeps the three-blue system tidy (blue-500 stays Actual Usage, blue-700
+becomes Covered, blue-300 stays unused/reserved as `--pp-chart-peak`), and a
+lighter blue at Covered's 45% fill opacity would read as washed-out, cutting
+against the "increase contrast" direction both this change and the SB-2026
+sync were already pointed in. Checked as actually rendered, not just at full
+strength: blue-700 blended to 45% over white is `#8caecf`, 2,32:1 against
+white, versus amber's old 45%-blend `#f7dfa0` at 1,31:1 — a real improvement,
+though (correctly) nowhere near blue-700's own unblended 8,53:1, since that
+figure describes the 100%-opacity hedge line, not this 45%-opacity fill.
+
+**The hatch texture needed no code change.** Every fill here feeds through
+`darkenHex(hue, CERTAINTY_HATCH_DARKEN)` at render time (see "A hedge is a
+step, not a ramp" / the certainty-layer texture below) rather than through a
+second hardcoded ink table, so swapping the three base hexes was sufficient
+— confirmed by rendering a fully-projected day and cropping the bars
+(Playwright + pixel-level crop, the same verification method
+`HATCH_MIN_BAR_WIDTH`'s own comment insists on). The cost chart's `COST_BUY_FILL`
+is kept byte-identical to the usage chart's Short hex on purpose, for a
+related reason: `hatchId()` derives the `<pattern>` id from the hex string
+itself, so the cost chart's provisional Buy bars silently resolve to the
+`<pattern>` the usage chart's own `<defs>` already defined — SVG id lookups
+are document-global, not scoped per-`<svg>`. Keep the two hexes identical or
+that reuse silently stops working.
+
+Verified the same way as the SB-2026 sync above: Playwright screenshots of
+Dashboard and Consumption (both a measured range and a fully-projected one,
+to check the hatch specifically), all five Node suites re-run, and a full
+sweep for the three old hexes (`#FF8F5C`, `#EEB72B`, plus every
+`var(--pp-orange...)`) confirming zero live references remain outside the
+`--pp-coral`/`--pp-orange` legacy token *definitions* themselves (kept, per
+"Legacy aliases carry old variable names forward on purpose" — unreferenced
+now, harmless to leave defined) and the decorative `--pp-rail-spectrum`
+sidebar gradient and page nav-dots (unrelated to this chart's semantics,
+deliberately left alone).
+
 #### Certainty layer — provisional offers & projected data (vocabulary, 2026-08-13)
 
 > **Status (2026-08-18):** the *projected data* half of this vocabulary is
@@ -1021,17 +1164,22 @@ All are totals over the selected date range.
 Card tones deliberately mirror the chart's own colors so the two read as
 one system: **Long** uses the `.export` tone (`--pp-teal-text`, matching the
 chart's own teal fill — see "Usage/cost chart saturation") and **Short**
-the `.short` tone (`--pp-orange-text`), matching the coral "bought at
+the `.short` tone (`--pp-red-text` as of 2026-08-18, was `--pp-orange-text`
+— see "Short/Covered/Hedge recolor" above), matching the red "bought at
 day-ahead" bar segment. Delta and Total Cost are red when it's an
 additional cost, green when it's savings/revenue. **Hedge cost** and
 **Hedge volume** — the one figure in each equation that is never derived,
 never withheld, and never marked projected (a locked-in contract position,
-see "Looking past the end of the data" below) — carry `tone="brand"`
-(`#004C94`, blue-700), the same blue as the hedge line on the chart above
-and the Hedge segment on the Dashboard's own composition bar. Before
-2026-08-18 both were untoned (a plain grey accent cap); the design system's
-own Consumption screen names Hedge volume `tone="brand"` explicitly, and
-Hedge cost gets the same treatment for the same reason, one equation over.
+see "Looking past the end of the data" below) — carry a dedicated
+`tone="hedge"` (`--pp-violet`/`--pp-violet-text`) as of 2026-08-18, the same
+violet as the hedge line on the chart above and the Hedge segment on the
+Dashboard's own composition bar; `.brand` (blue-700) was deliberately left
+alone rather than recoloured in place, since Dashboard's "Coverage — August"
+card also carries it for an unrelated figure — see "Short/Covered/Hedge
+recolor" for why a dedicated tone was minted instead of reusing `.brand`.
+Before that, Hedge cost/Hedge volume carried `tone="brand"` itself (and
+before 2026-08-18's earlier SB-2026 sync, both were untoned — a plain grey
+accent cap).
 
 The `#stat-row` element is a `.stat-stack` flex column wrapping two
 `.stat-row` divs — loading/no-data/error placeholders go through
@@ -1042,19 +1190,21 @@ likewise table-only — all six remain columns in the table and in the CSV
 export.
 
 **Usage chart (both single-day and multi-day):** two lines — actual usage
-(solid blue-500, `#006ECF`) and hedge volume (dashed blue-700, `#004C94`) —
-with each interval rendered as a stacked bar from the zero baseline: an
-amber segment (`#EEB72B` at 45% opacity — bumped up from 20% on
-2026-08-18, in the same product direction as the Short/Long full-opacity
-change below, but deliberately kept short of Short/Long's own full opacity
-so it still reads as the subordinate quantity, not an equal one) from zero up to
-`MIN(Actual Usage, Hedge Volume)` — the portion of usage already covered by
-the hedge — topped by the coral/teal segment spanning the gap between the
-two lines: coral, `#FF8F5C`, **full opacity**, when Uncovered ≥ 0 ("Short —
-bought at day-ahead"), teal, `#0FA69D`, **full opacity**, when Uncovered < 0
-("Long — sold at day-ahead"). Full opacity as of 2026-08-18, on product
-direction to match the Dashboard hero's own composition bar (see "Design
-system sync" below) — until then these were 55%/30% and Long's fill was the
+(solid blue-500, `#006ECF`, unchanged throughout) and hedge volume (dashed
+violet, `#9151B8` as of 2026-08-18's recolor, was blue-700 `#004C94` before
+that — see "Short/Covered/Hedge recolor" above) — with each interval
+rendered as a stacked bar from the zero baseline: a blue segment (`#004C94`
+— blue-700, freed up by the hedge line's move to violet, at 45% opacity;
+was amber `#EEB72B` before the same recolor, and 20% opacity before an
+earlier 2026-08-18 bump) from zero up to `MIN(Actual Usage, Hedge Volume)` —
+the portion of usage already covered by the hedge — topped by the red/teal
+segment spanning the gap between the two lines: red, `#F24F4F` (was coral
+`#FF8F5C`), **full opacity**, when Uncovered ≥ 0 ("Short — bought at
+day-ahead"), teal, `#0FA69D`, **full opacity**, when Uncovered < 0 ("Long —
+sold at day-ahead") — Long did not change in the recolor. Short/Long's full
+opacity (as opposed to Covered's 45%) dates to the earlier 2026-08-18 change
+made to match the Dashboard hero's own composition bar (see "Design system
+sync" below) — before that these were 55%/30% and Long's fill was the
 brighter `#00D4C6`, a hue the composition bar never uses. Consumption and
 production are no longer plotted; the y-axis is bipolar (a proper zero
 baseline, not always at the bottom) to correctly show intervals where Actual
@@ -1066,9 +1216,9 @@ uses the **same visual grammar** as the usage chart, deliberately:
 
 | | usage chart | cost chart |
 |---|---|---|
-| solid teal line | Actual Usage | **Total Cost** |
-| dashed indigo line | Hedge Volume | **Hedge Cost** |
-| bars spanning the gap | Uncovered (orange short / cyan long) | **Delta Cost** (orange buy / cyan sell) |
+| solid blue-500 line | Actual Usage | **Total Cost** |
+| dashed violet line | Hedge Volume | **Hedge Cost** |
+| bars spanning the gap | Uncovered (red short / teal long) | **Delta Cost** (red buy / teal sell) |
 
 That parallel is exact rather than decorative: `Total = Hedge + Delta`, so the
 vertical gap between the two lines **is** Delta Cost, just as the gap between
@@ -1076,19 +1226,24 @@ actual usage and hedge volume is the uncovered volume. Someone who has learned
 to read one chart can read the other. Delta Cost can be negative, so the
 y-axis is bipolar like the usage chart's.
 
-There is deliberately **no fill down to zero** here. The usage chart's yellow
+There is deliberately **no fill down to zero** here. The usage chart's blue
 "covered" band marks a real quantity (`MIN(usage, hedge)`); the cost analogue
 `MIN(hedgeCost, totalCost)` is not a meaningful figure, so drawing it would
 spend a colour on nothing. Every mark on this chart means something.
 
 Buy/Sell is encoded by **colour *and* by which side of the hedge line the bar
-sits on**, and named in the tooltip — so the coral/teal pair (`#FF8F5C` /
-`#0FA69D`, full opacity as of 2026-08-18 — see "Design system sync" below)
-is never the only cue. The tritanopia ΔE figure once cited here (5.9, later
-19.6) was measured against the *pre-08-18* orange/cyan pair; this pair
-hasn't been re-run through the dataviz validator since the 2026-08-18 hue
-and opacity change — re-run it before citing a number here again rather
-than trusting a stale one.
+sits on**, and named in the tooltip — so the red/teal pair (`#F24F4F` /
+`#0FA69D`, full opacity, matching the usage chart's Short/Long bars — see
+"Short/Covered/Hedge recolor" above) is never the only cue. `COST_BUY_FILL`
+is kept byte-identical to the usage chart's Short hex on purpose: the hatch
+`<pattern>` id is derived from the hex string itself (`hatchId()`), so the
+cost chart's provisional Buy bars silently reuse the `<pattern>` the usage
+chart's own `<defs>` already defined for Short, rather than needing a second
+copy — SVG id lookups are document-global, not scoped per-`<svg>`. The
+tritanopia ΔE figures previously cited here were measured against earlier
+palettes (orange/cyan, then coral/teal) and are stale again after the
+2026-08-18 red/blue/violet recolor — re-run the dataviz validator before
+citing a number here rather than trusting an old one.
 
 ### A hedge is a step, not a ramp
 
@@ -1416,9 +1571,16 @@ all 17 indices and which one ends each group; update it, the three indices,
 
 ### Looking past the end of the data (forward ranges)
 
-The From/To range extends to the furthest hedge block's `periodEnd`
-(`MAX_SELECTABLE_DATE`, currently 2026-12-31), not the dataset's coverage.
-Three different things are known past 2026-08-05, and the whole design turns
+The From/To range extends to the furthest of three things — any hedge
+block's `periodEnd`, any confirmed live trade's `periodEnd`, or
+`PortalSeedData.WIZARD_PERIODS.year`'s own furthest `end` — not the
+dataset's coverage. `MAX_SELECTABLE_DATE` is currently 2028-12-31, set by
+the last of those three: extended from 2026-12-31 on 2026-08-18 alongside
+the wizard's new Cal 2027/Cal 2028 rows (see "Three period rows, one
+selection" above), so the range inputs reach as far as
+`indicativeEpexFor()`/`usage-projection.js` can actually price and project,
+not just as far as a booked hedge block happens to cover. Three different
+things are known past 2026-08-05, and the whole design turns
 on keeping them apart rather than flattening them into one "future" idea:
 
 | | Source | Certainty |
@@ -1440,18 +1602,19 @@ can be read off the interval counters. Conflating them made a wholly-projected
 September look wholly measured.
 
 **Forward pricing, and the assumption in it.** `indicativeEpexFor(date, time)`
-reads `PortalSeedData.WIZARD_PERIODS` (month rows, then quarter) and
-`WIZARD_YEAR` — the same quoted curve behind the Prices and Trading screens —
-and picks base vs peak through `ConsumptionCalc.isPeakInterval()` rather than a
-second copy of that peak-window rule. A forward curve is the market's
+reads `PortalSeedData.WIZARD_PERIODS` — month rows, then quarter, then year
+(see "Three period rows, one selection" above) — the same quoted curve
+behind the Prices and Trading screens — and picks base vs peak through
+`ConsumptionCalc.isPeakInterval()` rather than a second copy of that
+peak-window rule. A forward curve is the market's
 expectation of spot but **embeds a risk premium**, so it is not the same claim
 as realised spot; every figure priced this way is labelled *indicative*. The
 alternative, withholding forward cost, was tried and rejected: it emptied Total
 cost, the headline figure, on exactly the ranges this view exists to show.
 
 **Known gap: August 2026 has no quote.** The seeded month rows start at Sep
-2026 and the year row is Cal *2027*, so 2026-08-06..08-31 has projected usage
-but no forward price. Those intervals are excluded from cost and the card says
+2026 and the earliest year row is Cal *2027*, so 2026-08-06..08-31 has
+projected usage but no forward price. Those intervals are excluded from cost and the card says
 so ("excludes 26 days with no quoted price"). This is missing demo data, not a
 code defect — adding an Aug 2026 row to `WIZARD_PERIODS` fixes it. **Do not**
 paper over it by extrapolating a neighbouring month's price.

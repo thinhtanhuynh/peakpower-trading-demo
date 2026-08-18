@@ -60,9 +60,10 @@ var PERIODS = {
   month: [{ period: "Sep 2026", base: 78.45, peak: 96.15, start: "2026-09-01", end: "2026-09-30" },
           { period: "Oct 2026", base: 80.10, peak: 99.40, start: "2026-10-01", end: "2026-10-31" }],
   quarter: [{ period: "Q4 2026", base: 84.20, peak: 103.70, start: "2026-10-01", end: "2026-12-31" },
-            { period: "Q1 2027", base: 82.75, peak: 94.75, start: "2027-01-01", end: "2027-03-31" }]
+            { period: "Q1 2027", base: 82.75, peak: 94.75, start: "2027-01-01", end: "2027-03-31" }],
+  year: [{ period: "Cal 2027", base: 79.90, peak: 98.25, start: "2027-01-01", end: "2027-12-31" },
+         { period: "Cal 2028", base: 76.80, peak: 91.40, start: "2028-01-01", end: "2028-12-31" }]
 };
-var YEAR = { period: "Cal 2027", base: 79.90, peak: 98.25, start: "2027-01-01", end: "2027-12-31" };
 var CONNS = [
   { id: "rot", name: "Rotterdam DC", sub: "…0011" },
   { id: "venlo", name: "Venlo cold store", sub: "…0027" },
@@ -70,7 +71,7 @@ var CONNS = [
   { id: "almere", name: "Almere office", sub: "…0059" }
 ];
 function opts(extra) {
-  var o = { id: "TRD-1079", customer: "Vandersteen Koeling", connections: CONNS, periods: PERIODS, year: YEAR };
+  var o = { id: "TRD-1079", customer: "Vandersteen Koeling", connections: CONNS, periods: PERIODS };
   for (var k in (extra || {})) { o[k] = extra[k]; }
   return o;
 }
@@ -81,8 +82,13 @@ function opts(extra) {
   assert.strictEqual(q.period, "Q1 2027", "quarterIdx picks from the quarter list");
   var m = Link.resolvePeriod({ periodType: "month", monthIdx: 1 }, opts());
   assert.strictEqual(m.period, "Oct 2026", "monthIdx picks from the month list");
-  var y = Link.resolvePeriod({ periodType: "year" }, opts());
-  assert.strictEqual(y.period, "Cal 2027", "year ignores the indices");
+  // Year resolves the same way as month/quarter now — a flat list indexed by
+  // yearIdx, not a standalone object — since WIZARD_PERIODS.year became a
+  // real 2-entry array (see "Three period rows, one selection" in CLAUDE.md).
+  var y = Link.resolvePeriod({ periodType: "year", yearIdx: 0 }, opts());
+  assert.strictEqual(y.period, "Cal 2027", "yearIdx 0 picks the first year row");
+  var y2 = Link.resolvePeriod({ periodType: "year", yearIdx: 1 }, opts());
+  assert.strictEqual(y2.period, "Cal 2028", "yearIdx 1 picks the second year row");
   // Out-of-range index falls back to the first row rather than undefined.
   var oob = Link.resolvePeriod({ periodType: "quarter", quarterIdx: 99 }, opts());
   assert.strictEqual(oob.period, "Q4 2026");

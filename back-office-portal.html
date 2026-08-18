@@ -283,7 +283,7 @@
 
   var D = BackOfficeDeskData;
   var Link = PortalTradeLink;
-  // The forward curve (WIZARD_PERIODS/WIZARD_YEAR) — same rows that already
+  // The forward curve (WIZARD_PERIODS) — same rows that already
   // drive the Customer Portal's Prices screen and trading wizard, reused
   // here rather than a private copy, so a desk market-reference figure can
   // never drift from what the customer is quoted elsewhere in the product.
@@ -713,8 +713,7 @@
    * carries a handful of periods, same as the portal's own Prices screen). */
   function wizardRowFor(t) {
     var portalPeriod = fromDeskPeriod(t.period);
-    if (Seed.WIZARD_YEAR && Seed.WIZARD_YEAR.period === portalPeriod) { return Seed.WIZARD_YEAR; }
-    var lists = (Seed.WIZARD_PERIODS && [Seed.WIZARD_PERIODS.month, Seed.WIZARD_PERIODS.quarter]) || [];
+    var lists = (Seed.WIZARD_PERIODS && [Seed.WIZARD_PERIODS.month, Seed.WIZARD_PERIODS.quarter, Seed.WIZARD_PERIODS.year]) || [];
     for (var i = 0; i < lists.length; i++) {
       var found = (lists[i] || []).filter(function (r) { return r.period === portalPeriod; })[0];
       if (found) { return found; }
@@ -725,16 +724,16 @@
   /**
    * The seeded trade's "Market reference" card — the one section from
    * TRD_1058_RICH that first looked like it needed fabricated numbers, and
-   * doesn't: the indicative price is real product data (WIZARD_PERIODS/
-   * WIZARD_YEAR, the same rows the Prices screen and trading wizard quote),
+   * doesn't: the indicative price is real product data (WIZARD_PERIODS,
+   * the same rows the Prices screen and trading wizard quote),
    * and the spread against the desk's own offered price is arithmetic on
    * two real numbers, not a third invented one. Returns "" when the period
    * isn't in the quoted set, rather than guessing an indication.
    */
   /**
    * A seeded trade's Market reference — volume (real, Link.hoursInPeriod)
-   * and the indicative price for that period+shape (real, WIZARD_PERIODS/
-   * WIZARD_YEAR). Deliberately does NOT divide the card's own decorative
+   * and the indicative price for that period+shape (real, WIZARD_PERIODS).
+   * Deliberately does NOT divide the card's own decorative
    * `valueLabel` by that volume to get a "price": that value was never
    * authored to equal price × volume (it's a plausible-looking demo
    * number, not a real trade value), so a price derived from it reads as
@@ -771,12 +770,9 @@
    */
   function liveMarketReferenceCardHtml(req) {
     var portalRow = null;
-    if (Seed.WIZARD_YEAR && Seed.WIZARD_YEAR.period === req.period) { portalRow = Seed.WIZARD_YEAR; }
-    if (!portalRow) {
-      var lists = (Seed.WIZARD_PERIODS && [Seed.WIZARD_PERIODS.month, Seed.WIZARD_PERIODS.quarter]) || [];
-      for (var i = 0; i < lists.length && !portalRow; i++) {
-        portalRow = (lists[i] || []).filter(function (r) { return r.period === req.period; })[0] || null;
-      }
+    var lists = (Seed.WIZARD_PERIODS && [Seed.WIZARD_PERIODS.month, Seed.WIZARD_PERIODS.quarter, Seed.WIZARD_PERIODS.year]) || [];
+    for (var i = 0; i < lists.length && !portalRow; i++) {
+      portalRow = (lists[i] || []).filter(function (r) { return r.period === req.period; })[0] || null;
     }
     if (!portalRow) { return ""; }
     var indicative = req.shape === "Peak" ? portalRow.peak : portalRow.base;

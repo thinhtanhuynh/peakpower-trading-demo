@@ -91,9 +91,18 @@
       { period: "Q1 2027", base: 82.75, peak: 94.75, observed: "14:22", start: "2027-01-01", end: "2027-03-31" },
       { period: "Q2 2027", base: 77.40, peak: 90.10, observed: "14:22", start: "2027-04-01", end: "2027-06-30" },
       { period: "Q3 2027", base: 75.90, peak: 88.60, observed: "14:22", start: "2027-07-01", end: "2027-09-30" }
+    ],
+    // Folded into WIZARD_PERIODS as a third array (was a standalone
+    // WIZARD_YEAR object, one row only) so every reader that already does
+    // WIZARD_PERIODS[periodType][idx] for month/quarter needs no special
+    // case for year — see CLAUDE.md "Three period rows, one selection"
+    // for why. Cal 2028's base/peak continue the Q2/Q3-2027 rows' own
+    // downward drift rather than being an arbitrary new number.
+    year: [
+      { period: "Cal 2027", base: 79.90, peak: 98.25, observed: "12:40", start: "2027-01-01", end: "2027-12-31" },
+      { period: "Cal 2028", base: 76.80, peak: 91.40, observed: "12:40", start: "2028-01-01", end: "2028-12-31" }
     ]
   };
-  var WIZARD_YEAR = { period: "Cal 2027", base: 79.90, peak: 98.25, observed: "12:40", start: "2027-01-01", end: "2027-12-31" };
 
   var PRICES = [
     { shape: "Base", label: "Next month", period: "Sep 2026", price: 78.45, delta: "+1,25", up: true, observed: "14:22" },
@@ -289,7 +298,6 @@
     CONNECTIONS: CONNECTIONS,
     WIZARD_CONNECTIONS: WIZARD_CONNECTIONS,
     WIZARD_PERIODS: WIZARD_PERIODS,
-    WIZARD_YEAR: WIZARD_YEAR,
     PRICES: PRICES,
     TRADES_SEED: TRADES_SEED,
     WALLET_LEDGER: WALLET_LEDGER,

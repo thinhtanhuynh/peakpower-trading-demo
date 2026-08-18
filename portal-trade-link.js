@@ -95,10 +95,10 @@
    * Turns the wizard's own state into a portable request record.
    *
    * `wizard` is the Customer Portal's state.wizard:
-   *   { direction, shape, periodType, monthIdx, quarterIdx, volumes:{id:mw}, note }
+   *   { direction, shape, periodType, monthIdx, quarterIdx, yearIdx, volumes:{id:mw}, note }
    * `opts` supplies what the wizard doesn't own:
-   *   { id, customer, connections:[{id,name,sub}], periods:{month:[],quarter:[]},
-   *     year:{...}, submittedAt }
+   *   { id, customer, connections:[{id,name,sub}], periods:{month:[],quarter:[],year:[]},
+   *     submittedAt }
    */
   function buildRequest(wizard, opts) {
     opts = opts || {};
@@ -134,16 +134,16 @@
     };
   }
 
-  /** The period row the wizard's periodType/index pair currently points at. */
+  /** The period row the wizard's periodType/index pair currently points at.
+   * All three period types (month, quarter, year) resolve the same way —
+   * one flat lookup into opts.periods[type], indexed by wizard[type + "Idx"] —
+   * since WIZARD_PERIODS.year became a real array alongside month/quarter
+   * rather than a single standalone object needing its own branch. */
   function resolvePeriod(wizard, opts) {
     var periods = opts.periods || {};
     var type = wizard.periodType;
-    if (type === "year") {
-      var y = opts.year || {};
-      return { type: "year", period: y.period, start: y.start, end: y.end, base: y.base, peak: y.peak };
-    }
     var list = periods[type] || [];
-    var idx = type === "month" ? wizard.monthIdx : wizard.quarterIdx;
+    var idx = wizard[type + "Idx"];
     var row = list[idx] || list[0] || {};
     return { type: type, period: row.period, start: row.start, end: row.end, base: row.base, peak: row.peak };
   }
