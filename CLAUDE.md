@@ -279,13 +279,33 @@ functional fidelity to the mockup for these six screens):
 
 | Screen | Data source | Sub-views |
 |---|---|---|
-| **Dashboard** | `portal-seed-data.js` (`DASHBOARD_PRICE_TILES`, `DASHBOARD_RECENT_ACTIVITY`) + live wallet balance + a live mini chart | Single view. Balance/coverage/uncovered-volume/open-trades stat cards, an amber "offer received" banner for the one pending trade (`TRD-1078`) linking to its Trading detail, indicative price tiles, and a "latest day" mini chart that reuses real Rotterdam DC data via a dedicated `buildMiniChartSvg()` (kept separate from the Day chart's `buildChartSvg()` so the two `<svg>`s don't collide on the `#chart-crosshair` id or clobber each other's hover geometry). |
+| **Dashboard** | `portal-seed-data.js` (`DASHBOARD_PRICE_TILES`, `DASHBOARD_RECENT_ACTIVITY`) + live wallet balance + a live mini chart | Single view. Balance/coverage/uncovered-volume/open-trades stat cards, an amber "Firm offer received" banner for the one pending trade (`TRD-1078` in the seeded case, but genuinely whichever trade is pending — see the note below the table) linking to its Trading detail, indicative price tiles, and a "latest day" mini chart that reuses real Rotterdam DC data via a dedicated `buildMiniChartSvg()` (kept separate from the Day chart's `buildChartSvg()` so the two `<svg>`s don't collide on the `#chart-crosshair` id or clobber each other's hover geometry). |
 | **Connections** | `portal-seed-data.js` (`CONNECTIONS`) | **list** / **detail** (`state.connId`). List is a CSS-grid table with status badges and a coverage bar; detail shows editable-looking name/description fields, connection facts, a 14-day data-quality grid, and any block positions (each linking to its Trading detail). |
 | **Consumption** | Fully real, unchanged from before — see below | Single view, filtered by an arbitrary From/To date range with Day/Month/Quarter presets and CSV export (see "Scope" and "Date-range filter" below). |
 | **Prices** | `portal-seed-data.js` (`PRICES`) | Single view. Six indicative Base/Peak price cards (month/quarter/calendar-year) each with a "Request a price →" link that jumps straight into the Trading wizard (`startWizardFromPrice`), plus a synthetic 90-day trend chart. |
 | **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`) + in-memory `state.trades` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView`. Detail shows a dark firm-offer banner with a live mm:ss countdown for the one pending trade, a timeline of `events`, and `facts`/`linked` records. The 3-step wizard (product & period → **connection & volume** → review & submit) mirrors the mockup's flow, including its three-row period picker (see "Three period rows, one selection" below) and a wallet-balance-sufficiency check gating step 2; `submitWizard()` publishes the wizard's real selections (see "Cross-portal trade flow") and prepends a new `TRD-1079`-style row. See "One block, one connection" below for how step 2 diverges from the mockup. |
 | **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `TOPUPS`, `BANK_DETAILS`) + in-memory `state.walletAvailable/Settled/Reserved` | **ledger** / **topup**, via `state.walletView`. Ledger is a stat-card row + full CSS-grid ledger table (trade/invoice references are clickable links into those screens' detail views). The deposit view has a working iDEAL amount input + preset chips + bank-transfer details; `performTopup()` mutates the in-memory balances and prepends a ledger + deposit-history row, matching the mockup's `performTopup()` transition — genuinely interactive, just not persisted across a page reload. **The copy says "Deposit", the code says `topup`** — see "Two things called deposit" below. |
 | **Invoices** | `portal-seed-data.js` (`INVOICES`) | **list** / **detail** (`state.invoiceId`). Detail shows stat cards, a provisional-data banner where applicable, and a full line-item CSS-grid table with a volume-check/reconciliation footer. Static, ported line-for-line from the mockup; no live invoice generation exists in this POC. |
+
+**The Dashboard's offer banner had a hardcoded title until 2026-08-18.**
+`renderDashboardPage()` built the countdown and the "View offer" click
+target correctly off `pending` (the real `state.trades` entry with
+`.pending === true`) — `mmss(pending.secondsRemaining)`,
+`PP.openTrade('${pending.id}')` — but the banner's own headline text was a
+literal string, `"Offer received — Base Nov-2026 · 0,2 MW · €
+102,4000/MWh · € 14.745,60"`, that never read `pending` at all. Harmless
+only by coincidence, as long as the pending trade always happened to be
+the seeded `TRD-1078` (whose real numbers happen to match that string) —
+a real submitted-and-priced trade becoming the pending one would have
+shown someone else's numbers on their own offer. Fixed to interpolate
+`pending.shape`/`.period`/`.power`/`.price`/`.value` — the exact field
+names `toCustomerTrade()` already returns and the Trading detail page's
+own offer banner (`.ob-eyebrow`/`.ob-price`/`.ob-sub`) already reads, so
+there's one convention for "how a trade's own fields become offer-banner
+text," not two. Also restored the word **"Firm"** — the Dashboard banner
+read "Offer received", while the Trading page's own banner and the design
+system's own Dashboard mockup both say "**Firm** offer received"; a small,
+separate inconsistency caught while fixing the same line.
 
 All six screens' "tables" are `display:grid` divs (`.grid-table`/`.gt-head`/
 `.gt-row`, explicit per-screen `grid-template-columns`) rather than
@@ -575,6 +595,118 @@ future narrower viewport ever needs it to). Verified visually (full-page
 screenshot, all three rows in both columns) and with the same interaction
 script as above re-run unmodified — the selection logic doesn't know or
 care how wide its own cards are.
+
+#### Two tables, per-shape colour, a new default, and priced directions (2026-08-18, a fourth pass)
+
+Four separate product asks landed in one message; each gets its own
+paragraph below rather than being merged, since they touch different code
+for different reasons.
+
+**Two tables, not two columns of one panel.** "I think we need 2 tables, 1
+for base, 1 for peak" — `.shape-columns` (one `--pp-surface-alt` panel, two
+columns split by a single hairline border) became `.shape-tables`: two
+independent white bordered cards (`.shape-table`) with a real 20px gap
+between them, each looking like a genuine standalone table rather than a
+divided half of one. The sunken `.period-panel` background is gone
+entirely — grouping "Delivery period" now comes from spacing and the
+`.period-panel-label` heading above both tables, not a shared tint. Rename
+followed the structure: `buildShapeColumn(shape)` → `buildShapeTable(shape)`,
+returning `<div class="shape-table shape-table-base|peak">`.
+
+**BASE / PEAK, uppercase and 15px** (was sentence-case, 13px) — the table's
+own identity now reads before its numbers do. Caught and fixed a real
+contrast bug while touching this exact line: the Peak heading was
+`--pp-blue-300` (3.11:1 against white — a fill/border tier, not a text
+one; see "fill vs text" in the SB-2026 sync section) used directly as
+text, the identical mistake that section's own rule exists to catch,
+just never caught here. New helper `shapeTextColor(shape)` returns
+blue-700 for Base (8.53:1, already fine) and **blue-500** for Peak
+(5.08:1, clears AA) — one function so the table heading and the price
+readout (below) can't independently drift back to the wrong tier.
+
+**Selected-state colour no longer shared between the two shapes.** Before,
+every selected card — Base or Peak — used the same hardcoded blue-700
+border/wash/checkmark/price-text. Now `.shape-table-base`/`.shape-table-peak`
+scope the selected-state rules (`.bar-chart-col.selected`,
+`.bar-chart-check`, `.bar-chart-bar.selected`, and the selected card's own
+`.bar-chart-price`) so each table colours its own selection independently:
+Base stays blue-700 throughout (border, wash, checkmark fill, price text —
+all AA-safe already); Peak uses blue-300 for the border/wash/checkmark
+(a mark/fill role, not text — 3.11:1 is the right threshold class for
+that) and blue-500 for the price text specifically, via the same
+`shapeTextColor()` the heading uses. Hover stays a single neutral
+blue-300 cue for both tables — that state is transient and secondary, not
+the identity signal the ask was actually about.
+
+**Default is now Base, next month** (`WIZARD_PERIODS.month[0]`, "Sep
+2026" relative to this POC's stated present) — was Peak, Q1 2027.
+`startWizard()` and `startWizardFromConnection()` both changed
+(`defaultWizard("Base", "month", 0, 0)`); `startWizardFromPrice()` did
+**not**, and must not — its whole reason to exist is honouring whichever
+specific shape+period the customer already clicked on the Prices screen,
+not falling back to a generic default.
+
+**Buy and Sell now price differently — a real bid/ask spread, not
+decoration.** `WIZARD_PERIODS` carries one price per row (the buy/ask
+side); Sell was previously priced identically, which is not how any
+liquid day-ahead product actually quotes. Rather than hand-authoring a
+second number for all 24 base/peak × 12-period combinations — exactly the
+"correct arithmetic on decorative input is still a fabrication" trap
+"Derived detail must not out-claim its source" (below) already warns
+about, just with 24 new invented numbers instead of one bad division — the
+sell side is **derived**: `portal-trade-link.js` gains one named constant,
+`SELL_SPREAD = 0.02`, and one pure function, `sellAdjustedPrice(price,
+direction)`, returning `price * (1 - SELL_SPREAD)` for `"sell"`
+(case-insensitive) and `price` unchanged otherwise (`null` passes through
+as `null`, never coerced to `0`).
+
+That one function is called from exactly two places, and both matter for
+the same reason — a Sell request must show the customer the same number it
+submits, never two:
+- `resolvePeriod(wizard, opts)` applies it to `row.base`/`row.peak` before
+  returning, keyed on `wizard.direction` — so `buildRequest()`'s existing
+  `wizard.shape === "Peak" ? period.peak : period.base` picked up the
+  adjusted price with **no change of its own needed**. A submitted Sell
+  request's `indicativePrice` is the spread-adjusted number, verified
+  against a live submission's own stored record, not just against
+  `resolvePeriod`'s return value in isolation.
+- `customer-portal.html`'s `getSelectedWizardPeriod()` — the wizard's own
+  read of "the one currently-selected period," feeding the price readout
+  and `wizardSettlement()`'s deposit maths — now returns a **new object**
+  (never the raw `WIZARD_PERIODS` row itself, which every other reader on
+  this page also shares) with `.base`/`.peak` passed through the same
+  `PortalTradeLink.sellAdjustedPrice()`. `buildWizardPeriodRow()` — which
+  renders all 12 cards in one shape's table, not just the selected one —
+  calls the identical function per-card via a small local `priceAt()`
+  helper, applied **before** the row's own min/max bar-height
+  normalisation runs, so a Sell row's bars stay correctly proportioned to
+  Sell's own (uniformly 2%-lower) numbers rather than to Buy's.
+
+Both call sites reach the *same* `portal-trade-link.js` export — there is
+deliberately no second implementation in `customer-portal.html` that could
+drift from it. `back-office-portal.html`'s market-reference cards were
+**not** touched: they read `PortalSeedData.WIZARD_PERIODS` directly by
+label, never through `resolvePeriod()`, so they were never in this
+feature's path, and the desk's own "indicative" comparison figure staying
+at the flat quoted price (not bid/ask-split) was a judgement call, not an
+oversight — revisit only if asked to.
+
+New `portal-trade-link.test.js` coverage: `sellAdjustedPrice` in isolation
+(Buy unchanged, Sell at exactly 98%, case-insensitivity, `null` passthrough,
+undefined direction defaulting to unadjusted rather than throwing);
+`resolvePeriod` returning spread-adjusted `base` **and** `peak` for a Sell
+wizard (both, not just one); `buildRequest` producing the adjusted
+`indicativePrice` for a Sell request end to end. All pre-existing
+Buy-direction assertions were re-run unmodified and still pass — this
+feature is additive to them, not a rewrite.
+
+Verified together, not each piece in isolation: a scripted pass reading a
+specific card's displayed price in Buy, toggling to Sell, re-reading the
+*same* card (98% of the Buy figure, exactly), then completing a full
+submit and checking the record actually written to `localStorage` carries
+that identical adjusted number — the thing that would silently break if
+the wizard's display and the submission path ever used two different
+formulas.
 
 ### Vertical spacing between sections — a footgun
 
@@ -1387,6 +1519,19 @@ three states that never went anywhere. `.stat-equation`'s five-column grid
 (`card/op/card/op/card`) is now visually overkill for `statusCardHtml`'s
 always-one-card case — left as-is rather than narrowed, since a status
 placeholder taking the same grid a real equation once used costs nothing.
+
+**`.position-panel` didn't fill its own container** (fixed later the same
+day). `#stat-row` (`.stat-stack`) is `display:flex; flex-direction:row`,
+and `.position-panel` carried no `flex-grow` — a flex item with no grow
+shrink-wraps to its own content width rather than stretching, so the panel
+sat at its grid's intrinsic ~989px regardless of how much wider the row
+actually was. Invisible below that width, since shrink-to-fit can't exceed
+the space available (which is exactly why it went unnoticed at ordinary
+viewport widths and only showed up as dead space to the right of the panel
+at a wide one) — caught by measuring `panelWidth` against `statRowWidth` at
+several viewport widths, not by eyeballing a single screenshot. Fixed with
+`flex:1; min-width:0;` — the same shape of bug, same fix, as the wizard's
+own card-width fix above, in a different component.
 
 The old two-equation design is kept below as **history, not current
 behaviour** — read it for the arithmetic (`Hedge cost + Delta cost = Total

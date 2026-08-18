@@ -329,7 +329,15 @@
      actual selected range instead of hardcoded demo figures. .stat-card and
      friends above are UNCHANGED and still render the loading/no-data/error
      placeholders — only the data-present path moved off them. */
-  .position-panel { display:grid; grid-template-columns:1fr 1fr; gap:24px; background:#fff; border:1px solid var(--pp-border); border-radius:12px; box-shadow:var(--pp-shadow-card); padding:22px 24px; }
+  /* flex:1 (2026-08-18 fix) — #stat-row (.stat-stack) is display:flex, and a
+     flex item with no flex-grow shrink-wraps to its own content width (here,
+     the grid's intrinsic ~989px) rather than stretching to fill the row.
+     Below that content width the panel already tracked its container 1:1
+     (shrink-to-fit can't exceed available space), which is exactly why this
+     went unnoticed until a wide-enough viewport left dead space to its
+     right — confirmed by measuring panelWidth vs statRowWidth at several
+     widths, not just eyeballing one screenshot. */
+  .position-panel { display:grid; grid-template-columns:1fr 1fr; gap:24px; background:#fff; border:1px solid var(--pp-border); border-radius:12px; box-shadow:var(--pp-shadow-card); padding:22px 24px; flex:1; min-width:0; }
   /* Whole-panel certainty marker (mixed or fully-projected range) — the
      card-level equivalent of .stat-card.projected above, applied once to
      the panel rather than per component card, since cost and position now
@@ -610,35 +618,35 @@
   .field-group { margin-bottom:14px; }
   .field-group .fg-label { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; margin-bottom:6px; }
 
-  /* Delivery period gets its own sunken panel, the price readout nested
-     inside it — "your choice" and "what it costs" read as one unit, not two
-     unrelated blocks stacked in a card. */
-  .period-panel { background:var(--pp-surface-alt); border-radius:var(--radius-lg); padding:16px 18px 14px; margin-top:18px; }
-  .period-panel-label { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; margin-bottom:2px; }
+  .period-panel-label { font-size:10.5px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-body); text-transform:uppercase; margin-top:18px; margin-bottom:8px; }
 
-  /* Base and Peak side by side (2026-08-18 redesign) — the same 12 periods
-     priced twice, once per shape, so a customer compares Base vs Peak for
-     the same period directly instead of re-reading the same 12 bars after
-     flipping a Shape toggle. A plain 2-up grid plus one vertical rule, not a
-     second nested card per column — the period cards below are already the
-     one "card" tier in this panel; giving each column its own white
-     bordered box too would read as two blank cards holding smaller cards,
-     not two clearly separated tables. */
-  .shape-columns { display:grid; grid-template-columns:1fr 1fr; gap:0; margin-top:10px; }
-  .shape-column { padding:0 16px; min-width:0; }
-  .shape-column:first-child { padding-left:0; border-right:1px solid var(--pp-border); }
-  .shape-column:last-child { padding-right:0; }
-  .shape-column-head { font-size:13px; font-weight:700; margin-bottom:2px; }
+  /* Base and Peak as two genuinely separate tables (2026-08-18 redesign,
+     third pass) — the same 12 periods priced twice, once per shape, so a
+     customer compares Base vs Peak for the same period directly instead of
+     re-reading the same 12 bars after flipping a Shape toggle. Started as
+     one shared sunken panel with a single divider between two columns;
+     product direction asked for real separation instead — "I think we need
+     2 tables, 1 for base, 1 for peak" — so each shape now gets its own
+     bordered white card with a real gap between them, not a shared
+     background split by a hairline. */
+  .shape-tables { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:10px; }
+  .shape-table { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:16px 18px 14px; min-width:0; }
+  /* Uppercase + 15px (was 13px, sentence case) — the table's own identity
+     needs to read before any of its numbers do. Colour is per-shape (set
+     inline, see buildShapeTable) rather than one rule here, for the same
+     reason the selected-state rules below are duplicated per table: BASE
+     and PEAK needed to stop sharing a single colour meaning. */
+  .shape-table-head { font-size:15px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; margin-bottom:10px; }
 
   /* Three rows (6 months / 4 quarters / 2 years — see "Three period rows,
      one selection") replaced the old single row that switched between them.
-     Cards fill the row's full width (flex:1 1 0, 2026-08-18) — a later
-     reversal of an earlier fixed-width choice documented here: a 2-item
-     year row's cards now ARE visibly wider than the 6-item month row's, on
-     explicit product direction ("auto expand… to adapt the width of the
-     trade wizard") over the honest-sizing argument that fixed width used to
-     make. flex-basis:0 (not auto) so width is split strictly evenly by
-     count, not skewed by which card's own price text happens to be widest.
+     Cards fill the row's full width (flex:1 1 0, 2026-08-18) — a reversal
+     of an earlier fixed-width choice documented here: a 2-item year row's
+     cards now ARE visibly wider than the 6-item month row's, on explicit
+     product direction ("auto expand… to adapt the width of the trade
+     wizard") over the honest-sizing argument that fixed width used to make.
+     flex-basis:0 (not auto) so width is split strictly evenly by count, not
+     skewed by which card's own price text happens to be widest.
      Each option is a real card (2026-08-18 redesign), not a bare column: a
      border and white fill at rest, an elevated hover, and a selected state
      carried by THREE redundant cues — border colour, a light blue wash, and
@@ -648,21 +656,36 @@
      (min/max-normalised per row, per shape) — polish changed how it's
      framed, not what it shows. */
   .wizard-period-row { margin-top:16px; }
-  .wizard-period-row:first-child { margin-top:10px; }
+  .wizard-period-row:first-child { margin-top:0; }
   .wpr-label { font-size:10.5px; font-weight:700; color:var(--pp-text-heading); margin-bottom:8px; }
   .bar-chart-row { display:flex; align-items:stretch; gap:8px; height:116px; }
   .bar-chart-col { flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; box-sizing:border-box; padding:10px 2px 8px; position:relative; background:#fff; border:1.5px solid var(--pp-border); border-radius:var(--radius-md); cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, transform .1s ease; }
   .bar-chart-col:hover { border-color:var(--pp-blue-300); box-shadow:0 3px 10px rgba(45,63,84,.10); transform:translateY(-1px); }
-  .bar-chart-col.selected { border-color:var(--pp-blue-700); background:var(--pp-blue-050); box-shadow:0 3px 10px rgba(0,76,148,.16); }
-  .bar-chart-check { position:absolute; top:-7px; right:-7px; width:18px; height:18px; border-radius:50%; background:var(--pp-blue-700); color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,76,148,.4); opacity:0; transform:scale(.5); transition:opacity .15s ease, transform .15s ease; }
+  .bar-chart-check { position:absolute; top:-7px; right:-7px; width:18px; height:18px; border-radius:50%; color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,76,148,.4); opacity:0; transform:scale(.5); transition:opacity .15s ease, transform .15s ease; }
   .bar-chart-col.selected .bar-chart-check { opacity:1; transform:scale(1); }
   .bar-chart-price { font-size:11px; font-weight:700; color:var(--pp-text-body); margin-bottom:8px; transition:color .15s ease; }
-  .bar-chart-col.selected .bar-chart-price { color:var(--pp-blue-700); }
   .bar-chart-bar { width:56%; min-height:3px; border-radius:3px 3px 0 0; background:var(--pp-border-strong); transition:background-color .15s ease, height .15s ease; }
-  .bar-chart-bar.selected { background:var(--pp-blue-700); }
   .bar-chart-col:hover .bar-chart-bar:not(.selected) { background:var(--pp-blue-300); }
   .bar-chart-period { font-size:10.5px; color:var(--pp-text-body); margin-top:8px; font-weight:600; }
   .bar-chart-col.selected .bar-chart-period { color:var(--pp-text-heading); font-weight:700; }
+
+  /* Selected-state colour, scoped per table (2026-08-18) — BASE and PEAK no
+     longer share one hardcoded blue-700. Base keeps blue-700 throughout
+     (already AA text-contrast, 8.53:1 vs white). Peak splits by role like
+     every other bright-fill colour in this app already does: blue-300
+     (3.11:1 — a fill/border/mark tier only, same threshold class as a chart
+     bar) for the border/wash/checkmark, blue-500 (5.08:1, clears AA text)
+     for the price figure — using blue-300 for that text too would repeat
+     the exact contrast bug the SB-2026 sync's "fill vs text" rule exists to
+     catch (see CLAUDE.md), just in a new spot. */
+  .shape-table-base .bar-chart-col.selected { border-color:var(--pp-blue-700); background:var(--pp-blue-050); box-shadow:0 3px 10px rgba(0,76,148,.16); }
+  .shape-table-base .bar-chart-check { background:var(--pp-blue-700); }
+  .shape-table-base .bar-chart-col.selected .bar-chart-price { color:var(--pp-blue-700); }
+  .shape-table-base .bar-chart-bar.selected { background:var(--pp-blue-700); }
+  .shape-table-peak .bar-chart-col.selected { border-color:var(--pp-blue-300); background:var(--pp-blue-050); box-shadow:0 3px 10px rgba(60,147,250,.20); }
+  .shape-table-peak .bar-chart-check { background:var(--pp-blue-300); }
+  .shape-table-peak .bar-chart-col.selected .bar-chart-price { color:var(--pp-blue-500); }
+  .shape-table-peak .bar-chart-bar.selected { background:var(--pp-blue-300); }
 
   .price-readout { background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:14px 16px; margin-top:16px; }
   .price-readout .pr-eyebrow { font-size:10px; font-weight:700; letter-spacing:.05em; color:var(--pp-text-body); text-transform:uppercase; }
@@ -1231,10 +1254,17 @@
     };
   }
 
+  // Base / next month (WIZARD_PERIODS.month[0] — "Sep 2026" relative to
+  // this POC's stated present, 2026-08-18) is the product-specified
+  // default: the plainest, nearest product a first-time customer would
+  // reach for, rather than Peak/next-quarter. startWizardFromConnection()
+  // below matches this same default; startWizardFromPrice() deliberately
+  // does not, since its whole point is to honour whichever specific
+  // shape+period the customer already clicked on the Prices screen.
   function startWizard() {
     state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "wizard"; state.wizardStep = 0;
-    state.wizard = defaultWizard("Peak", "quarter", 0, 1);
+    state.wizard = defaultWizard("Base", "month", 0, 0);
     renderApp();
   }
   function startWizardFromPrice(shape, periodType) {
@@ -1258,7 +1288,9 @@
     if (!tradableConnection(id)) { return; }
     state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "wizard"; state.wizardStep = 0;
-    state.wizard = defaultWizard("Base", "quarter", 0, 0);
+    // Same default as startWizard() — see its comment. Only the connection
+    // is decided by this entry point; the period defaults the same way.
+    state.wizard = defaultWizard("Base", "month", 0, 0);
     state.wizard.connId = id;
     state.wizard.lockedConn = true;
     renderApp();
@@ -1996,8 +2028,17 @@
 
     var offerBannerHtml = "";
     if (pending) {
+      // Was a hardcoded demo string ("Base Nov-2026 · 0,2 MW · ...") that
+      // never matched whatever trade was actually pending — the countdown
+      // and click target right beside it already read the real object
+      // (pending.secondsRemaining/pending.id), so the title was the one
+      // piece left unwired. Same field names the Trading detail page's own
+      // offer banner already uses (t.shape/period/power/price/value), and
+      // the same "Firm offer" wording it and the Claude Design reference
+      // both use — this banner previously dropped "Firm".
       offerBannerHtml = '<div class="banner banner-amber"><div class="banner-icon">!</div>' +
-        '<div class="banner-body"><div class="banner-title">Offer received — Base Nov-2026 · 0,2 MW · € 102,4000/MWh · € 14.745,60</div>' +
+        '<div class="banner-body"><div class="banner-title">Firm offer received — ' + esc(pending.shape) + ' ' + esc(pending.period) +
+        ' · ' + esc(pending.power) + ' · ' + esc(pending.price) + ' / MWh · ' + esc(pending.value) + '</div>' +
         '<div class="banner-sub">Respond within ' + mmss(pending.secondsRemaining) + ' — the price is firm until then.</div></div>' +
         '<div class="banner-actions"><button type="button" class="btn-primary" onclick="PP.openTrade(\'' + pending.id + '\')">View offer</button></div></div>';
     }
@@ -2432,11 +2473,24 @@
     return count;
   }
 
+  /** The one currently-selected period row, base/peak already Sell-adjusted
+   * (see PortalTradeLink.sellAdjustedPrice) — every caller (the price
+   * readout, wizardSettlement's deposit maths, the review step) reads
+   * .base/.peak off this return value rather than the raw seed row, so
+   * fixing it once here is what keeps a Sell's lower price consistent
+   * everywhere it's used. Returns a new object rather than the seed row
+   * itself — mutating WIZARD_PERIODS in place would corrupt it for every
+   * other reader (the Prices screen, indicativeEpexFor, the Back Office). */
   function getSelectedWizardPeriod() {
     var w = state.wizard;
     var list = PortalSeedData.WIZARD_PERIODS[w.periodType];
     var idx = w[w.periodType + "Idx"];
-    return list[idx] || list[0];
+    var row = list[idx] || list[0];
+    return {
+      period: row.period, start: row.start, end: row.end, observed: row.observed,
+      base: PortalTradeLink.sellAdjustedPrice(row.base, w.direction),
+      peak: PortalTradeLink.sellAdjustedPrice(row.peak, w.direction)
+    };
   }
   function wizardTotalMW() { return state.wizard.volumeMw || 0; }
 
@@ -2547,11 +2601,17 @@
     var w = state.wizard;
     var list = PortalSeedData.WIZARD_PERIODS[type];
     var idx = w[type + "Idx"];
-    var vals = list.map(function (p) { return shape === "Base" ? p.base : p.peak; });
+    // Sell-adjusted (see PortalTradeLink.sellAdjustedPrice) before anything
+    // else touches it — both the displayed price AND the bar-height
+    // normalisation read this same array, so a Sell row's bars stay
+    // correctly proportioned to Sell's own (uniformly lower) numbers rather
+    // than to Buy's.
+    var priceAt = function (p) { return PortalTradeLink.sellAdjustedPrice(shape === "Base" ? p.base : p.peak, w.direction); };
+    var vals = list.map(priceAt);
     var minV = Math.min.apply(null, vals), maxV = Math.max.apply(null, vals);
     var range = (maxV - minV) || 1;
     var cols = list.map(function (p, i) {
-      var v = shape === "Base" ? p.base : p.peak;
+      var v = priceAt(p);
       var pct = 30 + (v - minV) / range * 70;
       var sel = w.shape === shape && w.periodType === type && i === idx;
       return '<div class="bar-chart-col' + (sel ? " selected" : "") + '" onclick="PP.selectWizardBar(\'' + shape + '\',\'' + type + '\',' + i + ')">' +
@@ -2564,17 +2624,30 @@
       '<div class="bar-chart-row">' + cols + '</div></div>';
   }
 
+  /** The text-safe tier for a shape's identity colour — Base's blue-700
+   * clears AA on its own (8.53:1); Peak's fill/border colour, blue-300, is
+   * only 3.11:1 and would repeat the exact contrast bug the SB-2026 sync's
+   * "fill vs text" rule exists to catch if used as text directly (see
+   * CLAUDE.md), so anything readable (a heading, a price figure) reads
+   * blue-500 (5.08:1) for Peak instead. One place to get this right rather
+   * than three (table heading, price-readout, and any future caller). */
+  function shapeTextColor(shape) {
+    return shape === "Base" ? "var(--pp-blue-700)" : "var(--pp-blue-500)";
+  }
+
   /**
-   * One shape's whole column — its three period rows stacked, under a
-   * heading coloured to match that shape's own price-tile colour elsewhere
-   * in the app (Prices screen, Dashboard tiles: Base blue-700, Peak
-   * blue-300). Two of these side by side let a customer compare the same
-   * period's Base and Peak price at a glance, rather than needing to flip a
-   * toggle and re-read the same 12 bars twice.
+   * One shape's whole table — its three period rows stacked under an
+   * UPPERCASE heading, in its own bordered card. Two of these side by side
+   * (see "Base/Peak side by side" in CLAUDE.md) let a customer compare the
+   * same period's Base and Peak price at a glance, rather than needing to
+   * flip a toggle and re-read the same 12 bars twice. `shape-table-base`/
+   * `-peak` on the wrapper is what lets the selected-state CSS colour each
+   * table independently — see the rules right after .bar-chart-period in
+   * the stylesheet.
    */
-  function buildShapeColumn(shape) {
-    var color = shape === "Base" ? "var(--pp-blue-700)" : "var(--pp-blue-300)";
-    return '<div class="shape-column"><div class="shape-column-head" style="color:' + color + '">' + shape + '</div>' +
+  function buildShapeTable(shape) {
+    var modifier = shape === "Base" ? "base" : "peak";
+    return '<div class="shape-table shape-table-' + modifier + '"><div class="shape-table-head" style="color:' + shapeTextColor(shape) + '">' + shape + '</div>' +
       buildWizardPeriodRow(shape, "month", "Month") +
       buildWizardPeriodRow(shape, "quarter", "Quarter") +
       buildWizardPeriodRow(shape, "year", "Calendar year") + '</div>';
@@ -2583,7 +2656,7 @@
   function buildPriceReadout(period, priceVal) {
     var w = state.wizard;
     return '<div class="price-readout"><div class="pr-eyebrow">Indicative price — ' + w.shape.toUpperCase() + ' · ' + period.period + '</div>' +
-      '<div class="pr-price">€ ' + ConsumptionCalc.formatNL(priceVal, 2) + ' <span style="font-size:12px;font-weight:500;color:var(--pp-text-faint)">/ MWh</span></div>' +
+      '<div class="pr-price" style="color:' + shapeTextColor(w.shape) + '">€ ' + ConsumptionCalc.formatNL(priceVal, 2) + ' <span style="font-size:12px;font-weight:500;color:var(--pp-text-faint)">/ MWh</span></div>' +
       '<div class="pr-meta">observed ' + period.observed + '</div></div>';
   }
 
@@ -2720,9 +2793,9 @@
     if (state.wizardStep === 0) {
       bodyHtml = cardHtml("Product & period", "Choose a direction and a delivery period — Base and Peak price the same periods side by side, so pick straight from whichever suits.",
         '<div class="field-group"><div class="fg-label">Direction</div>' + segTabs(["Buy", "Sell"], w.direction === "Buy" ? 0 : 1, "setDirIdx") + '</div>' +
-        '<div class="period-panel"><div class="period-panel-label">Delivery period</div>' +
-        '<div class="shape-columns">' + buildShapeColumn("Base") + buildShapeColumn("Peak") + '</div>' +
-        buildPriceReadout(period, priceVal) + '</div>' +
+        '<div class="period-panel-label">Delivery period</div>' +
+        '<div class="shape-tables">' + buildShapeTable("Base") + buildShapeTable("Peak") + '</div>' +
+        buildPriceReadout(period, priceVal) +
         '<div class="wizard-actions"><button type="button" class="btn-primary" onclick="PP.wizardGoStep1()">Continue</button>' +
         '<button type="button" class="btn-secondary" onclick="PP.cancelWizard()">Cancel</button></div>');
     } else if (state.wizardStep === 1) {

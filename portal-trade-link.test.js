@@ -76,22 +76,41 @@ function opts(extra) {
   return o;
 }
 
+// --- sellAdjustedPrice: the one place Buy vs Sell pricing is decided --------
+(function () {
+  assert.strictEqual(Link.SELL_SPREAD, 0.02, "documented spread — update this alongside CLAUDE.md if it ever changes");
+  assertClose(Link.sellAdjustedPrice(100, "Buy"), 100, "Buy is unadjusted");
+  assertClose(Link.sellAdjustedPrice(100, "Sell"), 98, "Sell is 2% below the quoted price");
+  assertClose(Link.sellAdjustedPrice(100, "sell"), 98, "case-insensitive, like direction is read everywhere else");
+  assertClose(Link.sellAdjustedPrice(100, undefined), 100, "no direction at all defaults to unadjusted, not a throw");
+  assert.strictEqual(Link.sellAdjustedPrice(null, "Sell"), null, "no price to adjust passes through as null, never 0");
+})();
+
 // --- resolvePeriod ----------------------------------------------------------
 (function () {
-  var q = Link.resolvePeriod({ periodType: "quarter", quarterIdx: 1 }, opts());
+  var q = Link.resolvePeriod({ periodType: "quarter", quarterIdx: 1, direction: "Buy" }, opts());
   assert.strictEqual(q.period, "Q1 2027", "quarterIdx picks from the quarter list");
-  var m = Link.resolvePeriod({ periodType: "month", monthIdx: 1 }, opts());
+  var m = Link.resolvePeriod({ periodType: "month", monthIdx: 1, direction: "Buy" }, opts());
   assert.strictEqual(m.period, "Oct 2026", "monthIdx picks from the month list");
   // Year resolves the same way as month/quarter now — a flat list indexed by
   // yearIdx, not a standalone object — since WIZARD_PERIODS.year became a
   // real 2-entry array (see "Three period rows, one selection" in CLAUDE.md).
-  var y = Link.resolvePeriod({ periodType: "year", yearIdx: 0 }, opts());
+  var y = Link.resolvePeriod({ periodType: "year", yearIdx: 0, direction: "Buy" }, opts());
   assert.strictEqual(y.period, "Cal 2027", "yearIdx 0 picks the first year row");
-  var y2 = Link.resolvePeriod({ periodType: "year", yearIdx: 1 }, opts());
+  var y2 = Link.resolvePeriod({ periodType: "year", yearIdx: 1, direction: "Buy" }, opts());
   assert.strictEqual(y2.period, "Cal 2028", "yearIdx 1 picks the second year row");
   // Out-of-range index falls back to the first row rather than undefined.
-  var oob = Link.resolvePeriod({ periodType: "quarter", quarterIdx: 99 }, opts());
+  var oob = Link.resolvePeriod({ periodType: "quarter", quarterIdx: 99, direction: "Buy" }, opts());
   assert.strictEqual(oob.period, "Q4 2026");
+
+  // Sell resolves both base AND peak at the spread-adjusted price — this is
+  // what makes buildRequest's indicativePrice correct for a Sell request
+  // with no separate change needed there (see the buildRequest block below).
+  var sellQ = Link.resolvePeriod({ periodType: "quarter", quarterIdx: 1, direction: "Sell" }, opts());
+  assertClose(sellQ.base, PERIODS.quarter[1].base * 0.98, "Sell base is spread-adjusted");
+  assertClose(sellQ.peak, PERIODS.quarter[1].peak * 0.98, "Sell peak is spread-adjusted too, not just base");
+  var buyQ = Link.resolvePeriod({ periodType: "quarter", quarterIdx: 1, direction: "Buy" }, opts());
+  assertClose(buyQ.base, PERIODS.quarter[1].base, "Buy stays at the quoted price, unchanged by this feature");
 })();
 
 // --- buildRequest -----------------------------------------------------------
@@ -119,6 +138,13 @@ function opts(extra) {
   var baseReq = Link.buildRequest({ ...wizard, shape: "Base" }, opts());
   assertClose(baseReq.indicativePrice, 82.75, "Base shape takes the base price");
   assertClose(baseReq.volumeMwh, 1.0 * 90 * 24, "base volume spans every hour");
+
+  // A Sell request is submitted at the spread-adjusted price, not the quoted
+  // one — the wizard shows the customer this same lower number before they
+  // submit (see sellAdjustedPrice), so the two must never disagree.
+  var sellReq = Link.buildRequest({ ...wizard, direction: "Sell" }, opts());
+  assertClose(sellReq.indicativePrice, 94.75 * 0.98, "Sell submits at 2% below the quoted Peak price");
+  assert.strictEqual(sellReq.direction, "Sell");
 
   // Zero-volume connections are dropped entirely.
   var sparse = Link.buildRequest({ ...wizard, volumes: { rot: 0.5, venlo: 0, tilburg: 0 } }, opts());

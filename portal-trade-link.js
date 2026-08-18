@@ -134,7 +134,30 @@
     };
   }
 
-  /** The period row the wizard's periodType/index pair currently points at.
+  // A quoted period/shape has one price; Buy and Sell are not the same
+  // number — a customer sells into the market's bid, not its ask, the same
+  // spread every liquid day-ahead product quotes. WIZARD_PERIODS carries
+  // only the one (buy-side) price per row, so Sell is derived rather than
+  // hand-authored a second time: hand-picking 24 "plausible" sell numbers
+  // (12 rows x base+peak) alongside the buy ones would be exactly the
+  // fabrication CLAUDE.md's "Derived detail must not out-claim its source"
+  // warns about — correct-looking numbers with no stated relationship to
+  // the real ones. One named constant instead, applied uniformly, so the
+  // relationship is a documented rule, not 24 independent authored values.
+  var SELL_SPREAD = 0.02;
+
+  /** The one place Buy vs Sell pricing is decided — both the wizard's own
+   * display (customer-portal.html, via this same export) and a submitted
+   * request's indicativePrice (resolvePeriod below) call this, so the two
+   * can never quote a different number for the same shape+period+direction. */
+  function sellAdjustedPrice(price, direction) {
+    if (price == null) { return price; }
+    return String(direction).toLowerCase() === "sell" ? price * (1 - SELL_SPREAD) : price;
+  }
+
+  /** The period row the wizard's periodType/index pair currently points at,
+   * base/peak already adjusted for direction (see sellAdjustedPrice) — a
+   * Sell wizard resolves to the lower, bid-side price with no separate step.
    * All three period types (month, quarter, year) resolve the same way —
    * one flat lookup into opts.periods[type], indexed by wizard[type + "Idx"] —
    * since WIZARD_PERIODS.year became a real array alongside month/quarter
@@ -145,7 +168,11 @@
     var list = periods[type] || [];
     var idx = wizard[type + "Idx"];
     var row = list[idx] || list[0] || {};
-    return { type: type, period: row.period, start: row.start, end: row.end, base: row.base, peak: row.peak };
+    return {
+      type: type, period: row.period, start: row.start, end: row.end,
+      base: sellAdjustedPrice(row.base, wizard.direction),
+      peak: sellAdjustedPrice(row.peak, wizard.direction)
+    };
   }
 
   // --- pricing (the Back Office -> Customer leg) -----------------------------
@@ -650,6 +677,8 @@
     toDeskPeriod: toDeskPeriod,
     hoursInPeriod: hoursInPeriod,
     volumeMwh: volumeMwh,
+    SELL_SPREAD: SELL_SPREAD,
+    sellAdjustedPrice: sellAdjustedPrice,
     resolvePeriod: resolvePeriod,
     buildRequest: buildRequest,
     STATUS_AWAITING_PRICE: STATUS_AWAITING_PRICE,
