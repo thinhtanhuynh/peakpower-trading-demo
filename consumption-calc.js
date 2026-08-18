@@ -40,16 +40,31 @@
     return weekday >= 1 && weekday <= 5;
   }
 
-  // Excludes exactly "08:00" (that interval's usage window is 07:45-08:00,
-  // before the block starts); includes "08:15" through "20:00" inclusive
-  // ("20:00" covers 19:45-20:00, still inside the block; "20:15" is not).
+  // Interval labels in this dataset are the interval's START (the source's
+  // `timestamp` field is documented as the local delivery-interval start, and
+  // a day runs "00:00".."23:45", not "00:15".."24:00"). A peak block held
+  // 08:00-20:00 therefore covers the intervals labelled "08:00" through
+  // "19:45" — "08:00" covers 08:00-08:15, which is inside the block, and
+  // "20:00" covers 20:00-20:15, which is not.
+  //
+  // This used to read `> "08:00" && <= "20:00"`, an END-of-interval reading
+  // applied to START-labelled data, which held the block from 08:15 to 20:15 —
+  // the whole position 15 minutes late, and visibly so once the chart drew the
+  // hedge as a step (the riser landed a bar to the right of the 08:00 tick).
+  //
+  // PeakPowerTrading-CalculationSample.csv disagrees: its "8:00" row carries no
+  // peak volume and its "20:00" row does. That sample is start-labelled too
+  // (it runs 0:00..23:45), so it embeds the same off-by-one; per explicit
+  // product direction (2026-08-18, twice) the block starts at 08:00, and the
+  // sample is the artifact that is wrong. consumption-calc.test.js records the
+  // two rows where they now differ.
   function isPeakWindow(timeStr) {
-    return timeStr > "08:00" && timeStr <= "20:00";
+    return timeStr >= "08:00" && timeStr < "20:00";
   }
 
   /**
    * Whether a date+time falls in a "peak" hedge block's active window
-   * (Mon-Fri, 08:15-20:00 inclusive) — exported so any caller needing the
+   * (Mon-Fri, 08:00 up to but not including 20:00) — exported so any caller needing the
    * same base-vs-peak distinction (e.g. picking which indicative forward
    * price applies to a projected interval) reuses this exact convention
    * rather than re-deriving it. computeIntervalHedgeVolumes uses the same

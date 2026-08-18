@@ -665,16 +665,30 @@ then everything below follows the sample column-for-column:
 - **Base Volume** / **Peak Volume** — summed separately across all
   simultaneously-active hedge blocks of each shape (`powerKw × 0.25` per
   block); a `peak` block only counts toward Peak Volume when the weekday is
-  Mon–Fri **and** the time is **08:15 through 20:00 inclusive**. Each
-  interval's timestamp marks the *end* of its 15-minute window (e.g. "08:00"
-  covers 07:45–08:00), so "08:00" itself is still before the block starts
-  and is excluded; "08:15" (covering 08:00–08:15, the first window actually
-  inside the block) is the first peak interval, and "20:00" (covering
-  19:45–20:00) is still peak while "20:15" is not.
-  `PeakPowerTrading-CalculationSample.csv` follows this same convention (its
-  "8:00" row has no peak volume; "8:15" is the first peak interval) — an
-  earlier revision of that file assumed a start-of-interval convention, and
-  the code intentionally diverged from it until the sample was corrected.
+  Mon–Fri **and** the time is **"08:00" through "19:45"** — i.e.
+  `>= "08:00" && < "20:00"`.
+
+  **Interval labels are the interval's START**, and that is the fact the
+  whole boundary turns on: the source's `timestamp` field is documented as
+  the local delivery-interval start, and a day's array runs "00:00".."23:45",
+  not "00:15".."24:00". So "08:00" covers 08:00–08:15 (inside a block held
+  08:00–20:00, and its first interval), while "20:00" covers 20:00–20:15 and
+  is outside.
+
+  This was wrong until **2026-08-18**: the rule read `> "08:00" && <= "20:00"`,
+  an *end*-of-interval reading applied to start-labelled data, which held the
+  whole position 15 minutes late (08:15–20:15). It survived because a slope
+  hides an off-by-one — it only became visible once the chart drew the hedge
+  as a step and the riser landed a bar to the right of the 08:00 tick. Drawing
+  a quantity honestly is what exposed the error in computing it.
+
+  `PeakPowerTrading-CalculationSample.csv` **disagrees on exactly two rows**:
+  its "8:00" row carries no peak volume and its "20:00" row does. That sample
+  is start-labelled too (it runs 0:00..23:45), so it embeds the same
+  off-by-one. Per explicit product direction the block starts on the hour, so
+  the sample is the artifact that is wrong; `consumption-calc.test.js` pins
+  both diverging rows with a comment saying so. Do **not** "fix" the code back
+  to match the sample.
 - **Hedge Volume** = Base Volume + Peak Volume.
 - **Uncovered** = Actual Usage − Hedge Volume.
 - **Long** = `max(0, −Uncovered)` — over-hedged; the unused hedge volume is
@@ -1046,7 +1060,7 @@ September look wholly measured.
 reads `PortalSeedData.WIZARD_PERIODS` (month rows, then quarter) and
 `WIZARD_YEAR` — the same quoted curve behind the Prices and Trading screens —
 and picks base vs peak through `ConsumptionCalc.isPeakInterval()` rather than a
-second copy of that 08:00/08:15 rule. A forward curve is the market's
+second copy of that peak-window rule. A forward curve is the market's
 expectation of spot but **embeds a risk premium**, so it is not the same claim
 as realised spot; every figure priced this way is labelled *indicative*. The
 alternative, withholding forward cost, was tried and rejected: it emptied Total
