@@ -431,23 +431,29 @@ Per-screen `grid-template-columns` are copied from the mockup verbatim (e.g.
 Wallet ledger `0.9fr 1fr 1.8fr 1fr 1fr 0.8fr 0.8fr 1fr`, invoice line items
 `0.3fr 2.6fr 1fr 1fr 1fr 1fr`) — don't "tidy" these into round numbers.
 
-### One block, one connection (trading wizard, step 2)
+### One or more connections, one shared volume (trading wizard, step 2)
 
-A block is traded against **exactly one** EAN/connection, which is a deliberate
-divergence from the mockup (whose step 2 offers a volume field on every row and
-splits one request across connections). Step 2 is therefore a **radio picker**
-plus a single volume field:
+A block was originally traded against **exactly one** EAN/connection — a
+deliberate divergence from the mockup (whose step 2 offers a volume field on
+every row and splits one request across connections). On 2026-08-18, explicit
+product direction reopened this: step 2 is now a **checkbox multi-select**,
+any number of connections at once, each at the same shared volume, with
+`Select all` and `Clear all` actions — see "Multiple connections, one shared
+volume" below for the full redesign. The rest of this section (entry points,
+locked mode, why the volume field doesn't `renderApp()`) still applies
+unchanged.
 
-- `state.wizard` carries `connId` + `volumeMw` rather than a `volumes` map.
-  `PortalTradeLink.buildRequest()` still takes the map, so `wizardVolumes()`
-  derives a one-entry map at submit time — the link module needed no change,
-  and a published request simply has `connections.length === 1`.
+- `state.wizard` carries `connIds` (array) + `volumeMw` (one shared figure)
+  rather than a single `connId`. `PortalTradeLink.buildRequest()` always took
+  a volume-per-connection map, so `wizardVolumes()` deriving one entry per
+  selected id — instead of at most one — needed no change to the link module
+  either before or after this redesign.
 - Volume is a real `<input type="number">` with `min="0.1" step="0.1"`.
   **Minimum 0,1 MW, in multiples of 0,1 MW**; `commitWizardVolume()` snaps to
   that grid on blur, `wizardVolumeValid()` gates the Continue button.
 - Ineligible connections (`notEligible`, e.g. Breda's expiring contract) get no
-  radio, and `setWizardConnection()` refuses them — the guard is in the handler,
-  not only in the markup.
+  checkbox, and `toggleWizardConnection()` refuses them — the guard is in the
+  handler, not only in the markup.
 
 **Entry points into the wizard.** Four buttons, three functions, all landing on step 1:
 
@@ -476,14 +482,15 @@ The connection-detail button sits **below** the "Block positions on this
 connection" table, in a `.card-foot-action` (16px margin, 14px padding, a
 top rule) — a request is a deliberate next step after reading the positions,
 not a header control, so the card's `actionHtml` slot keeps only the
-active-block count. Since a block is
-traded against one connection and that connection is already decided by the
-time you're on its detail page, the wizard sets `state.wizard.lockedConn` and
-step 2 then renders **only that row** rather than offering a choice that was
-already made. Non-tradeable (`tilburg-gas`) and ineligible (`breda`) connections
-show a short reason instead of a button, and `startWizardFromConnection()`
-re-checks eligibility itself via `tradableConnection()` — the guard is in the
-handler, not only in the markup.
+active-block count. Since that connection is already decided by the time
+you're on its detail page, the wizard sets `state.wizard.lockedConn` and step
+2 then renders **only that row**, its checkbox checked and disabled, rather
+than offering a choice that was already made — see "Multiple connections, one
+shared volume" below for how locked mode adapted to a checkbox picker.
+Non-tradeable (`tilburg-gas`) and ineligible (`breda`) connections show a
+short reason instead of a button, and `startWizardFromConnection()` re-checks
+eligibility itself via `tradableConnection()` — the guard is in the handler,
+not only in the markup.
 
 **Why the volume field does not `renderApp()`:** it used to, and that was the
 bug where the field could not be typed into — a full re-render rebuilds the
@@ -492,6 +499,97 @@ the derived readouts in place (`#wizard-total-line`, `#wizard-volume-note`,
 `#wizard-continue`) via `refreshWizardVolumeUi()` and leaves the input alone.
 Any new live-edit field on this page needs the same treatment; those three ids
 are what makes the targeted update possible, so keep them.
+
+### Multiple connections, one shared volume (trading wizard, step 2, 2026-08-18)
+
+Product direction, in these exact words: "Change the connection to multiple
+choices selectable in wizard trade of step 2 connection & volume. We will
+have 1 for all, 1 for multiple choices (with clear all button), keep the 1
+volume input for all selected EANs (connections)." This reopens "one
+connection, one block" above, but doesn't fully return to the mockup's own
+design either — the mockup splits one request across connections with a
+**separate volume field per row**; this keeps the single shared field,
+requested identically at every row selected, which is what "keep the 1
+volume input for all selected EANs" specifically asks for.
+
+**The radio picker became checkboxes**, plus a small toolbar
+(`Select all` / `Clear all`) above the table. `state.wizard.connId` (one id)
+became `connIds` (an array); `toggleWizardConnection(id)` adds or removes one
+id, `selectAllWizardConnections()` sets the array to every eligible id
+(`eligibleConnectionIds()`, the same filter `firstEligibleConnection()`
+already used), `clearWizardConnections()` empties it. The toolbar is omitted
+entirely when `state.wizard.lockedConn` is set — with exactly one row and no
+choice to make, `Select all`/`Clear all` would have nothing to do.
+
+**`buildRequest()` needed no change at all.** It already summed a
+`wizard.volumes` map across every connection with `mw > 0` (see
+`portal-trade-link.js`) — the single-connection era only ever populated one
+entry in that map. `wizardVolumes()` now populates one entry per selected id,
+every entry carrying the *same* `state.wizard.volumeMw` — each selected
+connection is requested at that volume **independently**, not a total split
+across them, which is the literal reading of "keep the 1 volume input for
+all selected EANs." `wizardTotalMW()` became `volumeMw × connIds.length`
+accordingly, and since `wizardSettlement()` (deposit/balance) and the review
+step's Power/Volume rows already read `wizardTotalMW()` rather than the raw
+input, both picked up the correct scaled total with no change of their own —
+verified against a live submission's own `powerMw`, not just the wizard's
+own display.
+
+**A footgun caught before it shipped: the row's own click handler would have
+double-toggled a direct checkbox click.** The old radio markup put an
+`onchange` on the radio *and* an `onclick` on the row — a direct click on the
+radio bubbles up and fires the row's handler too, so both ran, calling
+`setWizardConnection(id)` twice with the same id. Harmless for a *set*
+(idempotent — the same id twice is still just that id) but not for a
+*toggle*: two calls cancel out, so a direct click on the checkbox itself
+would silently have appeared to do nothing. Fixed by giving the checkbox no
+handler of its own — the row's `onclick` alone, reached by bubbling from
+anywhere in the row including the checkbox, is now the single source of
+truth for one physical click.
+
+**Two distinct reasons the Continue button can be disabled now need two
+distinct messages.** `wizardVolumeValid()` still returns one boolean
+(`connIds.length > 0` **and** the volume is a valid ≥0,1 MW multiple), used
+to gate the button — but "no connections selected" is only reachable *after*
+this redesign (via `Clear all`); the old radio's `connId` could never
+actually go missing once the wizard opened with one preselected, so the
+existing `VOLUME_HINT` ("Volume must be at least 0,1 MW…") was always the
+right message by default. It would be actively misleading for the new empty
+case, so a second constant, `NO_CONNECTION_HINT`, and a small
+`wizardVolumeHint()` picker tell the two failure reasons apart — checked live
+by clicking `Clear all` and reading the banner, not assumed from the code
+alone.
+
+**Locked mode is disabled, not hidden or dimmed.** `startWizardFromConnection()`
+still filters the table to that one connection and still sets `lockedConn`,
+but the row now renders a `checked disabled` checkbox with no `onclick`, and
+carries its own `.locked` CSS class — full opacity, unlike `.not-eligible`'s
+dimmed 0.55, because this row **is** the trade, not an unavailable option.
+`toggleWizardConnection()` / `selectAllWizardConnections()` /
+`clearWizardConnections()` all refuse to act while locked, in the handler —
+matching the guard-in-the-handler discipline every other wizard control on
+this page already follows, so a stray call bound to a locked wizard can't
+quietly break its own invariant of "exactly this one connection."
+
+**Everywhere a connection's name was shown, it now shows a joined list.** A
+small `joinWithAnd()` (Oxford-and: "A, B and C") replaced the single
+`c ? c.name : "—"` reads in `wizardAllocationNote()`, `wizardSummaryRows()`'s
+Connection(s) row (the label itself pluralises on count), and
+`submitWizard()`'s own timeline text, `facts` array, and `connName` — all
+four read the *same* helper rather than four independent joins that could
+drift in style (Oxford-and in one place, a bare comma in another).
+
+Verified end to end, not just visually: `Select all` against every eligible
+connection and `Clear all` back to none, individual row toggles including
+toggling one back off after several were on, the requested-volume total
+scaling correctly with connection count at each step, both distinct hint
+messages actually appearing for their own trigger (not just present in the
+code), a full submit with 2 connections read back out of the *published*
+`localStorage` record — confirming `connections.length === 2` and `powerMw`
+equal to volume × 2, not just what the wizard's own summary claimed — and the
+locked entry point still showing exactly one non-interactive, checked row
+with no toolbar and no response to a forced click. Plus the full Node suite;
+none of this touches calculation logic.
 
 ### Three period rows, one selection (trading wizard, step 1, 2026-08-18)
 

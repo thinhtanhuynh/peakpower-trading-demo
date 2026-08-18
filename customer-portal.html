@@ -781,10 +781,16 @@
   .field-group .fg-hint { font-size:10.5px; color:var(--pp-text-faint); margin-top:5px; }
   /* Single-connection picker: the whole row is the click target for its radio. */
   .gt-row.conn-pick { cursor:pointer; }
-  .gt-row.conn-pick:hover:not(.not-eligible) { background:var(--pp-surface-alt); }
+  .gt-row.conn-pick:hover:not(.not-eligible):not(.locked) { background:var(--pp-surface-alt); }
   .gt-row.conn-pick.selected { background:var(--pp-teal-100); box-shadow:inset 2px 0 0 var(--pp-teal-600); }
   .gt-row.conn-pick.not-eligible { cursor:default; opacity:.55; }
-  .gt-row.conn-pick input[type=radio] { accent-color:var(--pp-teal-600); cursor:pointer; }
+  /* Locked (opened from a connection's own detail page, see
+     startWizardFromConnection): still selected/full-opacity, just not
+     interactive — unlike .not-eligible, this row IS the trade, so dimming
+     it would read as "unavailable" rather than "already decided." */
+  .gt-row.conn-pick.locked { cursor:default; }
+  .gt-row.conn-pick input[type=radio], .gt-row.conn-pick input[type=checkbox] { accent-color:var(--pp-teal-600); cursor:pointer; }
+  .gt-row.conn-pick input[type=checkbox]:disabled { cursor:default; }
   .wizard-actions { display:flex; gap:10px; margin-top:16px; }
 
   /* Wallet — top-up screen, fidelity-matched to Customer Portal - Preview.html's
@@ -1186,6 +1192,11 @@
   var MIN_VOLUME_MW = 0.1;
   var VOLUME_STEP_MW = 0.1;
   var VOLUME_HINT = "Volume must be at least 0,1 MW and a multiple of 0,1 MW.";
+  // Distinct from VOLUME_HINT: reachable now that connections are a checkbox
+  // multi-select ("Clear all" can genuinely empty the selection), where the
+  // single-select radio picker's connId could never go missing once the
+  // wizard opened with one preselected.
+  var NO_CONNECTION_HINT = "Pick at least one connection to trade this block against.";
   // Shared with the Wallet ledger's own low-balance banner (renderWalletPage)
   // so the top-up screen's banner/chip are derived from the SAME real
   // threshold rather than a second hardcoded number.
@@ -1215,7 +1226,7 @@
     // opens the screen (see that function) — 0 here is just "not open yet".
     walletLedgerExtra: [], topupsExtra: [], topupAmount: 0, lastTopup: null,
     wizard: { direction: "Buy", shape: "Peak", periodType: "quarter", monthIdx: 0, quarterIdx: 1,
-              connId: "rot", volumeMw: 0.200, note: "" },
+              connIds: ["rot"], volumeMw: 0.200, note: "" },
     invoiceId: null,
     trades: PortalSeedData.TRADES_SEED.slice(),
     nextSeq: 1079,
@@ -1307,22 +1318,33 @@
   function backToTrades() { state.tradingView = "list"; state.tradeId = null; renderApp(); }
 
   /**
-   * A block is traded against exactly ONE connection, so the wizard carries a
-   * single `connId` + `volumeMw` rather than a volume-per-connection map. The
-   * map shape PortalTradeLink.buildRequest() expects is derived on demand by
-   * wizardVolumes(), so the link module needs no change.
+   * A block can be traded against one or more connections at once (2026-08-18
+   * — see CLAUDE.md, "Multiple connections, one shared volume"), each at the
+   * SAME requested volume — so the wizard carries `connIds` (array) +
+   * `volumeMw` (one shared figure) rather than a volume-per-connection map.
+   * The map shape PortalTradeLink.buildRequest() expects is derived on demand
+   * by wizardVolumes(), so the link module needs no change.
    */
-  function firstEligibleConnection() {
-    var list = PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return !c.notEligible; });
-    return list.length ? list[0].id : null;
+  function eligibleConnectionIds() {
+    return PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return !c.notEligible; }).map(function (c) { return c.id; });
   }
+  function firstEligibleConnection() {
+    var ids = eligibleConnectionIds();
+    return ids.length ? ids[0] : null;
+  }
+  /** Same volume applies to every selected connection independently — a
+   * shared input, not a total split across them (see CLAUDE.md, "Multiple
+   * connections, one shared volume"). buildRequest() already expects a
+   * volume-per-connection map, so this is the only place that shape gets
+   * built; the link module needed no change. */
   function wizardVolumes() {
     var m = {};
-    if (state.wizard.connId) { m[state.wizard.connId] = state.wizard.volumeMw || 0; }
+    (state.wizard.connIds || []).forEach(function (id) { m[id] = state.wizard.volumeMw || 0; });
     return m;
   }
 
   function defaultWizard(shape, periodType, monthIdx, quarterIdx) {
+    var first = firstEligibleConnection();
     return {
       direction: "Buy", shape: shape, periodType: periodType, monthIdx: monthIdx, quarterIdx: quarterIdx,
       // No caller currently needs to preselect a specific year row (Prices'
@@ -1330,7 +1352,7 @@
       // renderPricesPage), so this only ever needs its own default, unlike
       // month/quarterIdx which every caller sets explicitly.
       yearIdx: 0,
-      connId: firstEligibleConnection(), volumeMw: 0.200, note: ""
+      connIds: first ? [first] : [], volumeMw: 0.200, note: ""
     };
   }
 
@@ -1371,7 +1393,7 @@
     // Same default as startWizard() — see its comment. Only the connection
     // is decided by this entry point; the period defaults the same way.
     state.wizard = defaultWizard("Base", "month", 0, 0);
-    state.wizard.connId = id;
+    state.wizard.connIds = [id];
     state.wizard.lockedConn = true;
     renderApp();
   }
@@ -1381,7 +1403,7 @@
   /**
    * Step 2 -> review, and review -> submitted. Both re-check the deposit
    * rather than trusting the disabled Continue button, matching how
-   * setWizardConnection and respondToOffer guard themselves: the button is the
+   * toggleWizardConnection and respondToOffer guard themselves: the button is the
    * affordance, the handler is the rule. Without this, PP.wizardGoStep2() from
    * anywhere — a stale screen, a console, a future call site — walks straight
    * past a check the UI only paints.
@@ -1409,10 +1431,29 @@
   }
   function setHoverBar(type, i) { state.hoverBar = type + ":" + i; renderApp(); }
   function clearHoverBar() { state.hoverBar = null; renderApp(); }
-  function setWizardConnection(id) {
+  /** Checkbox multi-select: a click toggles that one connection in/out of
+   * state.wizard.connIds. Refuses ineligible ids and, once locked (opened
+   * from a connection's own detail page), refuses to change the selection
+   * at all — that connection IS the trade by the time you're on its detail
+   * page, so there is nothing left to toggle. Guard lives in the handler,
+   * not only in the markup, matching every other wizard guard on this page. */
+  function toggleWizardConnection(id) {
+    if (state.wizard.lockedConn) { return; }
     var c = PortalSeedData.WIZARD_CONNECTIONS.filter(function (x) { return x.id === id; })[0];
     if (!c || c.notEligible) { return; }
-    state.wizard.connId = id;
+    var ids = state.wizard.connIds || (state.wizard.connIds = []);
+    var idx = ids.indexOf(id);
+    if (idx === -1) { ids.push(id); } else { ids.splice(idx, 1); }
+    renderApp();
+  }
+  function selectAllWizardConnections() {
+    if (state.wizard.lockedConn) { return; }
+    state.wizard.connIds = eligibleConnectionIds();
+    renderApp();
+  }
+  function clearWizardConnections() {
+    if (state.wizard.lockedConn) { return; }
+    state.wizard.connIds = [];
     renderApp();
   }
 
@@ -1450,7 +1491,7 @@
     var note = document.getElementById("wizard-volume-note");
     if (note) {
       note.className = "banner " + (invalid ? "banner-amber" : "banner-teal");
-      note.textContent = invalid ? VOLUME_HINT : wizardAllocationNote();
+      note.textContent = invalid ? wizardVolumeHint() : wizardAllocationNote();
     }
     var btn = document.getElementById("wizard-continue");
     if (btn) { btn.disabled = invalid || !wizardFundsSufficient(); }
@@ -1468,8 +1509,9 @@
     // refused at acceptance — wasting the desk's time and the customer's.
     if (!wizardVolumeValid() || !wizardFundsSufficient()) { renderApp(); return; }
     var id = "TRD-" + state.nextSeq;
-    // buildRequest() still takes a volume-per-connection map; a single-connection
-    // block is simply a map with one entry.
+    // buildRequest() always took a volume-per-connection map — wizardVolumes()
+    // now populates one entry per selected connection instead of at most one,
+    // so multi-select needed no change here.
     var wizardForRequest = {};
     Object.keys(state.wizard).forEach(function (k) { wizardForRequest[k] = state.wizard[k]; });
     wizardForRequest.volumes = wizardVolumes();
@@ -1485,7 +1527,8 @@
 
     var power = PortalTradeLink.formatMw(req.powerMw);
     var volume = PortalTradeLink.formatMwh(req.volumeMwh);
-    var connName = req.connections.length ? req.connections[0].name : "—";
+    var connNames = req.connections.map(function (c) { return c.name; });
+    var connName = connNames.length ? joinWithAnd(connNames) : "—";
     var bodyText = req.note
       ? 'Comment: "' + req.note + '"'
       : req.direction + " " + req.shape + " " + req.period + " · " + power + " for " + connName + ".";
@@ -1496,7 +1539,7 @@
       price: null, value: null, status: "Awaiting price", statusTone: "info",
       events: [{ title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "just now", body: bodyText, tone: "submit" }],
       facts: [["Reference", id], ["Requested by", "J. de Vries"], ["State", "Awaiting price"], ["Direction", req.direction],
-        ["Shape", req.shape], ["Delivery period", req.period], ["Connection", connName], ["Power", power], ["Volume", volume]]
+        ["Shape", req.shape], ["Delivery period", req.period], ["Connection" + (connNames.length === 1 ? "" : "s"), connName], ["Power", power], ["Volume", volume]]
     };
     // Hand off to the Back Office desk, then rebuild the list from the link so
     // this trade has exactly one source of truth. Storage may be unavailable
@@ -1637,7 +1680,8 @@
     wizardGoStep0: wizardGoStep0, wizardGoStep1: wizardGoStep1, wizardGoStep2: wizardGoStep2,
     setDirIdx: setDirIdx,
     selectWizardBar: selectWizardBar, setHoverBar: setHoverBar, clearHoverBar: clearHoverBar,
-    setWizardConnection: setWizardConnection, setWizardVolume: setWizardVolume,
+    toggleWizardConnection: toggleWizardConnection, selectAllWizardConnections: selectAllWizardConnections,
+    clearWizardConnections: clearWizardConnections, setWizardVolume: setWizardVolume,
     commitWizardVolume: commitWizardVolume, onWizardNoteChange: onWizardNoteChange, submitWizard: submitWizard,
     topUpWallet: topUpWallet, backToWallet: backToWallet, closeTopupSuccess: closeTopupSuccess,
     setTopupAmount: setTopupAmount, setTopupAmountValue: setTopupAmountValue,
@@ -2593,21 +2637,54 @@
       peak: PortalTradeLink.sellAdjustedPrice(row.peak, w.direction)
     };
   }
-  function wizardTotalMW() { return state.wizard.volumeMw || 0; }
+  /** The same volumeMw is requested at EVERY selected connection — a shared
+   * input, not a total split across them — so the wizard's own "total" is
+   * that one value times how many connections are selected. buildRequest()
+   * arrives at the identical number independently, by summing wizardVolumes()'s
+   * map (see there), which is what makes this the true total rather than a
+   * display-only shortcut. */
+  function wizardTotalMW() {
+    var n = (state.wizard.connIds || []).length;
+    return (state.wizard.volumeMw || 0) * n;
+  }
 
-  /** Valid iff a connection is picked and the volume is a ≥0,1 MW multiple of 0,1. */
+  /** Valid iff at least one connection is picked and the volume is a ≥0,1 MW
+   * multiple of 0,1. Two distinct failure reasons collapse into one boolean
+   * here (it only gates the Continue button); wizardVolumeHint() below is
+   * what tells them apart for the person reading the error. */
   function wizardVolumeValid() {
     var v = state.wizard.volumeMw || 0;
-    if (!state.wizard.connId) { return false; }
+    if (!state.wizard.connIds || !state.wizard.connIds.length) { return false; }
     if (v < MIN_VOLUME_MW) { return false; }
     return Math.abs(v / VOLUME_STEP_MW - Math.round(v / VOLUME_STEP_MW)) < 1e-9;
   }
-  function wizardConnection() {
-    return PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return c.id === state.wizard.connId; })[0] || null;
+  function wizardVolumeHint() {
+    if (!state.wizard.connIds || !state.wizard.connIds.length) { return NO_CONNECTION_HINT; }
+    return VOLUME_HINT;
+  }
+  /** Every selected connection's own record, in WIZARD_CONNECTIONS' own
+   * (stable) order — not connIds' push/splice order, so the list doesn't
+   * reshuffle as rows are toggled on and off. */
+  function wizardConnections() {
+    var ids = state.wizard.connIds || [];
+    return PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return ids.indexOf(c.id) !== -1; });
+  }
+  /** "A, B and C" — Oxford-and, not a bare comma list, so three or more
+   * connection names still read as one sentence rather than a raw array dump. */
+  function joinWithAnd(names) {
+    if (names.length <= 1) { return names[0] || ""; }
+    if (names.length === 2) { return names[0] + " and " + names[1]; }
+    return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
   }
   function wizardAllocationNote() {
-    var c = wizardConnection();
-    return "This block will be allocated to " + (c ? c.name : "the selected connection") + " once the trade is confirmed.";
+    var list = wizardConnections();
+    if (!list.length) { return NO_CONNECTION_HINT; }
+    var names = list.map(function (c) { return c.name; });
+    if (names.length === 1) {
+      return "This block will be allocated to " + names[0] + " once the trade is confirmed.";
+    }
+    var vol = ConsumptionCalc.formatNL(state.wizard.volumeMw || 0, 3) + " MW";
+    return "This block will be allocated to " + joinWithAnd(names) + " — " + vol + " each — once the trade is confirmed.";
   }
   function wizardHours(period) {
     if (state.wizard.shape === "Base") { return countDaysInRange(period.start, period.end) * 24; }
@@ -2615,9 +2692,10 @@
   }
   function wizardSummaryRows(period, totalMW, hours) {
     var w = state.wizard;
-    var conn = wizardConnection();
+    var conns = wizardConnections();
+    var connLabel = conns.length ? joinWithAnd(conns.map(function (c) { return c.name; })) : "—";
     var rows = [["Direction", w.direction], ["Shape", w.shape], ["Delivery period", period.period],
-      ["Connection", conn ? conn.name : "—"]];
+      ["Connection" + (conns.length === 1 ? "" : "s"), connLabel]];
     if (w.shape === "Peak") {
       rows.push(["Peak days in period", String(countWeekdaysInRange(period.start, period.end))]);
       rows.push(["Peak hours", "Mon–Fri 08:00–20:00"]);
@@ -2768,28 +2846,37 @@
   }
 
   /**
-   * One block, one connection: the table picks the single connection the block
-   * is traded for (radio), and the volume is entered once below it — rather
-   * than a volume field on every row.
+   * Connection & volume: a checkbox multi-select (2026-08-18 — was a radio,
+   * exactly one connection; see CLAUDE.md, "Multiple connections, one shared
+   * volume") plus a "Select all" / "Clear all" pair, and the volume is
+   * entered once below the table — the SAME figure requested at every
+   * selected connection, not split across them (see wizardTotalMW/
+   * wizardVolumes). Locked mode (opened from a connection's own detail page)
+   * shows only that one row, non-interactive, with no toolbar — the choice
+   * was already made by which detail page this came from.
    */
   function buildWizardVolumeTable(totalMW) {
     var cols = "32px 2fr 1.3fr 1.2fr";
     var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div></div><div>CONNECTION</div>' +
       '<div class="gt-cell-num">AUG CONSUMPTION</div><div class="gt-cell-num">CURRENT COVER</div></div>';
-    // Started from a connection's detail page: that connection IS the request,
-    // so show only it rather than offering a choice that was already made.
     var locked = state.wizard.lockedConn;
+    var ids = state.wizard.connIds || [];
     var list = locked
-      ? PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return c.id === state.wizard.connId; })
+      ? PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return ids.indexOf(c.id) !== -1; })
       : PortalSeedData.WIZARD_CONNECTIONS;
     var rows = list.map(function (c) {
-      var sel = c.id === state.wizard.connId;
+      var sel = ids.indexOf(c.id) !== -1;
       var pick = c.notEligible
         ? '<span class="gt-mono" style="color:var(--pp-text-faint)">—</span>'
-        : '<input type="radio" name="wizard-conn" value="' + c.id + '"' + (sel ? " checked" : "") +
-          ' onchange="PP.setWizardConnection(\'' + c.id + '\')">';
-      var click = c.notEligible ? "" : ' onclick="PP.setWizardConnection(\'' + c.id + '\')"';
-      return '<div class="gt-row conn-pick' + (sel ? " selected" : "") + (c.notEligible ? " not-eligible" : "") +
+        // No separate onchange: a click anywhere in the row (including
+        // directly on the checkbox) already bubbles to the row's own
+        // onclick below. A second handler here would double-fire on a
+        // direct checkbox click and immediately toggle the selection back
+        // off — harmless for the old radio's idempotent "set" but not for
+        // this checkbox's toggle.
+        : '<input type="checkbox"' + (sel ? " checked" : "") + (locked ? " disabled" : "") + '>';
+      var click = (c.notEligible || locked) ? "" : ' onclick="PP.toggleWizardConnection(\'' + c.id + '\')"';
+      return '<div class="gt-row conn-pick' + (sel ? " selected" : "") + (c.notEligible ? " not-eligible" : "") + (locked ? " locked" : "") +
         '" style="grid-template-columns:' + cols + '"' + click + '>' +
         '<div>' + pick + '</div>' +
         '<div><div style="font-weight:600">' + c.name + '</div><div class="gt-cell-sub gt-mono">' + c.sub +
@@ -2797,20 +2884,25 @@
         '<div class="gt-cell-num">' + c.consumption + '</div>' +
         '<div class="gt-cell-num">' + c.cover + '</div></div>';
     }).join("");
-    var table = '<div class="grid-table dense">' + head + rows + '</div>';
+    var toolbar = locked ? "" :
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px">' +
+        '<button type="button" class="btn-secondary btn-sm" onclick="PP.selectAllWizardConnections()">Select all</button>' +
+        '<button type="button" class="btn-secondary btn-sm" onclick="PP.clearWizardConnections()">Clear all</button>' +
+      '</div>';
+    var table = toolbar + '<div class="grid-table dense">' + head + rows + '</div>';
 
     var invalid = !wizardVolumeValid();
-    var volField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Volume (MW)</div>' +
+    var volField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Volume (MW) — per connection</div>' +
       '<input id="wizard-vol" type="number" class="wizard-vol-input" inputmode="decimal"' +
       ' min="' + MIN_VOLUME_MW + '" step="' + VOLUME_STEP_MW + '"' +
       ' value="' + (state.wizard.volumeMw || 0).toFixed(1) + '"' +
       ' oninput="PP.setWizardVolume(this.value)" onchange="PP.commitWizardVolume(this)">' +
-      '<div class="fg-hint">Minimum 0,1 MW · steps of 0,1 MW</div></div>';
+      '<div class="fg-hint">Minimum 0,1 MW · steps of 0,1 MW · requested at each selected connection</div></div>';
 
     var totalLine = '<div id="wizard-total-line" style="margin-top:10px;font-size:13px;font-weight:700;color:' +
       (invalid ? "var(--pp-red)" : "var(--pp-teal-700)") + '">Requested volume: ' + ConsumptionCalc.formatNL(totalMW, 3) + ' MW</div>';
     var noteBox = '<div id="wizard-volume-note" class="banner ' + (invalid ? "banner-amber" : "banner-teal") + '" style="margin-top:8px">' +
-      (invalid ? VOLUME_HINT : wizardAllocationNote()) + '</div>';
+      (invalid ? wizardVolumeHint() : wizardAllocationNote()) + '</div>';
     var noteField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Note (optional)</div>' +
       // Unescaped, a note containing "</textarea>" closes the element early and
       // everything after it is parsed as markup.
@@ -2908,7 +3000,7 @@
     } else if (state.wizardStep === 1) {
       bodyHtml = '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">' +
         '<div>' + cardHtml("Connection & volume",
-          state.wizard.lockedConn ? "Requested from this connection" : "Pick the connection this block is traded for",
+          state.wizard.lockedConn ? "Requested from this connection" : "Pick one or more connections this block is traded for",
           buildWizardVolumeTable(totalMW)) + '</div>' +
         '<div>' + cardHtml("Summary", "", buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
         '</div>';
