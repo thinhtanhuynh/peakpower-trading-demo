@@ -665,30 +665,49 @@ then everything below follows the sample column-for-column:
 - **Base Volume** / **Peak Volume** — summed separately across all
   simultaneously-active hedge blocks of each shape (`powerKw × 0.25` per
   block); a `peak` block only counts toward Peak Volume when the weekday is
-  Mon–Fri **and** the time is **"08:00" through "19:45"** — i.e.
-  `>= "08:00" && < "20:00"`.
+  Mon–Fri **and** the block is held — **08:00–20:00 wall-clock**, which the
+  screen shows as **"08:15" through "20:00" inclusive** and the code expresses
+  as `>= "08:00" && < "20:00"`. Those are the same twelve hours said three
+  ways; the next paragraph is why they look different.
 
-  **Interval labels are the interval's START**, and that is the fact the
-  whole boundary turns on: the source's `timestamp` field is documented as
-  the local delivery-interval start, and a day's array runs "00:00".."23:45",
-  not "00:15".."24:00". So "08:00" covers 08:00–08:15 (inside a block held
-  08:00–20:00, and its first interval), while "20:00" covers 20:00–20:15 and
-  is outside.
+### Two time conventions, and the one place they meet
 
-  This was wrong until **2026-08-18**: the rule read `> "08:00" && <= "20:00"`,
-  an *end*-of-interval reading applied to start-labelled data, which held the
-  whole position 15 minutes late (08:15–20:15). It survived because a slope
-  hides an off-by-one — it only became visible once the chart drew the hedge
-  as a step and the riser landed a bar to the right of the 08:00 tick. Drawing
-  a quantity honestly is what exposed the error in computing it.
+**Stored labels are the interval's START. Every label the UI shows is its
+END.** The data is start-labelled because that is what the source's
+`timestamp` field means (a day's array runs "00:00".."23:45", not
+"00:15".."24:00"), so every comparison inside `consumption-calc.js` is written
+against starts. The UI is end-labelled because that is how a delivery interval
+is quoted in this market, and how `PeakPowerTrading-CalculationSample.csv`
+reads a peak block — "8:15" is its first peak row, "20:00" its last.
 
-  `PeakPowerTrading-CalculationSample.csv` **disagrees on exactly two rows**:
-  its "8:00" row carries no peak volume and its "20:00" row does. That sample
-  is start-labelled too (it runs 0:00..23:45), so it embeds the same
-  off-by-one. Per explicit product direction the block starts on the hour, so
-  the sample is the artifact that is wrong; `consumption-calc.test.js` pins
-  both diverging rows with a comment saying so. Do **not** "fix" the code back
-  to match the sample.
+The shift lives in exactly two exported functions, and must stay there:
+
+| | | |
+|---|---|---|
+| `ConsumptionCalc.intervalEndLabel(t)` | `"08:00"` → `"08:15"` | axis ticks, table Time column, CSV Time column |
+| `ConsumptionCalc.intervalRangeLabel(t)` | `"08:00"` → `"08:00 – 08:15"` | tooltip head, where there is room to show the whole interval |
+
+So the day's last interval, `"23:45"`, displays as **"00:00"** — the midnight
+that closes the day, not the one that opened it — and the axis reads
+04:00 … 20:00, 00:00. A tick names an *instant*, so it is drawn at its
+interval's **right** edge; the "08:00" tick therefore belongs to the interval
+starting 07:45 and lands exactly where a peak block's riser does.
+
+**The history is worth keeping, because two different bugs wore the same
+costume.** The rule was originally `> "08:00" && <= "20:00"` — an end-of-
+interval comparison applied to start-labelled data, which held the position
+from 08:15 to 20:15, a full quarter-hour late. A sloped line hid it for
+months; it only surfaced when the chart began drawing the hedge as a step and
+the riser landed a bar right of the 08:00 tick. Drawing a quantity honestly is
+what exposed the error in computing it. The first fix moved the *window*
+(08:00–20:00, correct) and the labels then read "08:00", which looked wrong
+because the labels were the half that was actually lying. The second fix left
+the window alone and shifted the *display*. Both were needed; neither alone
+was right.
+
+Do **not** "simplify" `isPeakWindow` to the sample's literal strings. Applied
+to start labels, `> "08:00" && <= "20:00"` re-introduces the late block
+exactly.
 - **Hedge Volume** = Base Volume + Peak Volume.
 - **Uncovered** = Actual Usage − Hedge Volume.
 - **Long** = `max(0, −Uncovered)` — over-hedged; the unused hedge volume is
@@ -897,7 +916,10 @@ so the two charts stay linked to each other through the table.
 **Table:** a Date column (short format, e.g. "5 Aug 2026") is the first
 column — on a single-day range every row repeats the same date; on a
 multi-day range it's what disambiguates the repeating `HH:MM` values
-across days.
+across days. The Time column shows the interval's **end**
+(`intervalEndLabel`, see "Two time conventions" above), so a day's rows run
+00:15 … 00:00; the CSV export writes the same label, or the file and the
+screen would name the same row differently.
 
 ### Visual hierarchy, and three numbers not to "tidy"
 

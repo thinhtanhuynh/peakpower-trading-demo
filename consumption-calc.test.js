@@ -220,6 +220,24 @@ var MONDAY = "2026-01-05";
   assertClose(stats.uncoveredKwh, stats.actualUsageKwh, "no-hedge uncoveredKwh = full actualUsageKwh");
 })();
 
+// intervalEndLabel / intervalRangeLabel: stored labels are interval STARTS,
+// every label the UI shows is the interval's END. The day's last interval,
+// "23:45", is displayed "00:00" — the midnight that closes the day.
+(function () {
+  assert.strictEqual(ConsumptionCalc.intervalEndLabel("00:00"), "00:15", "first interval of the day");
+  assert.strictEqual(ConsumptionCalc.intervalEndLabel("00:15"), "00:30", "intervalEndLabel steps 15 minutes");
+  assert.strictEqual(ConsumptionCalc.intervalEndLabel("09:45"), "10:00", "intervalEndLabel rolls the hour");
+  assert.strictEqual(ConsumptionCalc.intervalEndLabel("23:45"), "00:00", "last interval of the day ends at midnight");
+  // The peak window, spoken in the labels the UI uses: 08:15 through 20:00.
+  assert.strictEqual(ConsumptionCalc.intervalEndLabel("08:00"), "08:15", "first peak interval displays 08:15");
+  assert.strictEqual(ConsumptionCalc.intervalEndLabel("19:45"), "20:00", "last peak interval displays 20:00");
+  assert.ok(ConsumptionCalc.isPeakInterval(MONDAY, "08:00"), "…and that 08:15-displayed interval IS peak");
+  assert.ok(ConsumptionCalc.isPeakInterval(MONDAY, "19:45"), "…as is the 20:00-displayed one");
+  assert.ok(!ConsumptionCalc.isPeakInterval(MONDAY, "20:00"), "…while the 20:15-displayed one is not");
+  assert.strictEqual(ConsumptionCalc.intervalRangeLabel("08:00"), "08:00 – 08:15", "range label spans the interval");
+  assert.strictEqual(ConsumptionCalc.intervalRangeLabel("23:45"), "23:45 – 00:00", "range label crosses midnight");
+})();
+
 // formatNL: comma decimal, dot thousands, negative sign (unchanged).
 (function () {
   assert.strictEqual(ConsumptionCalc.formatNL(612.4, 1), "612,4");

@@ -40,26 +40,52 @@
     return weekday >= 1 && weekday <= 5;
   }
 
-  // Interval labels in this dataset are the interval's START (the source's
-  // `timestamp` field is documented as the local delivery-interval start, and
-  // a day runs "00:00".."23:45", not "00:15".."24:00"). A peak block held
-  // 08:00-20:00 therefore covers the intervals labelled "08:00" through
-  // "19:45" — "08:00" covers 08:00-08:15, which is inside the block, and
-  // "20:00" covers 20:00-20:15, which is not.
+  // A peak block is held 08:00-20:00 wall-clock. Stored labels are interval
+  // STARTS (the source's `timestamp` field is the delivery-interval start,
+  // and a day runs "00:00".."23:45"), so that window is starts "08:00"
+  // through "19:45": "08:00" covers 08:00-08:15, inside the block; "20:00"
+  // covers 20:00-20:15, outside it.
   //
-  // This used to read `> "08:00" && <= "20:00"`, an END-of-interval reading
-  // applied to START-labelled data, which held the block from 08:15 to 20:15 —
-  // the whole position 15 minutes late, and visibly so once the chart drew the
-  // hedge as a step (the riser landed a bar to the right of the 08:00 tick).
-  //
-  // PeakPowerTrading-CalculationSample.csv disagrees: its "8:00" row carries no
-  // peak volume and its "20:00" row does. That sample is start-labelled too
-  // (it runs 0:00..23:45), so it embeds the same off-by-one; per explicit
-  // product direction (2026-08-18, twice) the block starts at 08:00, and the
-  // sample is the artifact that is wrong. consumption-calc.test.js records the
-  // two rows where they now differ.
+  // The UI shows the same intervals END-labelled (see intervalEndLabel), where
+  // this reads as "08:15 through 20:00 inclusive" — which is exactly how
+  // PeakPowerTrading-CalculationSample.csv labels its peak rows, so code,
+  // sample and screen now agree. Don't "simplify" this comparison to match the
+  // sample's literal strings: applied to start labels, `> "08:00" && <= "20:00"`
+  // holds the block from 08:15 to 20:15 — the whole position 15 minutes late,
+  // which is the bug this replaced.
   function isPeakWindow(timeStr) {
     return timeStr >= "08:00" && timeStr < "20:00";
+  }
+
+  /**
+   * A stored interval label is the interval's START; every label the UI shows
+   * is its END. "00:00" is displayed "00:15", "08:00" is displayed "08:15",
+   * and the day's last interval, "23:45", is displayed "00:00" — the midnight
+   * that closes the day, not the one that opened it.
+   *
+   * The two conventions coexist deliberately. The data is start-labelled
+   * because that is what the source's `timestamp` field means, so every
+   * comparison inside this module is written against starts. The UI is
+   * end-labelled because that is how a delivery interval is quoted in this
+   * market and how PeakPowerTrading-CalculationSample.csv reads a peak block
+   * ("8:15" is its first peak row, "20:00" its last). Same window either way:
+   * a peak block held 08:00-20:00 covers starts "08:00".."19:45", which the
+   * UI shows as "08:15".."20:00".
+   *
+   * Keeping the shift here, in one exported pair of functions, is what stops
+   * the two conventions from being re-derived per call site — the mistake
+   * that put the peak window 15 minutes late for as long as it did.
+   */
+  function intervalEndLabel(timeStr) {
+    var h = parseInt(timeStr.slice(0, 2), 10);
+    var m = parseInt(timeStr.slice(3, 5), 10) + 15;
+    if (m >= 60) { m -= 60; h = (h + 1) % 24; }
+    return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m;
+  }
+
+  /** The interval as a range, "08:00 – 08:15" — start label to end label. */
+  function intervalRangeLabel(timeStr) {
+    return timeStr + " – " + intervalEndLabel(timeStr);
   }
 
   /**
@@ -316,6 +342,8 @@
     // exactly this rule rather than re-deriving it — the 08:00/08:15 boundary
     // is subtle enough that a second implementation would drift.
     isPeakInterval: isPeakInterval,
+    intervalEndLabel: intervalEndLabel,
+    intervalRangeLabel: intervalRangeLabel,
     computeIntervalHedgeVolumes: computeIntervalHedgeVolumes,
     computeIntervalRow: computeIntervalRow,
     computeIntervalSeries: computeIntervalSeries,
