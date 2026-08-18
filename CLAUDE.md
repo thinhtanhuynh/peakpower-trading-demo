@@ -437,19 +437,22 @@ A block was originally traded against **exactly one** EAN/connection — a
 deliberate divergence from the mockup (whose step 2 offers a volume field on
 every row and splits one request across connections). On 2026-08-18, explicit
 product direction reopened this: step 2 is now a **checkbox multi-select**,
-any number of connections at once, each at the same shared volume, with
-`Select all` and `Clear all` actions — see "Multiple connections, one shared
-volume" below for the full redesign. The rest of this section (entry points,
-locked mode, why the volume field doesn't `renderApp()`) still applies
-unchanged.
+any number of connections at once, with `Select all` and `Clear all` actions,
+and a single volume field whose value is the **requested total** across
+however many are selected (split, not multiplied — see "Multiple
+connections, one shared volume" and then "One shared volume is the total,
+not per connection" below for the full redesign and its same-day reversal).
+The rest of this section (entry points, locked mode, why the volume field
+doesn't `renderApp()`) still applies unchanged.
 
-- `state.wizard` carries `connIds` (array) + `volumeMw` (one shared figure)
+- `state.wizard` carries `connIds` (array) + `volumeMw` (the shared total)
   rather than a single `connId`. `PortalTradeLink.buildRequest()` always took
-  a volume-per-connection map, so `wizardVolumes()` deriving one entry per
-  selected id — instead of at most one — needed no change to the link module
-  either before or after this redesign.
-- Volume is a real `<input type="number">` with `min="0.1" step="0.1"`.
-  **Minimum 0,1 MW, in multiples of 0,1 MW**; `commitWizardVolume()` snaps to
+  a volume-per-connection map summed to get its own total; `wizardVolumes()`
+  now splits `volumeMw` evenly across the selected ids (last one absorbing
+  the rounding remainder) so that sum recovers the input exactly — the link
+  module itself needed no change through any of this.
+- Volume is a real `<input type="number">` with `min="0.01" step="0.01"`.
+  **Minimum 0,01 MW, in multiples of 0,01 MW**; `commitWizardVolume()` snaps to
   that grid on blur, `wizardVolumeValid()` gates the Continue button.
 - Ineligible connections (`notEligible`, e.g. Breda's expiring contract) get no
   checkbox, and `toggleWizardConnection()` refuses them — the guard is in the
@@ -590,6 +593,112 @@ equal to volume × 2, not just what the wizard's own summary claimed — and the
 locked entry point still showing exactly one non-interactive, checked row
 with no toolbar and no response to a forced click. Plus the full Node suite;
 none of this touches calculation logic.
+
+> **Amendment, later the same day:** the "shared input × connIds.length"
+> design above was reverted a few hours after it shipped — see "One shared
+> volume is the total, not per connection" below. The mechanics described
+> above (checkboxes, `Select all`/`Clear all`, the footgun fix, the two
+> hint messages, locked mode) are all still exactly as documented here;
+> only *what the volume input means* changed.
+
+### One shared volume is the total, not per connection (trading wizard, step 2, 2026-08-18, later the same day)
+
+Product direction, in these exact words: "Do not multiply for multiple
+EANs, the input volume is the requested volume for all selected EANs, do
+not for per connection, for all selected EANs (connections)." A direct
+reversal of the section above's central design decision — `wizardTotalMW()`
+had made the volume input a **per-connection** figure, multiplied by however
+many were selected; it is now, again, simply **the total**, however many
+connections that total gets spread across.
+
+**`wizardTotalMW()` reverts to `state.wizard.volumeMw` — no arithmetic at
+all.** Since `wizardSettlement()` (deposit/balance) and the review step's
+Power/Volume rows already read `wizardTotalMW()` rather than the raw input,
+both followed the reversal with no change of their own — the same "one
+function, everything downstream inherits it" property that made the
+multiply version easy to ship one turn earlier now makes reverting it just
+as easy.
+
+**`wizardVolumes()` — the map `buildRequest()` sums — now SPLITS the total
+instead of repeating it.** `buildRequest()` itself still hasn't changed
+across any of these turns; it has only ever summed a volume-per-connection
+map. Making the wizard's *displayed* total equal the raw input, while
+`buildRequest()`'s sum stays untouched, means the map's own entries must sum
+back to exactly that input — so `wizardVolumes()` divides
+`state.wizard.volumeMw` evenly across `connIds`, with the **last** id
+absorbing the rounding remainder. This is the identical "consistent by
+construction" technique `back-office-portal.html`'s own `deriveConnRows()`
+already uses to split a seeded trade's contracted power across its
+illustrative connection rows — reused rather than re-derived, since it's the
+same problem (one total, several rows, sum must be exact) in a different
+screen. Verified directly: 2 connections at a 0,30 MW total published as
+0,15 MW + 0,15 MW, summing to exactly 0,3 — not 0,29999999999999996, which a
+naive `total / n` division without the remainder step would eventually
+produce for less tidy splits.
+
+**`wizardAllocationNote()` dropped its "— *X* MW each —" clause** — that
+phrasing was only ever true under the multiply design; under a split, no
+two connections necessarily carry the same share (they usually do, since
+the split is even except for rounding, but the copy no longer asserts it).
+It now reads "This block's total volume will be split across A, B and C
+once the trade is confirmed" — true regardless of how the remainder lands.
+
+**Minimum volume and step both moved from 0,1 MW to 0,01 MW** — `MIN_VOLUME_MW`,
+`VOLUME_STEP_MW`, the `<input min step>` attributes, `VOLUME_HINT`'s wording,
+and the committed value's display precision (`toFixed(1)` → `toFixed(2)`,
+since a 0,01 grid needs two decimal places to show cleanly). This makes finer
+requests possible in general, and matters more than it otherwise would once
+volume is a total split across several connections — a 0,1 MW floor made a
+handful of small evenly-split shares awkward to reach; 0,01 MW does not.
+
+**The connection picker shows each row's full EAN, not a truncated
+suffix.** `WIZARD_CONNECTIONS` in `portal-seed-data.js` used to carry its own
+`sub: "…0011"`-style string; that field (along with the always-static
+`consumption`/`cover` strings — see below) is gone. The full EAN is read
+live from `PortalSeedData.CONNECTIONS` by id inside `buildWizardVolumeTable()`
+— the same list the Connections screen itself renders from — rather than
+duplicated onto `WIZARD_CONNECTIONS` as a second copy that could drift from
+the first (see "Derived detail must not out-claim its source"). Breda's
+former `"…0078 · ends 31 Dec 2026"` split into two things: the EAN (looked
+up) and a genuinely extra qualifier, now `note: "ends 31 Dec 2026"` on
+Breda's own `WIZARD_CONNECTIONS` entry — nothing else carries a `note`.
+
+**AUG CONSUMPTION is gone; CURRENT COVER is now real.** The picker was a
+3-column table (checkbox, connection, cover) with the static consumption
+figure dropped outright — it never updated and the request didn't ask for
+it back. Current cover, instead of a hardcoded seed string, is now
+`connectionCoverMw(connId, periodStart, periodEnd)`: every block from
+`hedgeBlocksFor(connId, ...)` — the SAME function the Consumption chart's own
+hedge line and cost figures read, joining `hedge_blocks_2026.json`'s
+contracted blocks with every CONFIRMED live trade on the link (never
+`DATA.hedge` directly, or a confirmed trade silently drops out here exactly
+as it would there) — whose own `[periodStart, periodEnd]` overlaps the
+wizard's *currently selected* delivery period, summed in kW and shown in MW.
+`hedgeBlocksFor()` does not itself filter its static half by date (see its
+own comment), so the overlap test is this function's own job, written to the
+same inclusive-overlap rule `coversRange()` already uses for the live half.
+A connection with no overlapping cover at all reads "—", matching how the
+old static seed represented zero (`almere: cover: "—"`); a real negative
+figure (a sold block reducing net cover) is shown as a negative number, not
+clamped to zero — an honest position, not a display convenience.
+
+Verified against real numbers, not just that *some* string rendered:
+Rotterdam DC's own `hedge_blocks_2026.json` rows put exactly two blocks
+(base + peak, 1 MW each) under the "2026" YEAR period, which overlaps every
+2026 month/quarter the wizard offers — hand-computed cover of 2,00 MW,
+matching the picker exactly. A synthetic request built with
+`PortalTradeLink.confirmTrade()` and published straight to `localStorage`
+(bypassing the desk UI, since the *pipeline* was what needed proving, not
+the desk flow itself, which already has its own coverage) added a confirmed
++0,5 MW Buy for Rotterdam DC over Sep 2026; reopening the wizard read
+2,50 MW — the exact sum. Switching the selected period to Q1 2027, which
+neither the static blocks nor the injected trade overlap, read back "—",
+confirming the figure tracks the *currently selected* period on every
+render rather than a value computed once and cached. Locked mode
+(`startWizardFromConnection`) re-checked afterward, showing the one full EAN
+and its own live cover with no toolbar, unaffected by any of this. Plus the
+full Node suite — none of this touches calculation logic, only what feeds
+a picker row.
 
 ### Three period rows, one selection (trading wizard, step 1, 2026-08-18)
 

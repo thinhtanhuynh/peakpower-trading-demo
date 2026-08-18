@@ -69,12 +69,20 @@
     { id: "tilburg-gas", name: "Tilburg plant — gas", ean: "8716 8710 0000 0000 92", commodity: "Gas", status: "Not tradeable", statusTone: "neutral", latestDate: "—", latestNote: "", volume: "—", coverage: null, notTradeable: true }
   ];
 
+  // Full EANs are read live from CONNECTIONS by id (customer-portal.html's
+  // buildWizardVolumeTable) rather than duplicated here — a second copy is a
+  // copy that can drift. consumption/cover used to be static seed strings;
+  // both are computed live now (2026-08-18) — consumption was dropped from
+  // the picker entirely, cover reads real hedge + confirmed-trade coverage
+  // for whichever period is selected. `note` carries only what a bare EAN
+  // doesn't already say (e.g. an expiring contract) — see CLAUDE.md,
+  // "One shared volume is the total, not per connection".
   var WIZARD_CONNECTIONS = [
-    { id: "rot", name: "Rotterdam DC", sub: "…0011", consumption: "385,4 MWh", cover: "0,40 MW" },
-    { id: "venlo", name: "Venlo cold store", sub: "…0027", consumption: "291,7 MWh", cover: "0,30 MW" },
-    { id: "tilburg", name: "Tilburg plant", sub: "…0043", consumption: "612,0 MWh", cover: "0,50 MW" },
-    { id: "almere", name: "Almere office", sub: "…0059", consumption: "18,2 MWh", cover: "—" },
-    { id: "breda", name: "Breda warehouse", sub: "…0078 · ends 31 Dec 2026", consumption: "102,3 MWh", cover: "0,10 MW", notEligible: true }
+    { id: "rot", name: "Rotterdam DC" },
+    { id: "venlo", name: "Venlo cold store" },
+    { id: "tilburg", name: "Tilburg plant" },
+    { id: "almere", name: "Almere office" },
+    { id: "breda", name: "Breda warehouse", note: "ends 31 Dec 2026", notEligible: true }
   ];
 
   var WIZARD_PERIODS = {

@@ -1188,10 +1188,10 @@
 
   // ------------------------- State machine (ported from the mockup) -----
 
-  // A trade block's volume is requested in whole 0,1 MW steps, minimum 0,1 MW.
-  var MIN_VOLUME_MW = 0.1;
-  var VOLUME_STEP_MW = 0.1;
-  var VOLUME_HINT = "Volume must be at least 0,1 MW and a multiple of 0,1 MW.";
+  // A trade block's volume is requested in whole 0,01 MW steps, minimum 0,01 MW.
+  var MIN_VOLUME_MW = 0.01;
+  var VOLUME_STEP_MW = 0.01;
+  var VOLUME_HINT = "Volume must be at least 0,01 MW and a multiple of 0,01 MW.";
   // Distinct from VOLUME_HINT: reachable now that connections are a checkbox
   // multi-select ("Clear all" can genuinely empty the selection), where the
   // single-select radio picker's connId could never go missing once the
@@ -1332,14 +1332,27 @@
     var ids = eligibleConnectionIds();
     return ids.length ? ids[0] : null;
   }
-  /** Same volume applies to every selected connection independently — a
-   * shared input, not a total split across them (see CLAUDE.md, "Multiple
-   * connections, one shared volume"). buildRequest() already expects a
-   * volume-per-connection map, so this is the only place that shape gets
-   * built; the link module needed no change. */
+  /** The shared input IS the requested total across every selected
+   * connection — not a per-connection figure multiplied up (see CLAUDE.md,
+   * "One shared volume is the total, not per connection"). buildRequest()
+   * sums a volume-per-connection map to get its own total, so this map is
+   * built to split state.wizard.volumeMw evenly across the selected ids —
+   * with the LAST id absorbing the rounding remainder, the same
+   * "consistent by construction" pattern back-office-portal.html's own
+   * deriveConnRows() already uses for its illustrative connection split —
+   * so the sum is exact, never a cent or a watt short from floating-point
+   * division. */
   function wizardVolumes() {
     var m = {};
-    (state.wizard.connIds || []).forEach(function (id) { m[id] = state.wizard.volumeMw || 0; });
+    var ids = state.wizard.connIds || [];
+    var total = state.wizard.volumeMw || 0;
+    if (!ids.length) { return m; }
+    var share = Math.round((total / ids.length) * 1e6) / 1e6;
+    var used = 0;
+    ids.forEach(function (id, i) {
+      if (i === ids.length - 1) { m[id] = Math.round((total - used) * 1e6) / 1e6; }
+      else { m[id] = share; used += share; }
+    });
     return m;
   }
 
@@ -1470,13 +1483,13 @@
     refreshWizardVolumeUi();
   }
 
-  /** On blur/enter: snap to the 0,1 MW grid and write the clean value back. */
+  /** On blur/enter: snap to the 0,01 MW grid and write the clean value back. */
   function commitWizardVolume(el) {
     var n = parseFloat(String(el.value).replace(",", "."));
     if (isNaN(n) || n < MIN_VOLUME_MW) { n = MIN_VOLUME_MW; }
     n = Math.round(n / VOLUME_STEP_MW) * VOLUME_STEP_MW;
     state.wizard.volumeMw = Math.round(n * 1000) / 1000;
-    el.value = state.wizard.volumeMw.toFixed(1);
+    el.value = state.wizard.volumeMw.toFixed(2);
     refreshWizardVolumeUi();
   }
 
@@ -2637,15 +2650,13 @@
       peak: PortalTradeLink.sellAdjustedPrice(row.peak, w.direction)
     };
   }
-  /** The same volumeMw is requested at EVERY selected connection — a shared
-   * input, not a total split across them — so the wizard's own "total" is
-   * that one value times how many connections are selected. buildRequest()
-   * arrives at the identical number independently, by summing wizardVolumes()'s
-   * map (see there), which is what makes this the true total rather than a
-   * display-only shortcut. */
+  /** The shared input already IS the requested total — see wizardVolumes(),
+   * which splits (not multiplies) it across whichever connections are
+   * selected so buildRequest()'s own sum recovers this exact number. Was
+   * volumeMw * connIds.length for one turn (2026-08-18); reverted the same
+   * day on explicit direction ("do not multiply for multiple EANs"). */
   function wizardTotalMW() {
-    var n = (state.wizard.connIds || []).length;
-    return (state.wizard.volumeMw || 0) * n;
+    return state.wizard.volumeMw || 0;
   }
 
   /** Valid iff at least one connection is picked and the volume is a ≥0,1 MW
@@ -2683,8 +2694,7 @@
     if (names.length === 1) {
       return "This block will be allocated to " + names[0] + " once the trade is confirmed.";
     }
-    var vol = ConsumptionCalc.formatNL(state.wizard.volumeMw || 0, 3) + " MW";
-    return "This block will be allocated to " + joinWithAnd(names) + " — " + vol + " each — once the trade is confirmed.";
+    return "This block's total volume will be split across " + joinWithAnd(names) + " once the trade is confirmed.";
   }
   function wizardHours(period) {
     if (state.wizard.shape === "Base") { return countDaysInRange(period.start, period.end) * 24; }
@@ -2846,19 +2856,52 @@
   }
 
   /**
+   * A connection's total contracted power (MW) overlapping a delivery period —
+   * its static hedge_blocks_2026.json blocks PLUS every CONFIRMED live trade,
+   * via the same hedgeBlocksFor() the Consumption chart's own hedge line and
+   * cost figures read (never DATA.hedge directly, or a confirmed trade would
+   * silently drop out here same as it would there). hedgeBlocksFor() itself
+   * doesn't filter its static half by date, so the overlap check is this
+   * function's own job — matching coversRange()'s inclusive-overlap test.
+   * Returns raw MW (can be negative — a sold block reduces cover, and that's
+   * a real, not a clamped, position); callers decide how to display zero.
+   */
+  function connectionCoverMw(connId, periodStart, periodEnd) {
+    var blocks = hedgeBlocksFor(connId, periodStart, periodEnd).filter(function (b) {
+      return b.periodStart && b.periodEnd && !(b.periodEnd < periodStart || b.periodStart > periodEnd);
+    });
+    var totalKw = blocks.reduce(function (sum, b) { return sum + (b.powerKw || 0); }, 0);
+    return totalKw / 1000;
+  }
+
+  /**
    * Connection & volume: a checkbox multi-select (2026-08-18 — was a radio,
    * exactly one connection; see CLAUDE.md, "Multiple connections, one shared
-   * volume") plus a "Select all" / "Clear all" pair, and the volume is
-   * entered once below the table — the SAME figure requested at every
-   * selected connection, not split across them (see wizardTotalMW/
-   * wizardVolumes). Locked mode (opened from a connection's own detail page)
-   * shows only that one row, non-interactive, with no toolbar — the choice
-   * was already made by which detail page this came from.
+   * volume") plus a "Select all" / "Clear all" pair, and the volume entered
+   * once below the table is the REQUESTED TOTAL across every selected
+   * connection, not a per-connection figure (see wizardTotalMW/wizardVolumes
+   * — reverted the same day it shipped, on explicit direction "do not
+   * multiply for multiple EANs"). Locked mode (opened from a connection's
+   * own detail page) shows only that one row, non-interactive, with no
+   * toolbar — the choice was already made by which detail page this came
+   * from.
+   *
+   * The table shows each connection's full EAN (looked up from
+   * PortalSeedData.CONNECTIONS by id — the shared source, not a second copy;
+   * see CLAUDE.md "Derived detail must not out-claim its source") and its
+   * CURRENT COVER, now computed live from connectionCoverMw() against the
+   * wizard's own currently-selected delivery period rather than read off a
+   * static seeded string — so accepting a trade and coming back to request
+   * another one shows a genuinely different number if it changes what's
+   * already covered. AUG CONSUMPTION was dropped entirely (2026-08-18): it
+   * was always a static, non-updating figure with no clear use in a picker
+   * whose whole job is "how much of this connection is already covered."
    */
   function buildWizardVolumeTable(totalMW) {
-    var cols = "32px 2fr 1.3fr 1.2fr";
+    var period = getSelectedWizardPeriod();
+    var cols = "32px 2.6fr 1.2fr";
     var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div></div><div>CONNECTION</div>' +
-      '<div class="gt-cell-num">AUG CONSUMPTION</div><div class="gt-cell-num">CURRENT COVER</div></div>';
+      '<div class="gt-cell-num">CURRENT COVER</div></div>';
     var locked = state.wizard.lockedConn;
     var ids = state.wizard.connIds || [];
     var list = locked
@@ -2876,13 +2919,16 @@
         // this checkbox's toggle.
         : '<input type="checkbox"' + (sel ? " checked" : "") + (locked ? " disabled" : "") + '>';
       var click = (c.notEligible || locked) ? "" : ' onclick="PP.toggleWizardConnection(\'' + c.id + '\')"';
+      var fullEan = (PortalSeedData.CONNECTIONS.filter(function (x) { return x.id === c.id; })[0] || {}).ean || c.id;
+      var noteSuffix = c.note ? " · " + c.note : "";
+      var coverMw = connectionCoverMw(c.id, period.start, period.end);
+      var coverText = coverMw === 0 ? "—" : ConsumptionCalc.formatNL(coverMw, 2) + " MW";
       return '<div class="gt-row conn-pick' + (sel ? " selected" : "") + (c.notEligible ? " not-eligible" : "") + (locked ? " locked" : "") +
         '" style="grid-template-columns:' + cols + '"' + click + '>' +
         '<div>' + pick + '</div>' +
-        '<div><div style="font-weight:600">' + c.name + '</div><div class="gt-cell-sub gt-mono">' + c.sub +
-          (c.notEligible ? " · not eligible" : "") + '</div></div>' +
-        '<div class="gt-cell-num">' + c.consumption + '</div>' +
-        '<div class="gt-cell-num">' + c.cover + '</div></div>';
+        '<div><div style="font-weight:600">' + c.name + '</div><div class="gt-cell-sub gt-mono">' + fullEan +
+          noteSuffix + (c.notEligible ? " · not eligible" : "") + '</div></div>' +
+        '<div class="gt-cell-num">' + coverText + '</div></div>';
     }).join("");
     var toolbar = locked ? "" :
       '<div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px">' +
@@ -2892,12 +2938,12 @@
     var table = toolbar + '<div class="grid-table dense">' + head + rows + '</div>';
 
     var invalid = !wizardVolumeValid();
-    var volField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Volume (MW) — per connection</div>' +
+    var volField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Volume (MW) — total for all selected connections</div>' +
       '<input id="wizard-vol" type="number" class="wizard-vol-input" inputmode="decimal"' +
       ' min="' + MIN_VOLUME_MW + '" step="' + VOLUME_STEP_MW + '"' +
-      ' value="' + (state.wizard.volumeMw || 0).toFixed(1) + '"' +
+      ' value="' + (state.wizard.volumeMw || 0).toFixed(2) + '"' +
       ' oninput="PP.setWizardVolume(this.value)" onchange="PP.commitWizardVolume(this)">' +
-      '<div class="fg-hint">Minimum 0,1 MW · steps of 0,1 MW · requested at each selected connection</div></div>';
+      '<div class="fg-hint">Minimum 0,01 MW · steps of 0,01 MW · split across all selected connections</div></div>';
 
     var totalLine = '<div id="wizard-total-line" style="margin-top:10px;font-size:13px;font-weight:700;color:' +
       (invalid ? "var(--pp-red)" : "var(--pp-teal-700)") + '">Requested volume: ' + ConsumptionCalc.formatNL(totalMW, 3) + ' MW</div>';
