@@ -858,6 +858,55 @@ increments correctly from an uncommitted typed figure; and the
 verified via `page.click()`. Plus the full Node suite — none of this
 touches calculation logic.
 
+### The multi-connection allocation sentence is gone too (trading wizard, step 2, 2026-08-18, later still)
+
+Product direction, quoting the sentence verbatim: "Remove the text 'This
+block's total volume will be split across … once the trade is confirmed.'"
+The third redundant-copy trim in as many passes — `wizardAllocationNote()`'s
+2+-connection branch now returns `""` outright rather than a shorter
+version of the same sentence. Nothing else says *which* connections are
+getting the volume once you've already checked their cards; a sentence
+restating names you can already see checked was adding words, not
+information — the same reasoning that dropped the total-line and the two
+hint fragments in the two passes before this one. The **single**-connection
+message is kept: with only one card, "which" was never in question, but the
+sentence still confirms *what happens next* ("once the trade is confirmed"),
+which the card alone doesn't say — that's real information, so it stays.
+
+**An empty banner is worse than none, so the box hides rather than sitting
+there blank.** `wizardAllocationNote()` can now return `""`, and
+`#wizard-volume-note` previously always rendered regardless of whether it
+had anything to say. Both places that produce this element —
+`buildWizardVolumeTable()`'s initial markup and `refreshWizardVolumeUi()`'s
+live-patch — now compute the same `text` value and set `display:none` when
+it's empty, `display:""` (its own default, `flex`, per `.banner`) when it
+isn't. This had to be fixed in **both** places, not just one: a full
+re-render (toggling a connection) rebuilds the markup from scratch, so
+`buildWizardVolumeTable()` alone would have been enough for *that* path,
+but typing a valid volume while 2+ connections are already selected goes
+through the lightweight `refreshWizardVolumeUi()` patch instead (deliberately,
+so the input never loses focus mid-keystroke — see "Why the volume field
+does not `renderApp()`") — and that function only ever touched
+`className`/`textContent`, never visibility. Missing this second spot would
+have shipped a real, reachable bug: go invalid (clear the field) with 2
+connections selected, which correctly shows the amber `VOLUME_HINT` in a
+visible banner, then type a valid volume again — the banner would have
+stayed visible, now empty, a blank green box with nothing in it, because
+nothing had ever told it to hide once its text emptied out.
+
+Verified all four states directly, not assumed from the two rewritten
+functions alone: 1 connection selected (message visible, correct text,
+`display:flex`); 2 connections (empty text, `display:none`, zero rendered
+height); typing a volume while still at 2 connections, exercising the
+live-patch path specifically (stays empty/hidden); and the exact regression
+scenario above — invalid-with-2-connections (`VOLUME_HINT` visible) then a
+valid volume typed right after, still through the live-patch path — reading
+back empty text *and* `display:none`, not a stale visible empty box.
+Screenshotted both the 1- and 2-connection states side by side to confirm
+the gap where the banner used to sit reads as intentional spacing, not a
+layout hole. Plus the full Node suite — none of this touches calculation
+logic.
+
 ### Three period rows, one selection (trading wizard, step 1, 2026-08-18)
 
 Step 1 ("Product & period") used to switch between Month / Quarter / "Next

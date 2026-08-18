@@ -1573,8 +1573,15 @@
     var invalid = !wizardVolumeValid();
     var note = document.getElementById("wizard-volume-note");
     if (note) {
+      // wizardAllocationNote() can now return "" (2+ connections selected —
+      // see its own comment), and an empty banner box is worse than none:
+      // hidden, not just emptied, so it never sits there as a blank coloured
+      // rectangle. Mirrors the same text/visibility pairing
+      // buildWizardVolumeTable()'s own noteBox uses at initial render.
+      var text = invalid ? wizardVolumeHint() : wizardAllocationNote();
       note.className = "banner " + (invalid ? "banner-amber" : "banner-teal");
-      note.textContent = invalid ? wizardVolumeHint() : wizardAllocationNote();
+      note.textContent = text;
+      note.style.display = text ? "" : "none";
     }
     var dec = document.getElementById("wizard-vol-dec");
     if (dec) { dec.disabled = (state.wizard.volumeMw || 0) <= MIN_VOLUME_MW; }
@@ -2760,14 +2767,21 @@
     if (names.length === 2) { return names[0] + " and " + names[1]; }
     return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
   }
+  /** No message at all once 2+ connections are selected (2026-08-18,
+   * "remove the text 'This block's total volume will be split across…'") —
+   * which connections are getting the volume is already visible from their
+   * own checked cards above; a sentence restating it added words without
+   * adding information. The single-connection case is kept: with only one
+   * card, "which" isn't in question, but naming it here still confirms
+   * *what happens next* ("once the trade is confirmed"), which the card
+   * alone doesn't say. */
   function wizardAllocationNote() {
     var list = wizardConnections();
     if (!list.length) { return NO_CONNECTION_HINT; }
-    var names = list.map(function (c) { return c.name; });
-    if (names.length === 1) {
-      return "This block will be allocated to " + names[0] + " once the trade is confirmed.";
+    if (list.length === 1) {
+      return "This block will be allocated to " + list[0].name + " once the trade is confirmed.";
     }
-    return "This block's total volume will be split across " + joinWithAnd(names) + " once the trade is confirmed.";
+    return "";
   }
   function wizardHours(period) {
     if (state.wizard.shape === "Base") { return countDaysInRange(period.start, period.end) * 24; }
@@ -3036,8 +3050,13 @@
       '</div>' +
       '<div class="fg-hint">Minimum 0,01 MW · steps of 0,01 MW</div></div>';
 
-    var noteBox = '<div id="wizard-volume-note" class="banner ' + (invalid ? "banner-amber" : "banner-teal") + '" style="margin-top:8px">' +
-      (invalid ? wizardVolumeHint() : wizardAllocationNote()) + '</div>';
+    // See refreshWizardVolumeUi()'s matching comment: wizardAllocationNote()
+    // can be "" now (2+ connections selected), and the box hides rather than
+    // sitting there empty — both places compute visibility from the same
+    // text so they can't disagree with each other.
+    var noteText = invalid ? wizardVolumeHint() : wizardAllocationNote();
+    var noteBox = '<div id="wizard-volume-note" class="banner ' + (invalid ? "banner-amber" : "banner-teal") +
+      '" style="margin-top:8px' + (noteText ? "" : ";display:none") + '">' + noteText + '</div>';
     var noteField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Note (optional)</div>' +
       // Unescaped, a note containing "</textarea>" closes the element early and
       // everything after it is parsed as markup.
