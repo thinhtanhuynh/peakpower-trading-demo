@@ -545,6 +545,37 @@ Continue/Cancel unaffected, the full Node suite re-run, and a full-page
 screenshot checked for card overflow/wrapping before calling the sizing
 numbers above final.
 
+#### Cards fill the row (2026-08-18, a third pass)
+
+Product direction, in these exact words: "auto expand all deliver period
+items to adapt the width of the trade wizard." `.bar-chart-col` moved from
+`flex:0 0 62px` (a fixed width, explicitly argued for above and in "Three
+period rows, one selection") to `flex:1 1 0` — every card now stretches to
+fill its row's full width, `flex-basis:0` so the split is strictly even by
+count rather than skewed by whichever card's own price text happens to be
+widest.
+
+This is a straight reversal of the earlier "honest sizing" argument, not a
+compatible extension of it: a 2-item Calendar year row's cards are now
+visibly, substantially wider than the 6-item Month row's, for the same
+underlying data — exactly the outcome the fixed-width choice was originally
+adopted to prevent. Both readings are defensible design opinions (fixed
+width says "every option costs the same glance regardless of its row";
+full-width says "don't leave the wizard looking half-empty on a short row")
+— this file's job is to record which one is *current*, not to relitigate
+which was *right*. It's this one, on explicit instruction, until told
+otherwise.
+
+Nothing else about the period picker changed: `selectWizardBar`,
+`buildWizardPeriodRow`, the Base/Peak column split, the selected-state
+cues (border/wash/checkmark) and the min/max bar-height normalisation are
+all untouched — this was a one-line CSS change (plus `min-width:0`, so a
+flex item can still shrink below its own content's natural width if a
+future narrower viewport ever needs it to). Verified visually (full-page
+screenshot, all three rows in both columns) and with the same interaction
+script as above re-run unmodified — the selection logic doesn't know or
+care how wide its own cards are.
+
 ### Vertical spacing between sections — a footgun
 
 `.page` is a flex column with `gap:16px`, but **only Consumption puts its
@@ -1268,65 +1299,139 @@ exactly.
 Cost); Delta Cost still measures the position against EPEX spot alone.
 Numbers display NL-style (comma decimal, period thousands separator).
 
-**Stat cards: two equations, not a row of peers.** Seven flat cards gave no
-sense of which figure mattered or how they related, even though the
-relationships are exact arithmetic. They are now two labelled groups, each
-running `component op component = result`, with the result card larger and
-heavier (`.stat-card.result`):
+**The position panel (2026-08-18) replaced the six stat cards.** Product
+direction: the two-equation stat-card layout (below, kept as history) gave
+seven and then six flat numbers with no visual sense of *position* — how
+much of usage is actually covered — the way the Dashboard hero's own
+composition bar does. `renderPositionPanel(stats, range)` (was
+`renderStatCards`) now renders one Dashboard-hero-style 2-column panel:
+cost as a headline figure on the left, a real Covered/Short/Long
+composition bar on the right, same visual language as
+`dashboardHeroHtml()`'s own bar but built from the *actual selected range*
+instead of hardcoded demo figures.
+
+```
+COST                              POSITION              [usage] kWh
++ € 6.038,04                      [====Covered====][Short][Long]
+hedge € 2.820,00 + delta € 3.218,04
+                                   ■ Covered      36.000,0 kWh
+                                   ■ Short — bought…  24.935,0 kWh
+                                   ■ Long — sold…         0,0 kWh
+```
+
+**"Covered" is not a field `computeDayStats` returns — it's derived:**
+`coveredKwh = actualUsageKwh - shortKwh`. This holds for every interval,
+always, not just the common case: `min(actual,hedge) + max(0, actual-hedge)
+= actual` regardless of which of actual/hedge is larger (short case:
+`min=hedge`, `max=actual-hedge`, sum = `actual`; long case: `min=actual`,
+`max=0`, sum = `actual`) — so it holds for any *sum* of intervals too. The
+equivalent `hedgeVolumeKwh - longKwh` gives the same number, which is the
+check that it's right, not an assumption. Segment widths clamp at 0 (`Math.max(0,
+…)`) for the **bar's own width maths only** — a heavily net-exporting range
+(production beyond what the hedge covers) can drive the true value
+negative, which no proportional bar can represent honestly either way;
+clamping the display is the least-wrong option, not a claim the real figure
+isn't negative. In the shipped dataset this needs a genuinely extreme range
+to trigger (whole-range net export beyond the hedge) — not reachable by any
+single site/month combination currently seeded, checked rather than assumed.
+
+**Certainty-layer behaviour is preserved, not rebuilt.** `costCertaintyOpts`
+is called exactly as the old `costEquation` called it — same `unavailable`/
+`indicative`/`sublabel` logic, byte-identical, only the container changed
+(a `.position-figure`/`.position-sub` pair instead of a `.stat-card`). The
+position side gets the same check the old volume cards used
+(`realDayCount !== totalDayCount`), now applied to the **whole panel**
+rather than one card at a time: `.position-panel.projected` (dashed border,
+`--pp-surface-alt` background — the panel-level equivalent of
+`.stat-card.projected`) plus a "Projected" badge on whichever side(s) are
+affected, plus a plain-language note ("N of M days projected from history,
+not measured" / cost's own existing "excludes N days with no quoted price"
+/ "indicative for N days of the range"). Verified across all four states
+that matter — fully measured, mixed, fully projected-with-a-quote, fully
+projected-with-no-quote (the `€ —` case) — not just the default single-day
+view.
+
+**Colour mapping, matching the chart directly above this panel:** Covered
+blue-700 (`--pp-blue-700`, the exact hue `barFillAttrs("#004C94", 0.45, …)`
+fills the chart's own Covered band with), Short red (`--pp-red`/
+`--pp-red-text` for the legend value, matching the chart's Short bars),
+Long teal (`--pp-teal`/`--pp-teal-text`, matching the chart's Long bars) —
+a reader who has looked at the chart below already knows this panel's
+palette. Cost figure colour is unchanged from the old cards: red
+(`--pp-red-text`) for an additional cost, green (`--pp-green-text`) for
+savings/revenue, neutral for exactly zero.
+
+**In-bar segment labels are dropped below 8%, and their `%` suffix below
+20%** (`seg()` in `renderPositionPanel`) — text that can't fit inside its
+own coloured sliver is worse than no text, the same reasoning
+`HATCH_MIN_BAR_WIDTH` applies to the chart's own hatch texture. The legend
+underneath always carries the real number regardless of whether a segment
+got a label, so nothing is actually lost, only the in-bar shortcut to it.
+
+**Dead code removed, not left behind:** `statOpHtml`, `statResultGroupHtml`
+and `mergeOpts` had no callers left once the two-equation layout was gone
+(checked by grep, not assumed) and were deleted outright, along with their
+CSS (`.stat-op`, `.stat-result-group`, and the `.stat-result-group`
+references inside both responsive breakpoints). `volumeCertaintyOpts` was
+deleted the same way — its one caller (the old Uncovered card) is gone, and
+the position panel's own certainty check doesn't need a per-value breakdown
+generator, since it marks the whole panel rather than one card's sublabel.
+
+**What's still there, and why:** `statCardHtml`, `statGroupHtml`,
+`costCertaintyOpts`, and every `.stat-card`/`.stat-group`/`.stat-equation`
+CSS rule are **unchanged** — `statusCardHtml()` (loading / no-data / error
+placeholders) still routes through all of them, so `#stat-row` can still
+render a single centred status card the same way it always has. Removing
+that machinery because the *main* view stopped using it would have broken
+three states that never went anywhere. `.stat-equation`'s five-column grid
+(`card/op/card/op/card`) is now visually overkill for `statusCardHtml`'s
+always-one-card case — left as-is rather than narrowed, since a status
+placeholder taking the same grid a real equation once used costs nothing.
+
+The old two-equation design is kept below as **history, not current
+behaviour** — read it for the arithmetic (`Hedge cost + Delta cost = Total
+cost`, `Actual usage − Hedge volume = Uncovered`) and the certainty-layer
+reasoning behind `costCertaintyOpts`, both of which the position panel
+still relies on; don't read it as a description of what the page renders
+today.
+
+<details>
+<summary>Superseded: the six-stat-card layout (until 2026-08-18)</summary>
+
+Seven flat cards gave no sense of which figure mattered or how they
+related, even though the relationships are exact arithmetic. They became
+two labelled groups, each running `component op component = result`, with
+the result card larger and heavier (`.stat-card.result`):
 
 ```
 Cost           Hedge cost  +  Delta cost   =  Total cost
 Energy volume  Actual usage −  Hedge volume =  Uncovered
 ```
 
-Cost sits above volume because Total cost is the headline and the volume row
-explains the gap beneath it. **Long and Short merged into one Uncovered card**
-that switches label and tone by sign — they are mutually exclusive, so one was
-permanently displaying zero. Seven cards became six.
+Cost sat above volume because Total cost was the headline and the volume row
+explained the gap beneath it. Long and Short merged into one Uncovered card
+that switched label and tone by sign — they are mutually exclusive at the
+single-interval level (never both non-zero *in one interval*), though a
+multi-interval range can genuinely have both totals non-zero at once (a
+solar-heavy midday alongside a short evening) — a real limitation of
+folding them into one card that the position panel's 3-segment bar no
+longer has, since it shows both simultaneously. Seven cards became six.
 
-Two things to preserve if you touch this:
+`Total cost` was displayed as literally `hedgeCostEur + deltaCostEur`, not a
+separately-summed field, for the same reason `renderPositionPanel` still
+computes it that way today — see the current section above.
 
-- **`Total cost` is displayed as literally `hedgeCostEur + deltaCostEur`**, not
-  a separately-summed field. On a mixed range the summed field only covers
-  cost-computable intervals and silently drops the projected days' hedge cost,
-  while the Hedge cost card beside it always shows the full period — so the
-  equation would visibly stop adding up, which is the one thing this layout
-  exists to prevent. It is a no-op (~2e-10) on a fully-measured range.
-- `statCardHtml(label, value, tone, sublabel, opts)`'s 5th argument is an
-  options object (`{result, projected, breakdown}`). It defaults to falsy, so
-  Dashboard, Wallet and Invoices — which call it with four arguments — render
-  exactly as before. `.stat-group`/`.stat-equation`/`.stat-op`/`.result` are
-  Consumption-only; the shared `.stat-card`/`.stat-row` rules are untouched.
+Card tones mirrored the chart's own colors: Long used `.export`
+(`--pp-teal-text`), Short used `.short` (`--pp-red-text`), Hedge cost/Hedge
+volume carried a dedicated `tone="hedge"` (`--pp-violet`/`--pp-violet-text`)
+rather than reusing `.brand`, since Dashboard's "Coverage — August" card
+also carries `.brand` for an unrelated figure — see "Short/Covered/Hedge
+recolor" for why. Base Volume and Peak Volume never had their own cards
+(Hedge Volume already totals them), and Consumption, Production, Peak
+demand, Usage Cost stayed table-only throughout — that part is unchanged by
+this redesign; all remain columns in the table and CSV export.
 
-All are totals over the selected date range.
-
-Card tones deliberately mirror the chart's own colors so the two read as
-one system: **Long** uses the `.export` tone (`--pp-teal-text`, matching the
-chart's own teal fill — see "Usage/cost chart saturation") and **Short**
-the `.short` tone (`--pp-red-text` as of 2026-08-18, was `--pp-orange-text`
-— see "Short/Covered/Hedge recolor" above), matching the red "bought at
-day-ahead" bar segment. Delta and Total Cost are red when it's an
-additional cost, green when it's savings/revenue. **Hedge cost** and
-**Hedge volume** — the one figure in each equation that is never derived,
-never withheld, and never marked projected (a locked-in contract position,
-see "Looking past the end of the data" below) — carry a dedicated
-`tone="hedge"` (`--pp-violet`/`--pp-violet-text`) as of 2026-08-18, the same
-violet as the hedge line on the chart above and the Hedge segment on the
-Dashboard's own composition bar; `.brand` (blue-700) was deliberately left
-alone rather than recoloured in place, since Dashboard's "Coverage — August"
-card also carries it for an unrelated figure — see "Short/Covered/Hedge
-recolor" for why a dedicated tone was minted instead of reusing `.brand`.
-Before that, Hedge cost/Hedge volume carried `tone="brand"` itself (and
-before 2026-08-18's earlier SB-2026 sync, both were untoned — a plain grey
-accent cap).
-
-The `#stat-row` element is a `.stat-stack` flex column wrapping two
-`.stat-row` divs — loading/no-data/error placeholders go through
-`statusCardHtml()` so they keep the same wrapper. Base Volume and Peak
-Volume no longer have their own cards (Hedge Volume already totals them),
-and Consumption, Production, Peak demand, Usage Cost, and Uncovered are
-likewise table-only — all six remain columns in the table and in the CSV
-export.
+</details>
 
 **Usage chart (both single-day and multi-day):** two lines — actual usage
 (solid blue-500, `#006ECF`, unchanged throughout) and hedge volume (dashed
