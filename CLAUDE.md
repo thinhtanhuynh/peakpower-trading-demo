@@ -62,11 +62,12 @@ page through that server's URL.
 | `consumption-data-loader.js` | ~6 KB | Pure JS module that groups the two source JSON files above into the page's `{sites, byDate, bySite, hedge}` shape, plus a `fetch()`-based loader that runs the whole thing client-side on page load (dual Node/browser module). Unit tested via `consumption-data-loader.test.js`. |
 | `usage-projection.js` | ~4 KB | Pure JS module (dual Node/browser) that projects a site's usage forward past the dataset's coverage, by averaging its own real consumption/production per time-of-day, weekday vs weekend, across all 217 measured days. Deliberately **not** seasonally adjusted — the data stops in August, so a November date has no same-month history; that limit is surfaced in the UI label, not just a comment. Unit tested via `usage-projection.test.js`. |
 | `portal-seed-data.js` | ~28 KB | Pure JS module (dual Node/browser) holding static seed/mock data ported from `Customer Portal - Preview.html` for the screens that have no live data source in this POC — Connections' descriptive metadata, Dashboard tiles/activity, Wallet ledger/top-ups (plus a `simulateTopup()` pure function), and Invoices. Not unit tested (no calculation logic, just data + one small formatter/simulator). |
-| `portal-trade-link.js` | ~16 KB | Pure JS module (dual Node/browser) carrying trades both ways between the Customer Portal and the Back Office Trade desk over `localStorage` — request out, priced offer back — see "Cross-portal trade requests" below. Unit tested via `portal-trade-link.test.js`. |
+| `portal-terms-link.js` | ~9 KB | Pure JS module (dual Node/browser) carrying the **deposit percentage** the other way — Back Office sets it, Customer Portal obeys it — plus all the settlement maths (deposit/balance split, due date, overdue state). Unit tested via `portal-terms-link.test.js`. See "Deposit on a bought block" below. |
+| `portal-trade-link.js` | ~17 KB | Pure JS module (dual Node/browser) carrying trades both ways between the Customer Portal and the Back Office Trade desk over `localStorage` — request out, priced offer back — see "Cross-portal trade requests" below. Unit tested via `portal-trade-link.test.js`. |
 | `back-office-desk-data.js` | ~6 KB | Pure JS module (dual Node/browser): the Back Office mockup's own seeded `TRADES`/`QUEUE_META` ported verbatim, plus `buildQueues()`, which merges live Customer Portal requests into the seeded columns. |
-| `customer-portal.html` | ~108 KB | Standalone, hand-written multi-page portal (loads `consumption-calc.js`, `consumption-data-loader.js`, `portal-seed-data.js` and `portal-trade-link.js` via `<script src>`) with a working Dashboard/Connections/Consumption/Prices/Trading/Wallet/Invoices sidebar — see "Customer Portal (Live Data) page" below. Must be served over http(s), not opened via `file://`. |
+| `customer-portal.html` | ~108 KB | Standalone, hand-written multi-page portal (loads `consumption-calc.js`, `consumption-data-loader.js`, `portal-seed-data.js`, `portal-trade-link.js` and `portal-terms-link.js` via `<script src>`) with a working Dashboard/Connections/Consumption/Prices/Trading/Wallet/Invoices sidebar — see "Customer Portal (Live Data) page" below. Must be served over http(s), not opened via `file://`. |
 | `back-office-screens-data.js` | ~25 KB | Pure JS module (dual Node/browser): the Back Office mockup's own seeded data for **Home, Customers, Wallets, Invoicing and Data & feeds**, ported verbatim, plus the small `build*` helpers its `renderVals()` applies. `TAG_STYLE` is taken from `back-office-desk-data.js` rather than duplicated. |
-| `back-office-portal.html` | ~82 KB | Functional stand-in for the **whole** Back Office mockup (loads `portal-trade-link.js`, `back-office-desk-data.js` and `back-office-screens-data.js`). Despite the filename, all six of the mockup's real screens are here — Home, Trade desk, Customers, Wallets, Invoicing and Data & feeds — with `Reference data` and `Audit` left as the mockup's own placeholder. Only the **Trade desk** is backed by live data (the cross-portal trade flow); the other five clone the mockup's static seeded screens. Also needs http(s). |
+| `back-office-portal.html` | ~82 KB | Functional stand-in for the **whole** Back Office mockup (loads `portal-trade-link.js`, `portal-terms-link.js`, `back-office-desk-data.js` and `back-office-screens-data.js`). Despite the filename, all six of the mockup's real screens are here — Home, Trade desk, Customers, Wallets, Invoicing and Data & feeds — with `Reference data` and `Audit` left as the mockup's own placeholder. Only the **Trade desk** is backed by live data (the cross-portal trade flow); Customers and Wallets are seeded but carry two live additions (the editable deposit % and outstanding balances — see "Deposit on a bought block"); the rest clone the mockup's static seeded screens. Also needs http(s). |
 | `PeakPowerTrading-CalculationSample.csv` | ~8 KB | Reference calculation sample (one day, 96 rows) the `consumption-calc.js` formulas (Usage Cost, Actual Usage, Base/Peak/Hedge Volume, Uncovered, Long, Short, Delta Cost, Hedge Cost, Total Cost) are validated against — see "Calculations" below. Negative numbers are written in accounting parentheses, e.g. `(70)`, and `-` means zero/absent. Its hedge blocks are unpriced, so its Hedge Cost column is 0 throughout and Total Cost equals Delta Cost. Not consumed by the page itself. |
 
 The two large usage/combined JSON files are over the 30 MB chat-upload
@@ -1183,8 +1184,10 @@ which shares `localStorage` with the Customer Portal and so must be served
 from the **same origin** — open both through one server to see the trade-request
 flow work.
 
-`node consumption-calc.test.js`, `node consumption-data-loader.test.js` and
-`node portal-trade-link.test.js` unit-test the three logic modules against
+`node consumption-calc.test.js`, `node consumption-data-loader.test.js`,
+`node portal-trade-link.test.js` and `node portal-terms-link.test.js`
+(deposit percentage, deposit/balance split, due dates, overdue state)
+unit-test the logic modules against
 fixtures (grouping-by-site, sorting-by-isp, rounding, hedge-block
 filtering/blending, multi-period hedge stacking, period-hour maths, desk-card
 conversion, storage round-tripping and corrupt-storage handling) without
@@ -1196,6 +1199,85 @@ verified with a one-off jsdom + `http.server` smoke test rather than a
 checked-in suite — re-run a similar script after changing the page shell
 if in doubt, since there's no automated regression coverage for the
 sidebar/page-switching logic itself.
+
+## Deposit on a bought block
+
+A customer enters a bought block on a **deposit** — a share of its value paid
+up front — and owes the **balance** before delivery starts. Default 20 %, so a
+€ 17.664 block costs € 3.532,80 to enter and € 14.131,20 the day before the
+delivery period opens.
+
+The percentage is per customer, set by the desk, and obeyed by the portal:
+
+```
+Back Office · Customers · Commercial settings  --deposit %-->  Customer Portal
+      (peakpower.commercialTerms.v1)                wizard · offer · wallet
+```
+
+### The three rules that keep it coherent
+
+1. **Before acceptance the percentage is read live**, so a change by the desk
+   shows up immediately in what the wizard and the firm-offer banner ask for.
+2. **At acceptance it is frozen onto the trade** (`PortalTermsLink.buildSettlement`
+   → `req.settlement`). A later change must never retroactively alter what an
+   agreed trade owes.
+3. **Every screen after that reads the percentage off the trade**, never off the
+   live setting. `depositPct()` in `customer-portal.html` is therefore only ever
+   used for trades that do not exist yet.
+
+`req.settlement` is `{depositPct, valueEur, depositEur, balanceEur, dueDate,
+paidAt, paidBy}`. The balance is the **remainder**, not its own percentage
+calculation, so deposit + balance = value exactly — at 33,33 % two independent
+roundings would miss the total by a cent on every screen showing all three.
+
+### Where it shows up
+
+| Portal | Screen | What |
+|---|---|---|
+| Back Office | Customers · Commercial settings | The editable **Deposit on a bought block** field (`key: "depositPct"` in `COMMERCIAL_FIELDS`), plus a note saying what changing it does. An unusable value (blank, negative, over 100, words) **refuses the whole save** and keeps the form open — the field goes red. |
+| Back Office | Customers · detail | A **BALANCE OUTSTANDING** stat card, only when there is one. |
+| Back Office | Wallets | An **OUTSTANDING** column (one more than the mockup's, between MINIMUM and STATUS), red with an "N overdue" sub-line when late. |
+| Customer | Trading wizard step 2 & 3 | Deposit and balance rows with the due date, and the balance box's "Deposit reserved" line. The funds check gates on the **deposit**, not the full value — before this a 20 % term was meaningless because you still needed 100 % in the wallet to get past step 2. |
+| Customer | Firm-offer banner | "Accepting reserves € X (20 %) now · balance € Y due …", and Accept is **disabled** when the deposit exceeds the available balance, with the shortfall named. |
+| Customer | Trade detail | A **Payment** card: trade value, deposit paid, balance, due date, a **Pay balance** button, and the state in words (overdue by N days / due in N days / paid in full). |
+| Customer | Wallet | A **Balance outstanding** stat card and an **Outstanding balances** table, soonest due first. |
+| Customer | Dashboard | A stat card, and a red/amber banner when a balance is overdue or within 14 days. |
+
+### Things that would be easy to get wrong
+
+- **A Sell has no deposit.** The customer is the one being paid, so
+  `PortalTermsLink.appliesTo()` is false and no schedule is built. Showing
+  "balance due" against a sale would invent an obligation that does not exist.
+- **Outstanding is not reserved.** The deposit is reserved on acceptance and
+  leaves the available balance; the balance is money still sitting in the
+  wallet that is already committed to a date. The Wallet screen shows both
+  cards side by side deliberately — "available" is not "free" once a balance is
+  coming.
+- **A confirmed trade still owes its balance.** Confirmation is execution, not
+  payment. `confirmTrade()` leaves `settlement` untouched and the balance stays
+  payable afterwards; there is a test pinning exactly this.
+- **The accept guard is in the handler, not only the button.** A stale screen
+  must not be able to accept its way into a negative wallet. Rejecting is never
+  blocked — declining cannot overdraw anything.
+- **A missing or corrupt setting falls back to 20 %, never to 0.** The safe
+  direction to fail in is asking for money we might not need, not letting a
+  block through unpaid.
+- **Commercial settings are now per customer** (`state.commercialByCustomer`,
+  keyed by `kvk`). They used to be one shared list, which was harmless while
+  every field was decorative — but editing Vandersteen's deposit would
+  otherwise have silently changed Kramer's.
+- The published request carries `customerId` (`PortalSeedData.CUSTOMER_ID`,
+  Vandersteen's `kvk` `34215678`) so the desk joins a trade to a customer
+  record by id rather than by display name — the Back Office calls the same
+  company "Vandersteen Koeling B.V." and the portal calls it "Vandersteen
+  Koeling".
+
+### Not implemented
+
+Wallet movements are in-memory, exactly as they already were for top-ups: a
+reload resets the balances (the trade records themselves do persist, on the
+link). There is no invoice, no dunning, and nothing stops delivery when a
+balance goes unpaid — the overdue state is surfaced, not enforced.
 
 ## Cross-portal trade flow
 

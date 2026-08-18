@@ -406,6 +406,10 @@
      (already used by .badge.success/.dq-final) — for the top-up confirmation
      state (see renderWalletTopupSuccess). */
   .banner-green { background:var(--pp-green-bg); border:1px solid var(--pp-green-border); color:var(--pp-green-text); }
+  /* Same pattern again, existing red tokens only (already used by
+     .badge.critical/.dq-none) — for an overdue balance, which is the one
+     banner state that is neither a warning nor good news. */
+  .banner-red { background:var(--pp-red-bg); border:1px solid var(--pp-red-border); color:var(--pp-red-text); }
   .banner-icon { width:22px; height:22px; border-radius:50%; background:var(--pp-amber); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex-shrink:0; }
   .banner-icon.success { background:var(--pp-green); }
   .banner-body { flex:1; }
@@ -835,6 +839,7 @@
 <script src="usage-projection.js"></script>
 <script src="portal-seed-data.js"></script>
 <script src="portal-trade-link.js"></script>
+<script src="portal-terms-link.js"></script>
 <script>
 (function () {
   "use strict";
@@ -1150,6 +1155,7 @@
     var req = PortalTradeLink.buildRequest(wizardForRequest, {
       id: id,
       customer: PortalSeedData.CUSTOMER_NAME,
+      customerId: PortalSeedData.CUSTOMER_ID,
       connections: PortalSeedData.WIZARD_CONNECTIONS,
       periods: PortalSeedData.WIZARD_PERIODS,
       year: PortalSeedData.WIZARD_YEAR,
@@ -1317,6 +1323,7 @@
     onTopupAmountInput: onTopupAmountInput, performTopup: performTopup,
     openInvoice: openInvoice, closeInvoice: closeInvoice,
     acceptOffer: acceptOffer, rejectOffer: rejectOffer,
+    payTradeBalance: payTradeBalance,
     noop: function () {}
   };
 
@@ -1332,6 +1339,103 @@
    * any offer against it — survives a page reload, which in-memory state alone
    * would lose.
    */
+  // --- deposit & balance ----------------------------------------------------
+  //
+  // A bought block is entered on a deposit — a share of its value, set per
+  // customer by the Back Office (Commercial settings) and read here through
+  // portal-terms-link.js. The rest is the balance, due the day before delivery
+  // starts.
+  //
+  // Three rules hold this together and are worth keeping straight:
+  //
+  //  1. Before acceptance the percentage is read LIVE, so the desk changing it
+  //     is reflected in what the wizard asks for.
+  //  2. At acceptance it is FROZEN onto the trade (PortalTermsLink.
+  //     buildSettlement), so a later change never alters an agreed trade.
+  //  3. Every screen after that reads the percentage off the TRADE, never off
+  //     the live setting — which is why depositPct() below is only ever used
+  //     for trades that do not exist yet.
+
+  /** The live setting: this customer's deposit %, defaulting to 20. */
+  function depositPct() {
+    try {
+      return PortalTermsLink.depositPctFor(PortalTermsLink.read(window.localStorage), PortalSeedData.CUSTOMER_ID);
+    } catch (e) {
+      return PortalTermsLink.DEFAULT_DEPOSIT_PCT;
+    }
+  }
+
+  /** "20 %" / "12,5 %" — NL decimal, and no trailing ",0" on a whole number. */
+  function pctLabel(pct) {
+    return ConsumptionCalc.formatNL(pct, pct === Math.round(pct) ? 0 : 1) + " %";
+  }
+
+  function eur(v) { return "€ " + ConsumptionCalc.formatNL(v, 2); }
+
+  /**
+   * Every live trade of this customer's with a balance still outstanding, in
+   * due-date order — the soonest deadline first, which is the order anyone
+   * chasing a payment wants them in.
+   *
+   * Accepted and confirmed only: an offer that has not been answered is not a
+   * debt, and a rejected or failed one never became one.
+   */
+  function outstandingBalances() {
+    var live;
+    try { live = PortalTradeLink.read(window.localStorage) || []; } catch (e) { return []; }
+    return live.filter(function (r) {
+      if (!r.settlement || r.settlement.paidAt) { return false; }
+      var st = PortalTradeLink.effectiveStatus(r);
+      return st === PortalTradeLink.STATUS_ACCEPTED || st === PortalTradeLink.STATUS_CONFIRMED;
+    }).sort(function (a, b) {
+      return String(a.settlement.dueDate || "").localeCompare(String(b.settlement.dueDate || ""));
+    });
+  }
+
+  function outstandingTotal() {
+    return outstandingBalances().reduce(function (sum, r) { return sum + (r.settlement.balanceEur || 0); }, 0);
+  }
+
+  /**
+   * Pays a trade's balance from the wallet.
+   *
+   * The wallet movement is in-memory, exactly like performTopup() — this POC
+   * has no ledger behind it — but it is a real movement: available and settled
+   * both drop, and a ledger row is written, so the payment is visible where a
+   * customer would look for it rather than only on the trade.
+   *
+   * Refuses rather than overdrawing. The link's payBalance() re-checks that
+   * there is an unpaid balance at all, so a stale screen cannot pay twice.
+   */
+  function payTradeBalance(id) {
+    var list;
+    try { list = PortalTradeLink.read(window.localStorage) || []; } catch (e) { return; }
+    var req = list.filter(function (r) { return r.id === id; })[0];
+    if (!req || !req.settlement || req.settlement.paidAt) { return; }
+    var amount = req.settlement.balanceEur || 0;
+    if (amount > state.walletAvailable) { return; }   // the button is disabled too
+    var next = PortalTradeLink.payBalance(req, {});
+    if (!next) { return; }
+    try { PortalTradeLink.publish(window.localStorage, next); } catch (e) { /* keep going */ }
+    state.walletAvailable -= amount;
+    state.walletSettled -= amount;
+    state.walletLedgerExtra.unshift({
+      date: ledgerStamp(), type: "Balance paid", tone: "success",
+      desc: (req.shape || "") + " " + (req.period || "") + " · " + pctLabel(100 - req.settlement.depositPct) + " balance",
+      by: "J. de Vries", byNote: "", ref: id, refKind: "trade",
+      debit: eur(amount), credit: "", after: eur(state.walletAvailable)
+    });
+    syncLinkedTrades();
+    renderApp();
+  }
+
+  /** "18-08 14:07" — the wallet ledger's own date format (see WALLET_LEDGER). */
+  function ledgerStamp() {
+    var d = new Date();
+    function p(v) { return (v < 10 ? "0" : "") + v; }
+    return p(d.getDate()) + "-" + p(d.getMonth() + 1) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+
   /**
    * Accept / reject a live offer. The link re-checks expiry itself, so a stale
    * screen can't accept an offer whose window has already closed — it just
@@ -1344,9 +1448,35 @@
     } catch (e) { return; }
     var req = list.filter(function (r) { return r.id === id; })[0];
     if (!req) { return; }
-    var next = PortalTradeLink.respondToOffer(req, action);
+    // The schedule is built here, at the moment of acceptance, from the
+    // percentage in force right now — and then frozen on the record. A Sell
+    // gets none: the customer is the one being paid (PortalTermsLink.appliesTo).
+    var settlement = (action === "accept" && PortalTermsLink.appliesTo(req) && req.offer)
+      ? PortalTermsLink.buildSettlement(req.offer.valueEur, depositPct(), req.periodStart)
+      : null;
+    // The deposit cannot be reserved out of money that is not there. Guarded
+    // in the handler, not only by the disabled button, so a stale screen can't
+    // accept its way into a negative wallet. Rejecting is never blocked.
+    if (settlement && settlement.depositEur > state.walletAvailable) {
+      renderApp();   // re-draws the banner, which already names the shortfall
+      return;
+    }
+    var next = PortalTradeLink.respondToOffer(req, action, { settlement: settlement });
     if (next) {
       try { PortalTradeLink.publish(window.localStorage, next); } catch (e) { /* keep going */ }
+      // Accepting reserves the deposit, not the whole value — that is the
+      // point of the deposit. In-memory only, like every other wallet
+      // movement on this page.
+      if (settlement) {
+        state.walletAvailable -= settlement.depositEur;
+        state.walletReserved += settlement.depositEur;
+        state.walletLedgerExtra.unshift({
+          date: ledgerStamp(), type: "Funds reserved", tone: "warning",
+          desc: (req.shape || "") + " " + (req.period || "") + " · " + pctLabel(settlement.depositPct) + " deposit",
+          by: "J. de Vries", byNote: "", ref: req.id, refKind: "trade",
+          debit: eur(settlement.depositEur), credit: "", after: eur(state.walletAvailable)
+        });
+      }
     }
     syncLinkedTrades();
     renderApp();
@@ -1558,6 +1688,40 @@
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#4338ca" stroke-width="2" stroke-dasharray="5,3"></polyline>';
   }
 
+  function overdueCount() {
+    return outstandingBalances().filter(function (r) {
+      return PortalTermsLink.balanceState(r.settlement) === "overdue";
+    }).length;
+  }
+
+  /**
+   * The Dashboard's balance banner: red when something is late, amber when
+   * something is close, and absent otherwise. Names the trade and links
+   * straight to the payment, because a banner the customer cannot act on from
+   * is just an alarm.
+   */
+  function balanceBannerHtml_() {
+    var list = outstandingBalances().filter(function (r) {
+      var st = PortalTermsLink.balanceState(r.settlement);
+      return st === "overdue" || st === "due-soon";
+    });
+    if (!list.length) { return ""; }
+    var first = list[0];
+    var overdue = PortalTermsLink.balanceState(first.settlement) === "overdue";
+    var days = PortalTermsLink.daysUntilDue(first.settlement);
+    var total = list.reduce(function (sum, r) { return sum + (r.settlement.balanceEur || 0); }, 0);
+    var when = overdue
+      ? "overdue by " + Math.abs(days) + (Math.abs(days) === 1 ? " day" : " days")
+      : "due in " + days + (days === 1 ? " day" : " days");
+    return '<div class="banner ' + (overdue ? "banner-red" : "banner-amber") + '">' +
+      '<div class="banner-icon"' + (overdue ? ' style="background:var(--pp-red)"' : '') + '>!</div>' +
+      '<div class="banner-body"><div class="banner-title">Balance ' + when + ' — ' + eur(total) +
+      (list.length > 1 ? ' across ' + list.length + ' trades' : ' on ' + esc(first.id)) + '</div>' +
+      '<div class="banner-sub">The balance on a bought block falls due the day before delivery starts.</div></div>' +
+      '<div class="banner-actions"><button type="button" class="btn-primary" onclick="PP.openTrade(\'' +
+      esc(first.id) + '\')">Review &amp; pay</button></div></div>';
+  }
+
   function renderDashboardPage() {
     var pending = state.trades.filter(function (t) { return t.pending; })[0];
 
@@ -1566,7 +1730,21 @@
         "settled € " + ConsumptionCalc.formatNL(state.walletSettled, 0) + " · reserved € " + ConsumptionCalc.formatNL(state.walletReserved, 0)) +
       statCardHtml("Coverage — August", "78,4 %", "brand", "of forecast volume hedged") +
       statCardHtml("Uncovered volume", "214,4 MWh", "critical", "≈ € 18.953 at day-ahead") +
-      statCardHtml("Open trades", "2", "warning", "1 awaiting your response");
+      statCardHtml("Open trades", "2", "warning", "1 awaiting your response") +
+      // Only when there is one — an always-present "€ 0,00 outstanding" card
+      // would be noise on every other day.
+      (outstandingTotal() > 0
+        ? statCardHtml("Balance outstanding", "€ " + ConsumptionCalc.formatNL(outstandingTotal(), 2),
+            overdueCount() ? "negative" : "warning",
+            outstandingBalances().length + " trade" + (outstandingBalances().length === 1 ? "" : "s") +
+            (overdueCount() ? " · " + overdueCount() + " overdue" : " · none overdue"))
+        : "");
+
+    // An overdue or imminent balance outranks a pending offer: one is money
+    // already owed, the other is an opportunity. Shown as its own banner
+    // above, not merged into the offer banner, because they call for
+    // different actions.
+    var balanceBannerHtml = balanceBannerHtml_();
 
     var offerBannerHtml = "";
     if (pending) {
@@ -1608,6 +1786,7 @@
 
     var html =
       '<div class="stat-row">' + kpiHtml + '</div>' +
+      balanceBannerHtml +
       offerBannerHtml +
       cardHtml("Price indications", "Indicative only — not an offer", '<div class="price-card-grid" style="grid-template-columns:repeat(6,1fr);gap:10px">' + tilesHtml + '</div>') +
       '<div style="display:flex;gap:20px;align-items:flex-start">' +
@@ -1817,15 +1996,31 @@
 
     var offerHtml = "";
     if (t.pending) {
+      // What accepting will actually cost, worked out before the customer
+      // commits: the deposit leaves the wallet now, the balance later. Quoted
+      // off the live setting because the trade has no frozen schedule yet —
+      // it gets one at the moment of acceptance.
+      var quote = offerDepositQuote(t);
+      var depositLine = quote
+        ? '<div class="ob-sub" style="margin-top:6px">Accepting reserves <strong>' + eur(quote.depositEur) + '</strong> (' +
+          pctLabel(quote.depositPct) + ') now · balance ' + eur(quote.balanceEur) + ' due ' +
+          (quote.dueDate ? formatDateShort(quote.dueDate) : "before delivery") + '</div>' +
+          (quote.affordable ? '' :
+            '<div class="ob-sub" style="margin-top:6px;color:#fca5a5">Available balance is ' + eur(state.walletAvailable) +
+            ' — top up ' + eur(quote.shortfallEur) + ' to accept this offer.</div>')
+        : "";
       offerHtml = '<div class="offer-banner">' +
         '<div class="ob-eyebrow">Firm offer — respond before ' + esc(t.expiresLabel) + '</div>' +
         '<div class="ob-price">' + esc(t.price) + ' <span>/ MWh</span></div>' +
         '<div class="ob-sub">' + esc(t.volume) + ' · total ' + esc(t.value) + ' · VAT excluded</div>' +
+        depositLine +
         '<div class="ob-actions">' +
         // Linked trades carry a real offer on the Back Office link, so Accept
         // and Reject act on it. The seeded demo trade keeps the mockup's stub.
+        // Rejecting is always allowed: declining can never overdraw anything.
         (t.linked
-          ? '<button type="button" class="btn-accept" onclick="PP.acceptOffer(\'' + esc(t.id) + '\')">Accept</button>' +
+          ? '<button type="button" class="btn-accept"' + (quote && !quote.affordable ? " disabled" : "") +
+            ' onclick="PP.acceptOffer(\'' + esc(t.id) + '\')">Accept</button>' +
             '<button type="button" class="btn-reject" onclick="PP.rejectOffer(\'' + esc(t.id) + '\')">Reject</button>'
           : '<button type="button" class="btn-accept" onclick="PP.noop()">Accept</button>' +
             '<button type="button" class="btn-reject" onclick="PP.noop()">Reject</button>') +
@@ -1858,6 +2053,7 @@
         esc(t.id) + '\')">View on consumption chart</button></div>'
       : "";
     var tradeCard = cardHtml("Trade", "", factsHtml + chartFoot);
+    var settlementCard = settlementCardHtml(t);
 
     var linkedCard = "";
     if (t.linked && t.linked.length) {
@@ -1870,8 +2066,106 @@
     document.getElementById("trading-body").innerHTML = offerHtml +
       '<div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;align-items:start;margin-top:' + (offerHtml ? "16px" : "0") + '">' +
       '<div>' + historyCard + '</div>' +
-      '<div style="display:flex;flex-direction:column;gap:16px">' + tradeCard + linkedCard + '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:16px">' + settlementCard + tradeCard + linkedCard + '</div>' +
       '</div>';
+  }
+
+  /**
+   * What accepting a live offer would cost, at today's deposit percentage.
+   *
+   * Null for anything with nothing to quote — a Sell, or a seeded demo row
+   * with no real offer behind it. `affordable` is what both the Accept button
+   * and the accept handler test, so the rule lives in one place.
+   */
+  function offerDepositQuote(t) {
+    if (!t || !t.linked || !t.pending) { return null; }
+    if (String(t.direction || "").toLowerCase() !== "buy") { return null; }
+    var value = t.valueEur;
+    if (value == null) {
+      // The customer-trade shape carries the value formatted for reading, so
+      // fall back to the record when the raw number is not on it.
+      var rec = liveTradeRecords().filter(function (r) { return r.id === t.id; })[0];
+      value = rec && rec.offer ? rec.offer.valueEur : null;
+    }
+    if (value == null) { return null; }
+    var rec2 = liveTradeRecords().filter(function (r) { return r.id === t.id; })[0];
+    var split = PortalTermsLink.splitDeposit(value, depositPct());
+    return {
+      depositPct: split.depositPct,
+      depositEur: split.depositEur,
+      balanceEur: split.balanceEur,
+      dueDate: PortalTermsLink.balanceDueDate(rec2 ? rec2.periodStart : t.periodStart),
+      affordable: split.depositEur <= state.walletAvailable,
+      shortfallEur: Math.max(0, split.depositEur - state.walletAvailable)
+    };
+  }
+
+  /**
+   * What has been paid on this trade and what has not.
+   *
+   * Only for a trade that carries a schedule — a Sell has none (the customer
+   * is being paid), and neither does a seeded demo row or an offer nobody has
+   * accepted yet. Rendering an empty "Payment" card on those would imply a
+   * payment obligation that does not exist.
+   *
+   * Every figure comes off the trade's OWN frozen settlement, never the live
+   * setting: if the desk changes the deposit % tomorrow, this card keeps
+   * showing what was actually agreed.
+   */
+  function settlementCardHtml(t) {
+    var st = t.settlement;
+    if (!st) { return ""; }
+    var state_ = PortalTermsLink.balanceState(st);
+    var days = PortalTermsLink.daysUntilDue(st);
+    var paid = state_ === "paid";
+    var overdue = state_ === "overdue";
+
+    var dueText = paid
+      ? "paid " + formatDateShort(String(st.paidAt).slice(0, 10))
+      : (st.dueDate ? "due " + formatDateShort(st.dueDate) : "due before delivery");
+    var dueTone = paid ? "var(--pp-green)" : (overdue ? "var(--pp-red)" : "var(--pp-text-faint)");
+
+    var rows =
+      '<div class="kv-row"><span class="k">Trade value</span><span class="v">' + eur(st.valueEur) + '</span></div>' +
+      '<div class="kv-row"><span class="k">Deposit (' + pctLabel(st.depositPct) + ')</span>' +
+        '<span class="v" style="color:var(--pp-green)">' + eur(st.depositEur) + ' · paid</span></div>' +
+      '<div class="kv-row"><span class="k">Balance (' + pctLabel(100 - st.depositPct) + ')</span>' +
+        '<span class="v"' + (paid ? ' style="color:var(--pp-green)"' : (overdue ? ' style="color:var(--pp-red)"' : '')) + '>' +
+        eur(st.balanceEur) + '</span></div>' +
+      '<div class="kv-row"><span class="k">' + (paid ? "Settled" : "Payment due") + '</span>' +
+        '<span class="v" style="color:' + dueTone + '">' + esc(dueText) + '</span></div>';
+
+    // The state is said in words as well as colour: a red number alone does
+    // not tell you whether it is late or merely large.
+    var note = "";
+    if (paid) {
+      note = '<div class="banner banner-green" style="margin-top:12px">Paid in full. Nothing further is due on this trade.</div>';
+    } else if (overdue) {
+      var late = Math.abs(days);
+      note = '<div class="banner banner-red" style="margin-top:12px"><strong>Overdue by ' + late +
+        (late === 1 ? " day" : " days") + '.</strong> The balance was due the day before delivery started.</div>';
+    } else if (state_ === "due-soon") {
+      note = '<div class="banner banner-amber" style="margin-top:12px">Due in ' + days +
+        (days === 1 ? " day" : " days") + ' — the day before delivery starts.</div>';
+    } else {
+      note = '<div class="banner banner-teal" style="margin-top:12px">The balance falls due the day before delivery starts. You can pay it any time before then.</div>';
+    }
+
+    var action = "";
+    if (!paid) {
+      var afford = st.balanceEur <= state.walletAvailable;
+      action = '<div class="card-foot-action">' +
+        '<button type="button" class="btn-primary"' + (afford ? "" : " disabled") +
+        ' onclick="PP.payTradeBalance(\'' + esc(t.id) + '\')">Pay balance ' + eur(st.balanceEur) + '</button>' +
+        (afford
+          ? ''
+          : '<div style="font-size:11px;color:var(--pp-red);margin-top:8px">Available balance is ' +
+            eur(state.walletAvailable) + ' — top up ' + eur(st.balanceEur - state.walletAvailable) +
+            ' to cover this. <a class="btn-link" onclick="PP.topUpWallet()">Top up →</a></div>') +
+        '</div>';
+    }
+
+    return cardHtml("Payment", paid ? "Settled in full" : "Deposit paid · balance outstanding", rows + note + action);
   }
 
   function countDaysInRange(startStr, endStr) {
@@ -1932,12 +2226,36 @@
     rows.push(["Volume", ConsumptionCalc.formatNL(totalMW * hours, 2) + " MWh"]);
     return rows;
   }
-  function wizardFundsSufficient() {
+  /**
+   * The wizard's estimated value, and the deposit split it implies.
+   *
+   * A Sell has no deposit — the customer is being paid — so `applies` is
+   * false there and the funds check falls back to "nothing required", which is
+   * the honest answer rather than asking a seller to fund a purchase.
+   */
+  function wizardSettlement() {
     var period = getSelectedWizardPeriod();
-    var totalMW = wizardTotalMW();
     var hours = wizardHours(period);
     var priceVal = state.wizard.shape === "Base" ? period.base : period.peak;
-    return (state.walletAvailable - priceVal * totalMW * hours) >= 0;
+    var value = priceVal * wizardTotalMW() * hours;
+    var applies = String(state.wizard.direction || "").toLowerCase() === "buy";
+    var split = PortalTermsLink.splitDeposit(value, depositPct());
+    return {
+      applies: applies, period: period, valueEur: value,
+      depositPct: split.depositPct,
+      depositEur: applies ? split.depositEur : 0,
+      balanceEur: applies ? split.balanceEur : 0,
+      dueDate: PortalTermsLink.balanceDueDate(period.start)
+    };
+  }
+
+  /**
+   * The wallet only has to cover the DEPOSIT, not the whole block — that is
+   * what the deposit is for. Before this, a customer needed the full value
+   * available to get past step 2, which made a 20 % term meaningless.
+   */
+  function wizardFundsSufficient() {
+    return (state.walletAvailable - wizardSettlement().depositEur) >= 0;
   }
 
   function segTabs(labels, activeIdx, fnName) {
@@ -2044,19 +2362,41 @@
     return table + volField + totalLine + noteBox + noteField + actions;
   }
 
+  /**
+   * The deposit split, as the wizard and the review both show it.
+   *
+   * Both halves are always named, with the balance's own due date next to it.
+   * Showing only "deposit € 15.360" would make the block look like it cost
+   * that, which is exactly the misreading a deposit invites.
+   */
+  function depositRowsHtml(st) {
+    if (!st.applies) {
+      return '<div class="kv-row"><span class="k">Deposit</span><span class="v">None — you are selling</span></div>';
+    }
+    return '<div class="kv-row"><span class="k">Deposit (' + pctLabel(st.depositPct) + ')</span>' +
+      '<span class="v">' + eur(st.depositEur) + '</span></div>' +
+      '<div class="kv-row"><span class="k">Balance due ' + (st.dueDate ? formatDateShort(st.dueDate) : "before delivery") +
+      '</span><span class="v">' + eur(st.balanceEur) + '</span></div>';
+  }
+
   function buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue) {
     var rows = wizardSummaryRows(period, totalMW, hours);
     var rowsHtml = rows.map(function (r) { return '<div class="kv-row"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>'; }).join("");
-    var afterReservation = state.walletAvailable - estimatedValue;
+    var st = wizardSettlement();
+    // Only the deposit is reserved on acceptance, so only the deposit is what
+    // the balance box may claim will leave the wallet.
+    var afterReservation = state.walletAvailable - st.depositEur;
     var sufficient = afterReservation >= 0;
     var balanceHtml = '<div class="balance-box">' +
       '<div class="bb-row"><span>Available balance</span><span>€ ' + ConsumptionCalc.formatNL(state.walletAvailable, 2) + '</span></div>' +
+      '<div class="bb-row"><span>Deposit reserved</span><span>' + eur(st.depositEur) + '</span></div>' +
       '<div class="bb-row total"><span>After reservation</span><span style="color:' + (sufficient ? "var(--pp-green)" : "var(--pp-red)") + '">€ ' + ConsumptionCalc.formatNL(afterReservation, 2) + '</span></div>' +
       '</div><div class="fund-badge">' + badge(sufficient ? "SUFFICIENT FUNDS" : "INSUFFICIENT FUNDS", sufficient ? "success" : "critical") + '</div>';
 
     return rowsHtml +
       '<div class="kv-row"><span class="k">Indicative price</span><span class="v">€ ' + ConsumptionCalc.formatNL(priceVal, 2) + ' / MWh</span></div>' +
       '<div class="kv-row"><span class="k">Estimated value</span><span class="v">€ ' + ConsumptionCalc.formatNL(estimatedValue, 2) + '</span></div>' +
+      depositRowsHtml(st) +
       balanceHtml;
   }
 
@@ -2064,8 +2404,16 @@
     var rows = wizardSummaryRows(period, totalMW, hours);
     var rowsHtml = rows.map(function (r) { return '<div class="kv-row"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>'; }).join("");
     var noteHtml = state.wizard.note ? '<div class="banner banner-teal" style="margin-top:10px">Note: "' + esc(state.wizard.note) + '"</div>' : "";
+    var st = wizardSettlement();
     return rowsHtml +
       '<div class="kv-row"><span class="k">Estimated value</span><span class="v">€ ' + ConsumptionCalc.formatNL(estimatedValue, 2) + '</span></div>' +
+      depositRowsHtml(st) +
+      (st.applies
+        ? '<div class="banner banner-teal" style="margin-top:10px">You pay ' + pctLabel(st.depositPct) +
+          ' when you accept the price. The balance of ' + eur(st.balanceEur) + ' is due ' +
+          (st.dueDate ? "by " + formatDateLong(st.dueDate) : "before delivery starts") +
+          ' — the day before delivery starts. These figures are indicative until the desk sends a firm price.</div>'
+        : '') +
       noteHtml +
       '<div class="wizard-actions"><button type="button" class="btn-primary" onclick="PP.submitWizard()">Submit request</button>' +
       '<button type="button" class="btn-secondary" onclick="PP.wizardGoStep1()">Back</button></div>';
@@ -2111,6 +2459,41 @@
 
   // --- Wallet ----------------------------------------------------------
 
+  /**
+   * Every balance still to pay, soonest first, each payable from here.
+   *
+   * The wallet is where someone goes to ask "what do I owe?", so the answer
+   * lives here as well as on each trade — but the figures still come off each
+   * trade's own frozen schedule, so the two can never disagree.
+   */
+  function outstandingCardHtml() {
+    var list = outstandingBalances();
+    if (!list.length) { return ""; }
+    var cols = "1fr 1.4fr 1.2fr 1fr 1.2fr 1.1fr";
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>TRADE</div><div>BLOCK</div>' +
+      '<div class="gt-cell-num">TRADE VALUE</div><div class="gt-cell-num">DEPOSIT PAID</div>' +
+      '<div class="gt-cell-num">BALANCE DUE</div><div>DUE</div></div>';
+    var rows = list.map(function (r) {
+      var st = r.settlement;
+      var state_ = PortalTermsLink.balanceState(st);
+      var days = PortalTermsLink.daysUntilDue(st);
+      var dueTone = state_ === "overdue" ? "critical" : (state_ === "due-soon" ? "warning" : "neutral");
+      var dueText = state_ === "overdue"
+        ? formatDateShort(st.dueDate) + " · " + Math.abs(days) + "d late"
+        : formatDateShort(st.dueDate) + (state_ === "due-soon" ? " · in " + days + "d" : "");
+      return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openTrade(\'' + esc(r.id) + '\')">' +
+        '<div class="gt-mono" style="color:var(--pp-teal-700)">' + esc(r.id) + '</div>' +
+        '<div>' + esc((r.shape || "") + " " + (r.period || "")) + '</div>' +
+        '<div class="gt-cell-num">' + eur(st.valueEur) + '</div>' +
+        '<div class="gt-cell-num" style="color:var(--pp-green)">' + eur(st.depositEur) + '</div>' +
+        '<div class="gt-cell-num" style="font-weight:600">' + eur(st.balanceEur) + '</div>' +
+        '<div>' + badge(dueText, dueTone) + '</div></div>';
+    }).join("");
+    return cardHtml("Outstanding balances", "Committed on accepted blocks · payable any time before the due date",
+      '<div class="grid-table dense">' + head + rows + '</div>' +
+      '<div class="caption" style="margin-top:8px">The balance on a bought block is due the day before its delivery period starts. Open a trade to pay it.</div>');
+  }
+
   function renderWalletPage() {
     if (state.walletView === "topup") { renderWalletTopup(); return; }
     if (state.walletView === "topup-success") { renderWalletTopupSuccess(); return; }
@@ -2118,7 +2501,15 @@
     var kpiHtml =
       statCardHtml("Available balance", "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2), "brand", "ready to reserve for new trades") +
       statCardHtml("Settled balance", "€ " + ConsumptionCalc.formatNL(state.walletSettled, 2), "", "cleared funds") +
-      statCardHtml("Reserved", "€ " + ConsumptionCalc.formatNL(state.walletReserved, 2), "warning", "1 accepted trade awaiting confirmation");
+      statCardHtml("Reserved", "€ " + ConsumptionCalc.formatNL(state.walletReserved, 2), "warning", "1 accepted trade awaiting confirmation") +
+      // Outstanding is NOT reserved: it is money still in the wallet that is
+      // already committed to a date. Keeping the two cards side by side is the
+      // point — "available" is not "free" once a balance is coming.
+      (outstandingTotal() > 0
+        ? statCardHtml("Balance outstanding", "€ " + ConsumptionCalc.formatNL(outstandingTotal(), 2),
+            overdueCount() ? "negative" : "warning",
+            "not yet reserved — due before delivery")
+        : "");
 
     var lowBalanceBanner = state.walletAvailable < MIN_BALANCE_ALERT
       ? '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">Your minimum balance alert is set at € ' +
@@ -2149,7 +2540,8 @@
       '<div class="caption" style="margin-top:8px">Every movement names the colleague who caused it. Reference links open the trade, invoice or payment.</div>' +
       '<div class="caption">Showing ' + Math.min(12, allLedger.length) + ' of 146 entries</div>');
 
-    document.getElementById("wallet-body").innerHTML = '<div class="stat-row">' + kpiHtml + '</div>' + lowBalanceBanner + ledgerCard;
+    document.getElementById("wallet-body").innerHTML = '<div class="stat-row">' + kpiHtml + '</div>' +
+      lowBalanceBanner + outstandingCardHtml() + ledgerCard;
   }
 
   /**

@@ -234,6 +234,7 @@
 </div>
 
 <script src="portal-trade-link.js"></script>
+<script src="portal-terms-link.js"></script>
 <script src="portal-seed-data.js"></script>
 <script src="back-office-desk-data.js"></script>
 <script src="back-office-screens-data.js"></script>
@@ -261,9 +262,34 @@
     expiredShown: {},      // ids already re-rendered at the moment of expiry
     customerId: null,      // open customer on the Customers screen
     commercialEditing: false,
-    commercialFields: S.COMMERCIAL_FIELDS.slice(),
+    // Per customer, keyed by kvk. It used to be one shared list, which was
+    // harmless while every field was decorative — but the deposit % is a real
+    // per-customer term the Customer Portal obeys, and one shared list would
+    // have meant editing Vandersteen's deposit silently changed Kramer's.
+    commercialByCustomer: {},
     commercialSnapshot: null   // pre-edit copy, so Cancel can actually cancel
   };
+
+  /**
+   * This customer's commercial fields, seeded from the mockup's defaults on
+   * first open and with the deposit % read from the cross-portal terms link
+   * (see portal-terms-link.js) so a reload does not lose what the desk set.
+   */
+  function commercialFieldsFor(kvk) {
+    if (!state.commercialByCustomer[kvk]) {
+      var pct = PortalTermsLink.depositPctFor(PortalTermsLink.read(window.localStorage), kvk);
+      state.commercialByCustomer[kvk] = S.COMMERCIAL_FIELDS.map(function (fld) {
+        if (fld.key !== "depositPct") { return fld; }
+        var numeric = String(pct).replace(".", ",");
+        var next = {};
+        for (var k in fld) { if (fld.hasOwnProperty(k)) { next[k] = fld[k]; } }
+        next.numeric = numeric;
+        next.value = numeric + fld.suffix;
+        return next;
+      });
+    }
+    return state.commercialByCustomer[kvk];
+  }
 
   var deskBody = document.getElementById("desk-body");
   var crumb = document.getElementById("crumb");
@@ -1348,7 +1374,7 @@
 
   function customersCommercialCardHtml() {
     var editing = state.commercialEditing;
-    var fields = state.commercialFields;
+    var fields = commercialFieldsFor(state.customerId);
 
     var headActions = editing
       ? '<div style="display:flex;gap:8px">' +
@@ -1373,9 +1399,11 @@
           if (f.money) {
             // The input is uncontrolled (value attribute only) and its handler
             // deliberately does NOT re-render — see BO.updateCommercialField.
-            control = '<div style="display:flex;align-items:center;border:1px solid var(--pp-border-strong);border-radius:7px;overflow:hidden">' +
-              '<span style="padding:8px 0 8px 10px;font-size:12.5px;color:var(--pp-text-faint);background:var(--pp-surface-alt)">' + esc(f.prefix) + '</span>' +
-              '<input value="' + esc(f.numeric) + '" oninput="BO.updateCommercialField(' + i + ', this.value)" style="flex:1;min-width:0;padding:8px 4px;border:none;outline:none;font-size:12.5px;font-family:var(--font-sans);color:var(--pp-text-heading)">' +
+            var invalid = f.key === "depositPct" && PortalTermsLink.parsePct(f.numeric) === null;
+            control = '<div style="display:flex;align-items:center;border:1px solid ' +
+              (invalid ? 'var(--pp-red)' : 'var(--pp-border-strong)') + ';border-radius:7px;overflow:hidden">' +
+              (f.prefix ? '<span style="padding:8px 0 8px 10px;font-size:12.5px;color:var(--pp-text-faint);background:var(--pp-surface-alt)">' + esc(f.prefix) + '</span>' : '') +
+              '<input value="' + esc(f.numeric) + '" oninput="BO.updateCommercialField(' + i + ', this.value)" style="flex:1;min-width:0;padding:8px 10px;border:none;outline:none;font-size:12.5px;font-family:var(--font-sans);color:var(--pp-text-heading)">' +
               '<span style="padding:8px 10px 8px 0;font-size:12.5px;color:var(--pp-text-faint);background:var(--pp-surface-alt)">' + esc(f.suffix) + '</span>' +
               '</div>';
           } else {
@@ -1389,6 +1417,18 @@
         '</div>';
     }
 
+    // What the deposit actually does, said once under the fields. Without it
+    // the number is just a percentage; with it, the desk can see the
+    // consequence of changing it before they change it.
+    var deposit = null;
+    fields.forEach(function (fld) { if (fld.key === "depositPct") { deposit = fld; } });
+    var depositNote = deposit
+      ? '<div style="margin-top:12px;padding:9px 11px;background:var(--pp-surface-alt);border-radius:7px;font-size:11px;color:var(--pp-text-body);line-height:1.5">' +
+        'This customer pays <strong>' + esc(deposit.value) + '</strong> of a bought block up front; the rest falls due the day before delivery starts. ' +
+        'Changing it applies to <strong>new</strong> trades only — a trade already accepted keeps the percentage it was agreed on.' +
+        '</div>'
+      : '';
+
     // Hand-rolled card (not the DS Card) because the header carries buttons —
     // geometry copied verbatim from the mockup.
     return '<div style="background:#fff;border:1px solid var(--pp-border);border-radius:10px;padding:18px 20px">' +
@@ -1397,6 +1437,7 @@
         headActions +
       '</div>' +
       body +
+      depositNote +
       '</div>';
   }
 
@@ -1440,6 +1481,7 @@
 
   function customersDetailHtml(c) {
     var d = buildCustomerDetail(c);
+    var outstanding = outstandingFor(c.kvk, c.name);
 
     var stats = '<div style="display:flex;flex-wrap:wrap;gap:14px">' +
       customersStatCard('STATUS', d.status, d.statusTone) +
@@ -1447,6 +1489,12 @@
       customersStatCard('AVAILABLE BALANCE', d.available, d.availableTone) +
       customersStatCard('OPEN TRADES', d.openTrades, 'default') +
       customersStatCard('LAST INVOICE', d.lastInvoice, 'default') +
+      // Only shown when there is something to show: a card reading "€ 0,00"
+      // on every customer would train the desk to ignore the one that matters.
+      (outstanding.count
+        ? customersStatCard('BALANCE OUTSTANDING', outstandingLabel(outstanding),
+            outstanding.overdueCount ? 'critical' : 'warning')
+        : '') +
       '</div>';
 
     var topRow = '<div style="display:flex;gap:16px;align-items:flex-start">' +
@@ -1505,7 +1553,18 @@
   // verbatim.
 
   /** The mockup's grid template, shared by the table head and every row. */
-  var WALLET_COLS = "1.6fr 1fr 1fr 1fr 1fr 1fr 1.2fr 0.6fr";
+  // One more column than the mockup: OUTSTANDING, between MINIMUM and STATUS.
+  // The rest are the mockup's own widths, untouched.
+  var WALLET_COLS = "1.6fr 1fr 1fr 1fr 1fr 1.1fr 1fr 1.2fr 0.6fr";
+
+  /** A wallet row's customer id, matched by name against the customers list. */
+  function walletKvk(name) {
+    for (var i = 0; i < CUSTOMER_LIST.length; i++) {
+      var c = CUSTOMER_LIST[i].name.toLowerCase(), w = String(name).toLowerCase();
+      if (c === w || c.indexOf(w) === 0) { return CUSTOMER_LIST[i].kvk; }
+    }
+    return null;
+  }
   /** Field label above each input in the two forms. */
   var WALLET_FIELD_LABEL = "font-size:10.5px;font-weight:600;color:var(--pp-text-body);margin-bottom:6px";
   /** Default input chrome, and the teal-bordered emphasised variant (AMOUNT). */
@@ -1521,13 +1580,61 @@
     return statCard(s.label, s.value, s.tone, s.sublabel, false);
   }
 
+  /**
+   * What a customer still owes on blocks they have bought: the unpaid balances
+   * on their live trades.
+   *
+   * Live records only. A seeded row has no settlement schedule behind it — it
+   * is mockup furniture — and inventing one would put a number on this screen
+   * that no customer was ever told about. `matchesCustomer` takes the id when
+   * the record carries one and falls back to a name prefix for records
+   * published before the id existed, because "Vandersteen Koeling" and
+   * "Vandersteen Koeling B.V." are the same company.
+   */
+  function matchesCustomer(req, kvk, name) {
+    if (req.customerId) { return req.customerId === kvk; }
+    if (!name || !req.customer) { return false; }
+    var a = String(req.customer).toLowerCase(), b = String(name).toLowerCase();
+    return a.indexOf(b) === 0 || b.indexOf(a) === 0;
+  }
+
+  function outstandingFor(kvk, name) {
+    var out = { totalEur: 0, overdueEur: 0, count: 0, overdueCount: 0 };
+    state.requests.forEach(function (r) {
+      if (!matchesCustomer(r, kvk, name)) { return; }
+      var st = r.settlement;
+      if (!st || st.paidAt) { return; }
+      // Only a trade the customer is actually committed to owes anything —
+      // an offer they have not answered yet is not a debt.
+      var status = Link.effectiveStatus(r);
+      if (status !== Link.STATUS_ACCEPTED && status !== Link.STATUS_CONFIRMED) { return; }
+      out.totalEur += st.balanceEur || 0;
+      out.count += 1;
+      if (PortalTermsLink.balanceState(st) === "overdue") {
+        out.overdueEur += st.balanceEur || 0;
+        out.overdueCount += 1;
+      }
+    });
+    return out;
+  }
+
+  /** "€ 61.440,00", or an em dash when there is nothing outstanding. */
+  function outstandingLabel(o) {
+    return o.count ? "€ " + Link.formatNL(o.totalEur, 2) : "—";
+  }
+
   function walletRowHtml(w) {
+    var o = outstandingFor(walletKvk(w.name), w.name);
     return '<div style="display:grid;grid-template-columns:' + WALLET_COLS + ';gap:10px;padding:11px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
       '<div style="font-weight:600;color:var(--pp-text-heading)">' + esc(w.name) + "</div>" +
       '<div style="text-align:right;color:' + esc(w.settledColor) + '">' + esc(w.settled) + "</div>" +
       '<div style="text-align:right">' + esc(w.reserved) + "</div>" +
       '<div style="text-align:right;font-weight:700;color:' + esc(w.availableColor) + '">' + esc(w.available) + "</div>" +
       '<div style="text-align:right">' + esc(w.minimum) + "</div>" +
+      '<div style="text-align:right;color:' + (o.overdueCount ? "var(--pp-red)" : "var(--pp-text-body)") +
+        (o.count ? ';font-weight:600' : '') + '">' + esc(outstandingLabel(o)) +
+        (o.overdueCount ? '<div style="font-size:10px;font-weight:600;color:var(--pp-red)">' + o.overdueCount + ' overdue</div>' : '') +
+      "</div>" +
       "<div>" + badge(w.statusLabel, w.statusTone) + "</div>" +
       '<div style="color:var(--pp-text-body)">' + esc(w.lastMovement) + "</div>" +
       '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer" onclick="BO.noop()">open</div>' +
@@ -1542,6 +1649,7 @@
         '<div style="text-align:right">RESERVED</div>' +
         '<div style="text-align:right">AVAILABLE</div>' +
         '<div style="text-align:right">MINIMUM</div>' +
+        '<div style="text-align:right">OUTSTANDING</div>' +
         "<div>STATUS</div>" +
         "<div>LAST MOVEMENT</div>" +
         "<div></div>" +
@@ -1879,17 +1987,37 @@
    * snapshot taken when editing started, which is what the control claims to do.
    */
   function startCommercialEdit() {
-    state.commercialSnapshot = state.commercialFields.map(function (f) { return f; });
+    state.commercialSnapshot = commercialFieldsFor(state.customerId).map(function (f) { return f; });
     state.commercialEditing = true;
     render();
   }
   function cancelCommercialEdit() {
-    if (state.commercialSnapshot) { state.commercialFields = state.commercialSnapshot; }
+    if (state.commercialSnapshot) { state.commercialByCustomer[state.customerId] = state.commercialSnapshot; }
     state.commercialSnapshot = null;
     state.commercialEditing = false;
     render();
   }
+
+  /**
+   * Save publishes the deposit % to the cross-portal terms link, so the
+   * Customer Portal picks it up on its next render — in another tab via the
+   * `storage` event, with no reload.
+   *
+   * An unusable deposit (blank, negative, over 100) refuses the whole save and
+   * keeps the form open rather than writing a percentage that means nothing.
+   * The other fields are the mockup's own decorative ones and are not
+   * validated, because nothing downstream reads them.
+   */
   function saveCommercialEdit() {
+    var fields = commercialFieldsFor(state.customerId);
+    var deposit = null;
+    fields.forEach(function (f) { if (f.key === "depositPct") { deposit = f; } });
+    if (deposit) {
+      var pct = PortalTermsLink.parsePct(deposit.numeric);
+      if (pct === null) { render(); return; }   // refuse; the field is already flagged red
+      var terms = PortalTermsLink.setDepositPct(PortalTermsLink.read(window.localStorage), state.customerId, pct);
+      if (terms) { PortalTermsLink.write(window.localStorage, terms); }
+    }
     state.commercialSnapshot = null;
     state.commercialEditing = false;
     render();
@@ -1901,10 +2029,10 @@
    * Save instead, which is the only place the new value is shown.
    */
   function updateCommercialField(i, numeric) {
-    var fields = state.commercialFields.slice();
+    var fields = commercialFieldsFor(state.customerId).slice();
     var f = fields[i];
     if (!f) { return; }
-    var next = { label: f.label, color: f.color, money: f.money, numeric: numeric };
+    var next = { label: f.label, color: f.color, money: f.money, key: f.key, numeric: numeric };
     if (f.money) {
       next.prefix = f.prefix; next.suffix = f.suffix;
       next.value = f.prefix + numeric + f.suffix;
@@ -1912,7 +2040,7 @@
       next.value = numeric;
     }
     fields[i] = next;
-    state.commercialFields = fields;
+    state.commercialByCustomer[state.customerId] = fields;
   }
 
   /**

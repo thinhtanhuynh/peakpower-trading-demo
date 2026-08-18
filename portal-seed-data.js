@@ -21,6 +21,12 @@
   // How the Back Office desk names this customer (no "B.V.", matching the
   // Back Office mockup's own seeded trades).
   var CUSTOMER_NAME = "Vandersteen Koeling";
+  // This customer's id in the Back Office's own CUSTOMER_LIST (its `kvk`).
+  // It is what the commercial terms link is keyed by, so the deposit % the
+  // desk sets on Vandersteen's Commercial settings is the one this portal
+  // obeys — matching by display name would not survive the Back Office
+  // calling the same company "Vandersteen Koeling B.V.".
+  var CUSTOMER_ID = "34215678";
   var TONE_COLOR = { submit: "#0d9488", indigo: "#4f46e5", amber: "#d97706", green: "#15803d", red: "#dc2626" };
 
   var CONNECTIONS = [
@@ -278,6 +284,7 @@
     NAV: NAV,
     USER_LINE: USER_LINE,
     CUSTOMER_NAME: CUSTOMER_NAME,
+    CUSTOMER_ID: CUSTOMER_ID,
     TONE_COLOR: TONE_COLOR,
     CONNECTIONS: CONNECTIONS,
     WIZARD_CONNECTIONS: WIZARD_CONNECTIONS,

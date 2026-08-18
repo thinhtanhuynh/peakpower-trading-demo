@@ -560,4 +560,43 @@ function pricedFixture(extra) {
   assert.strictEqual(Link.toCustomerTrade(list[0], T0).pending, true);
 })();
 
+// --- the deposit schedule rides on the record --------------------------------
+// This module knows nothing about commercial terms: it carries whatever
+// settlement the caller built (PortalTermsLink owns the maths) and guards when
+// it can be paid.
+(function () {
+  var Terms = require("./portal-terms-link.js");
+  var priced = Link.priceRequest(Link.buildRequest(WIZ, opts({ submittedAt: T0 })), { priceMwh: 100, now: T0 });
+  var settlement = Terms.buildSettlement(priced.offer.valueEur, 20, priced.periodStart);
+
+  var rejected = Link.rejectOffer(priced, { now: T0, settlement: settlement });
+  assert.strictEqual(rejected.settlement, undefined, "a rejected offer never picks up a schedule");
+
+  var accepted = Link.acceptOffer(priced, { now: T0, settlement: settlement });
+  assert.ok(accepted.settlement, "an accepted offer carries its schedule");
+  assertClose(accepted.settlement.depositEur + accepted.settlement.balanceEur, priced.offer.valueEur,
+    "deposit + balance = the offer's own total value");
+  assert.strictEqual(accepted.settlement.paidAt, null, "…and starts unpaid");
+
+  var plain = Link.acceptOffer(priced, { now: T0 });
+  assert.strictEqual(plain.settlement, undefined, "no settlement passed, none attached");
+
+  var paid = Link.payBalance(accepted, { now: T0, by: "J. de Vries" });
+  assert.ok(paid.settlement.paidAt, "payBalance stamps the payment");
+  assert.strictEqual(paid.settlement.paidBy, "J. de Vries", "…and who made it");
+  assert.strictEqual(accepted.settlement.paidAt, null, "payBalance is pure — the input is untouched");
+  assertClose(paid.settlement.balanceEur, accepted.settlement.balanceEur, "the amount does not change on payment");
+
+  assert.strictEqual(Link.payBalance(paid, { now: T0 }), null, "a paid balance cannot be paid twice");
+  assert.strictEqual(Link.payBalance(plain, { now: T0 }), null, "a trade with no schedule has nothing to pay");
+  assert.strictEqual(Link.payBalance(null, {}), null, "no trade at all");
+
+  // A confirmed trade still owes its balance — confirmation is execution, not
+  // payment — so the schedule must survive confirmTrade untouched.
+  var confirmed = Link.confirmTrade(accepted, { now: T0, reference: "ICE-1" });
+  assert.ok(confirmed.settlement && !confirmed.settlement.paidAt,
+    "confirming does not settle the balance");
+  assert.ok(Link.payBalance(confirmed, { now: T0 }), "…and it can still be paid afterwards");
+})();
+
 console.log("portal-trade-link.test.js: all assertions passed");

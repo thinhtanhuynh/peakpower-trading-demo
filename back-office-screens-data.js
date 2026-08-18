@@ -207,6 +207,11 @@
    * `state.commercialFields` (see customers.render.js).
    */
   var COMMERCIAL_FIELDS = [
+    // The one field with teeth: the Customer Portal reads it (through
+    // portal-terms-link.js) and will not let a block be entered for less than
+    // this share of its value. `key` marks it as the field the terms link
+    // owns; the mockup's own fields have no key and stay decorative.
+    {label:'Deposit on a bought block', value:'20 %', color:'var(--pp-teal-700)', money:true, key:'depositPct', prefix:'', numeric:'20', suffix:' %'},
     {label:'Surcharge (from 1 Jan 2026)', value:'€ 4,5000 / MWh', color:'var(--pp-text-heading)', money:true, prefix:'€ ', numeric:'4,5000', suffix:' / MWh'},
     {label:'Previous (2025)', value:'€ 5,2000 / MWh', color:'var(--pp-text-heading)', money:true, prefix:'€ ', numeric:'5,2000', suffix:' / MWh'},
     {label:'Wallet minimum — warning', value:'€ 25.000,00', color:'var(--pp-text-heading)', money:true, prefix:'€ ', numeric:'25.000,00', suffix:''},

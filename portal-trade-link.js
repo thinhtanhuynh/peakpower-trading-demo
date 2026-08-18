@@ -115,6 +115,9 @@
     return {
       id: opts.id,
       customer: opts.customer || "",
+      // The customer's Back Office id, so the desk can join a live trade to a
+      // customer record without matching on a display name.
+      customerId: opts.customerId || null,
       direction: wizard.direction,
       shape: wizard.shape,
       period: period.period,
@@ -270,11 +273,36 @@
       by: opts.by || "J. de Vries · Energy Manager",
       at: new Date(nowMs(opts.now)).toISOString()
     };
+    // The deposit schedule is attached at acceptance and frozen there — see
+    // PortalTermsLink.buildSettlement for why it is a snapshot rather than a
+    // live read of the Back Office setting. Built by the caller (this module
+    // knows nothing about commercial terms) and simply carried, so a rejected
+    // offer never picks one up.
+    if (action === "accept" && opts.settlement) { out.settlement = opts.settlement; }
     return out;
   }
 
   function acceptOffer(req, opts) { return respondToOffer(req, "accept", opts); }
   function rejectOffer(req, opts) { return respondToOffer(req, "reject", opts); }
+
+  /**
+   * Records the balance as paid. Pure; returns a new record, or null when
+   * there is nothing to pay — no schedule on this trade, or it is already
+   * settled. Guarded here rather than only in the UI, so a stale screen can't
+   * pay the same balance twice.
+   */
+  function payBalance(req, opts) {
+    opts = opts || {};
+    if (!req || !req.settlement || req.settlement.paidAt) { return null; }
+    var out = {};
+    for (var k in req) { out[k] = req[k]; }
+    var s = {};
+    for (var f in req.settlement) { if (req.settlement.hasOwnProperty(f)) { s[f] = req.settlement[f]; } }
+    s.paidAt = new Date(nowMs(opts.now)).toISOString();
+    s.paidBy = opts.by || "J. de Vries · Energy Manager";
+    out.settlement = s;
+    return out;
+  }
 
   function isConfirmed(req) { return !!(req && req.confirmation); }
   function isFailed(req) { return !!(req && req.failure); }
@@ -452,8 +480,14 @@
           title: acc ? "Offer accepted" : "Offer rejected",
           actor: req.response.by,
           ts: formatStamp(req.response.at),
+          // What was reserved is the DEPOSIT, not the whole value, whenever the
+          // trade carries a schedule — saying "€ 76.800 reserved" when € 15.360
+          // moved would be a plain misstatement of the customer's own wallet.
           body: acc
-            ? "€ " + formatNL(o.valueEur, 2) + " reserved on the company wallet. Awaiting execution confirmation."
+            ? (req.settlement
+                ? "€ " + formatNL(req.settlement.depositEur, 2) + " deposit reserved on the company wallet (" +
+                  formatNL(req.settlement.depositPct, 0) + " % of € " + formatNL(o.valueEur, 2) + "). Awaiting execution confirmation."
+                : "€ " + formatNL(o.valueEur, 2) + " reserved on the company wallet. Awaiting execution confirmation.")
             : "The offer was declined. No volume was contracted.",
           tone: acc ? "amber" : "red"
         });
@@ -465,7 +499,10 @@
             actor: c.by,
             ts: formatStamp(c.at),
             body: "Executed on the market" + (c.reference ? ", reference " + c.reference : "") +
-              ". Reservation settled — wallet debited € " + formatNL(o.valueEur, 2) + ".",
+              (req.settlement
+                ? ". Deposit of € " + formatNL(req.settlement.depositEur, 2) + " settled; balance of € " +
+                  formatNL(req.settlement.balanceEur, 2) + " due " + (req.settlement.dueDate || "before delivery") + "."
+                : ". Reservation settled — wallet debited € " + formatNL(o.valueEur, 2) + "."),
             tone: "green"
           });
           facts.push(["Confirmed by", c.by]);
@@ -493,6 +530,18 @@
           tone: "red"
         });
       }
+    }
+
+    // The customer paying their balance is an event, not just a flag — it
+    // belongs on the same timeline as the offer and the confirmation.
+    if (req.settlement && req.settlement.paidAt) {
+      events.push({
+        title: "Balance paid",
+        actor: req.settlement.paidBy || "J. de Vries · Energy Manager",
+        ts: formatStamp(req.settlement.paidAt),
+        body: "€ " + formatNL(req.settlement.balanceEur, 2) + " paid from the company wallet. Nothing further is due on this trade.",
+        tone: "green"
+      });
     }
 
     return {
@@ -525,6 +574,7 @@
       secondsTotal: priced ? req.offer.reactionMinutes * 60 : 0,
       events: events,
       facts: facts,
+      settlement: req.settlement || null,
       linked: true
     };
   }
@@ -617,6 +667,7 @@
     priceRequest: priceRequest,
     respondToOffer: respondToOffer,
     acceptOffer: acceptOffer,
+    payBalance: payBalance,
     rejectOffer: rejectOffer,
     isResolved: isResolved,
     secondsRemaining: secondsRemaining,
