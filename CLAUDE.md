@@ -106,7 +106,7 @@ jsdom or Playwright smoke test after changing a page shell.
 | `portal-trade-link.js` | Carries trades between the portals over `localStorage`. Tested |
 | `portal-seed-data.js` | Static seed data for the customer screens with no live source |
 | `back-office-desk-data.js` | Back-office seeded trades/queues plus `buildQueues()` |
-| `back-office-screens-data.js` | Back-office seeded data for Home, Customers, Wallets, Invoicing, Data & feeds |
+| `back-office-screens-data.js` | Back-office seeded data for Home, Customers, Wallets, Settlements, Data & feeds |
 | `customer-portal.html` | The working customer portal (7 screens) |
 | `back-office-portal.html` | The working back-office portal (6 real screens + 2 placeholders) |
 
@@ -116,9 +116,9 @@ gzip before sending them through Claude (`gzip -9 -k file.json`).
 ## Portal mockup navigation
 
 **Customer Portal**: Dashboard, Connections, Consumption, Prices, Trading,
-Wallet, Invoices. "Connections" is where EANs get linked to an account.
+Wallet, Settlements. "Connections" is where EANs get linked to an account.
 
-**Back Office Portal**: Home, Trade desk, Customers, Wallets, Invoicing,
+**Back Office Portal**: Home, Trade desk, Customers, Wallets, Settlements,
 Data & feeds, Reference data, Audit.
 
 A mockup's real component styles live in a gzip+base64 blob inside the file
@@ -340,7 +340,7 @@ separate files. It does not modify or depend on `Customer Portal -
 Preview.html`.
 
 The state machine (`state` plus `goTo`/`openConnection`/`openTrade`/
-`startWizard`/`topUpWallet`/`performTopup`/`openInvoice` and friends) is
+`startWizard`/`topUpWallet`/`performTopup`/`openSettlement` and friends) is
 exposed on `window.PP` so generated HTML can wire `onclick`/`onchange`
 directly.
 
@@ -358,7 +358,7 @@ from real data; that was reverted on explicit product direction.
 | **Prices** | `portal-seed-data.js` (`PRICES`) | Single view. Six indicative cards, each jumping into the wizard via `startWizardFromPrice`, plus a synthetic 90-day trend chart |
 | **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`) + `state.trades` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView` |
 | **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `TOPUPS`, `BANK_DETAILS`) + in-memory balances | **ledger** / **topup**, via `state.walletView`. Interactive but not persisted across reload |
-| **Invoices** | `portal-seed-data.js` (`INVOICES`) | **list** / **detail** (`state.invoiceId`) |
+| **Settlements** | `portal-seed-data.js` (`SETTLEMENTS`) | **list** / **detail** (`state.settlementId`) |
 
 The Dashboard's mini chart has its own `buildMiniChartSvg()`, kept separate
 from the Day chart's `buildChartSvg()` so the two `<svg>`s don't collide on
@@ -389,11 +389,11 @@ Two densities, via a `.dense` modifier:
 
 | | head | row | gap | used by |
 |---|---|---|---|---|
-| default | `10px 16px` @10.5px | `13px 16px` @12.5px | 14px | top-level lists: Connections, Trading, Invoices |
-| `.dense` | `9px 12px` @10px | `11px 12px` @12px | 10px | tables nested in a card: wallet ledger, invoice line items, connection block positions |
+| default | `10px 16px` @10.5px | `13px 16px` @12.5px | 14px | top-level lists: Connections, Trading, Settlements |
+| `.dense` | `9px 12px` @10px | `11px 12px` @12px | 10px | tables nested in a card: wallet ledger, settlement line items, connection block positions |
 
 Per-screen `grid-template-columns` are copied verbatim (wallet ledger
-`0.9fr 1fr 1.8fr 1fr 1fr 0.8fr 0.8fr 1fr`, invoice line items
+`0.9fr 1fr 1.8fr 1fr 1fr 0.8fr 0.8fr 1fr`, settlement line items
 `0.3fr 2.6fr 1fr 1fr 1fr 1fr`) — don't tidy these into round numbers.
 
 ### Vertical spacing between sections
@@ -405,7 +405,7 @@ nothing. Those wrappers carry the gap themselves:
 
 ```css
 #dashboard-body, #connections-body, #prices-body,
-#trading-body, #wallet-body, #invoices-body { display:flex; flex-direction:column; gap:16px; }
+#trading-body, #wallet-body, #settlements-body { display:flex; flex-direction:column; gap:16px; }
 #dashboard-body { gap:20px; }   /* the one screen the mockup spaces at 20px */
 ```
 
@@ -1219,9 +1219,9 @@ classes:
 
 The Customer Portal's nav is four labelled groups — **Overview** (Dashboard),
 **Position** (Connections, Consumption), **Market** (Prices, Trading),
-**Finance** (Wallet, Invoices) — each link carrying a small domain-coloured
+**Finance** (Wallet, Settlements) — each link carrying a small domain-coloured
 square dot (Dashboard blue-700, Connections mint, Consumption blue-500, Prices
-amber, Trading blue-300, Wallet teal, Invoices violet) instead of the row
+amber, Trading blue-300, Wallet teal, Settlements violet) instead of the row
 tinting.
 
 The grouping is markup and CSS only: `attachSidebarNav()`'s wiring and
@@ -1287,6 +1287,20 @@ deposit flow rather than only refusing. `wizardGoStep2()` and `submitWizard()`
 **re-check it themselves**, so the rule survives a call that bypasses the
 disabled button.
 
+### Two things called settlement
+
+There are no invoices in this model — the monthly document is a **settlement**.
+That puts the word on two different things:
+
+| | means | called |
+|---|---|---|
+| The monthly document | the period's reconciled energy lines | the Settlements screen, `PortalSeedData.SETTLEMENTS`, `state.settlementId`, `openSettlement()`, ids `STL-2026-08-0042` |
+| A trade's payment schedule | deposit + balance frozen onto a bought block | `req.settlement`, `PortalTermsLink.buildSettlement()`, the trade detail's Payment card |
+
+They never meet in one object, so the shared word costs nothing at the call
+site — but don't reach for `settlement` as a bare variable name in new code
+without saying which one it is.
+
 ### Two things called deposit
 
 The wallet's funding flow is called **Deposit** in copy, which puts the word on
@@ -1333,8 +1347,8 @@ this block", with the link — not the sentence — carrying "Deposit funds →"
   "Vandersteen Koeling".
 
 **Not implemented:** wallet movements are in-memory, so a reload resets the
-balances (trade records themselves persist on the link). There is no invoice,
-no dunning, and nothing stops delivery when a balance goes unpaid — the
+balances (trade records themselves persist on the link). Nothing is billed,
+there is no dunning, and nothing stops delivery when a balance goes unpaid — the
 overdue state is surfaced, not enforced.
 
 ## Cross-portal trade flow
@@ -1464,7 +1478,7 @@ detail, so returning lands on the list rather than a stale record.
 | **Trade desk** | live | list / detail; the only screen with a real backend |
 | **Customers** | `back-office-screens-data.js` | list / detail (`state.customerId`), with editable Commercial settings. `buildCustomerDetail()` is ported verbatim, including its synthesised branch for every customer other than Vandersteen |
 | **Wallets** | `back-office-screens-data.js` | Read-only, plus the live OUTSTANDING column |
-| **Invoicing** | `back-office-screens-data.js` | Read-only |
+| **Settlements** | `back-office-screens-data.js` | Read-only |
 | **Data & feeds** | `back-office-screens-data.js` | Read-only |
 
 **Design-system helpers.** `cardHtml` / `statCard` / `badge` / `dsBanner` /

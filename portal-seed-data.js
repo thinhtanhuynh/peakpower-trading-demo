@@ -1,6 +1,6 @@
 /*
  * Static seed/mock data for the Dashboard, Connections, Prices, Trading,
- * Wallet, and Invoices screens of the Customer Portal (Live Data) page.
+ * Wallet, and Settlements screens of the Customer Portal (Live Data) page.
  *
  * This is a verbatim port of Customer Portal - Preview.html's own bundled
  * demo data/state (that mockup is itself a static seeded demo — every one
@@ -16,7 +16,7 @@
 (function (root) {
   "use strict";
 
-  var NAV = ["Dashboard", "Connections", "Consumption", "Prices", "Trading", "Wallet", "Invoices"];
+  var NAV = ["Dashboard", "Connections", "Consumption", "Prices", "Trading", "Wallet", "Settlements"];
   var USER_LINE = "J. de Vries · Vandersteen Koeling B.V.";
   // How the Back Office desk names this customer (no "B.V.", matching the
   // Back Office mockup's own seeded trades).
@@ -154,7 +154,7 @@
         { label: "Reservation", value: "RES-0912", note: "settled 30 Jul 14:52" },
         { label: "Ledger entry #4471", value: "Funds reserved", note: "− € 72.768,00 available" },
         { label: "Ledger entry #4472", value: "Trade settled", note: "− € 72.768,00 settled" },
-        { label: "Invoice", value: "from Jan 2027", note: "block energy lines" }
+        { label: "Settlement", value: "from Jan 2027", note: "block energy lines" }
       ] },
     { id: "TRD-1042", shape: "Base", period: "Aug 2026", direction: "Buy", power: "1,000 MW", volume: "744,00 MWh", price: "€ 72,4000", value: "€ 53.865,60", status: "Confirmed", statusTone: "success",
       events: [
@@ -185,7 +185,7 @@
     { date: "12-08 09:14", type: "Deposit (iDEAL)", tone: "success", desc: "Deposit via iDEAL", by: "J. de Vries", byNote: "", ref: "PAY-2291", refKind: "none", debit: "", credit: "€ 25.000,00", after: "€ 29.122,00" },
     { date: "05-08 16:03", type: "Reservation released", tone: "info", desc: "TRD-1048 failed — counterparty withdrew", by: "M. Bakker", byNote: "PeakPower", ref: "TRD-1048", refKind: "trade", debit: "", credit: "€ 3.900,00", after: "€ 4.122,00" },
     { date: "05-08 15:22", type: "Funds reserved", tone: "warning", desc: "Base Sep-26 · 0,05 MW", by: "J. de Vries", byNote: "", ref: "TRD-1048", refKind: "trade", debit: "€ 3.900,00", credit: "", after: "€ 222,00" },
-    { date: "01-08 00:04", type: "Invoice", tone: "neutral", desc: "July 2026 · 6 connections", by: "System", byNote: "automatic", ref: "INV-2026-07-0042", refKind: "invoice", debit: "€ 18.110,00", credit: "", after: "€ 4.122,00" },
+    { date: "01-08 00:04", type: "Settlement", tone: "neutral", desc: "July 2026 · 6 connections", by: "System", byNote: "automatic", ref: "STL-2026-07-0042", refKind: "settlement", debit: "€ 18.110,00", credit: "", after: "€ 4.122,00" },
     { date: "30-07 14:52", type: "Trade confirmed", tone: "success", desc: "Peak Q1-27 · reservation settled", by: "M. Bakker", byNote: "PeakPower", ref: "TRD-1051", refKind: "trade", debit: "€ 72.768,00", credit: "€ 72.768,00", after: "€ 22.232,00" },
     { date: "30-07 14:44", type: "Funds reserved", tone: "warning", desc: "Peak Q1-27 · 1,0 MW", by: "M. Vandersteen", byNote: "", ref: "TRD-1051", refKind: "trade", debit: "€ 72.768,00", credit: "", after: "€ 22.232,00" },
     { date: "28-07 11:20", type: "Trade confirmed", tone: "success", desc: "Base Aug-26 · reservation settled", by: "J. de Vries", byNote: "", ref: "TRD-1042", refKind: "trade", debit: "€ 53.865,60", credit: "€ 53.865,60", after: "€ 95.000,00" },
@@ -199,7 +199,7 @@
     { date: "28 Jul 2026, 08:30", method: "Bank transfer", ref: "DEP-0118", status: "Credited", amount: "€ 40.000,00" }
   ];
 
-  var INVOICE_LINES_AUG = [
+  var SETTLEMENT_LINES_AUG = [
     { n: "1", desc: "Base block Aug-26", sub: "block energy at the agreed price", ref: "TRD-1042", volume: "297,60 MWh", unitPrice: "€ 72,4000", amount: "€ 21.546,24" },
     { n: "2", desc: "Peak block Q3-26 — August portion", sub: "block energy at the agreed price", ref: "TRD-1051", volume: "50,40 MWh", unitPrice: "€ 96,1500", amount: "€ 4.845,96" },
     { n: "3", desc: "Day-ahead purchase — uncovered volume", sub: "volume-weighted average price", ref: "intervals", volume: "84,12 MWh", unitPrice: "€ 91,2400", amount: "€ 7.675,11" },
@@ -208,38 +208,38 @@
     { n: "6", desc: "Surcharge", sub: "contractual adder, valid from 1 Jan 2026", ref: "SUR-0007", volume: "385,42 MWh", unitPrice: "€ 4,5000", amount: "€ 1.734,39" },
     { n: "7", desc: "Energiebelasting — tier 3", sub: "cumulative year-to-date basis · tariff 2026 v1", ref: "tariff 2026", volume: "385.420 kWh", unitPrice: "tier rate", amount: "€ 0,00", faint: true }
   ];
-  var INVOICE_LINES_JUL = [
+  var SETTLEMENT_LINES_JUL = [
     { n: "1", desc: "Base block Jul-26", sub: "block energy at the agreed price", ref: "TRD-1042", volume: "138,00 MWh", unitPrice: "€ 69,8000", amount: "€ 9.632,40" },
     { n: "2", desc: "Peak block Q3-26 — July portion", sub: "block energy at the agreed price", ref: "TRD-1051", volume: "24,00 MWh", unitPrice: "€ 93,2000", amount: "€ 2.236,80" },
     { n: "3", desc: "Day-ahead purchase — uncovered volume", sub: "volume-weighted average price", ref: "intervals", volume: "22,60 MWh", unitPrice: "€ 88,9000", amount: "€ 2.009,14" },
     { n: "4", desc: "Day-ahead sale — surplus volume", sub: "block volume above consumption", ref: "intervals", volume: "−5,00 MWh", unitPrice: "€ 36,4000", amount: "− € 182,00", green: true }
   ];
-  var INVOICE_LINES_JUN = [
+  var SETTLEMENT_LINES_JUN = [
     { n: "1", desc: "Base block Jun-26", sub: "block energy at the agreed price", ref: "TRD-1042", volume: "132,00 MWh", unitPrice: "€ 68,4000", amount: "€ 9.028,80" },
     { n: "2", desc: "Peak block Q2-26 — June portion", sub: "block energy at the agreed price", ref: "TRD-1051", volume: "26,00 MWh", unitPrice: "€ 91,0000", amount: "€ 2.366,00" },
     { n: "3", desc: "Day-ahead purchase — uncovered volume", sub: "volume-weighted average price", ref: "intervals", volume: "21,30 MWh", unitPrice: "€ 85,6000", amount: "€ 1.823,28" },
     { n: "4", desc: "Day-ahead sale — surplus volume", sub: "block volume above consumption", ref: "intervals", volume: "−4,00 MWh", unitPrice: "€ 35,1000", amount: "− € 140,40", green: true }
   ];
-  var INVOICE_LINES_MAY = [
+  var SETTLEMENT_LINES_MAY = [
     { n: "1", desc: "Base block May-26", sub: "block energy at the agreed price", ref: "TRD-1042", volume: "126,00 MWh", unitPrice: "€ 66,9000", amount: "€ 8.429,40" },
     { n: "2", desc: "Peak block Q2-26 — May portion", sub: "block energy at the agreed price", ref: "TRD-1051", volume: "22,00 MWh", unitPrice: "€ 89,4000", amount: "€ 1.966,80" },
     { n: "3", desc: "Day-ahead purchase — uncovered volume", sub: "volume-weighted average price", ref: "intervals", volume: "22,00 MWh", unitPrice: "€ 83,2000", amount: "€ 1.830,40" },
     { n: "4", desc: "Day-ahead sale — surplus volume", sub: "block volume above consumption", ref: "intervals", volume: "−3,00 MWh", unitPrice: "€ 34,2000", amount: "− € 102,60", green: true }
   ];
-  var INVOICES = [
-    { id: "INV-2026-08-0042", period: "August 2026", total: "€ 41.620,95", volume: "1.291,4 MWh", connectionsCount: 6, coverage: "78,4 %", settledDate: "7 Sep 2026", settledNote: "wallet debit · ledger #4488",
-      provisionalNote: "4 of 31 delivery dates were still provisional when this invoice was calculated. Any correction is settled in the January annual true-up.",
+  var SETTLEMENTS = [
+    { id: "STL-2026-08-0042", period: "August 2026", total: "€ 41.620,95", volume: "1.291,4 MWh", connectionsCount: 6, coverage: "78,4 %", settledDate: "7 Sep 2026", settledNote: "wallet debit · ledger #4488",
+      provisionalNote: "4 of 31 delivery dates were still provisional when this settlement was calculated. Any correction is settled in the January annual true-up.",
       sectionTitle: "Rotterdam DC — EAN 8716 8710 0000 0000 11", sectionSubtitle: "Section 1 of 6 · measured consumption 385,42 MWh",
-      lines: INVOICE_LINES_AUG, volumeCheck: "297,60 + 50,40 + 84,12 − 46,70 = 385,42 MWh — reconciles to measured consumption", subtotal: "€ 34.397,48" },
-    { id: "INV-2026-07-0042", period: "July 2026", total: "€ 18.110,00", volume: "602,8 MWh", connectionsCount: 6, coverage: "74,2 %", settledDate: "1 Aug 2026", settledNote: "wallet debit",
+      lines: SETTLEMENT_LINES_AUG, volumeCheck: "297,60 + 50,40 + 84,12 − 46,70 = 385,42 MWh — reconciles to measured consumption", subtotal: "€ 34.397,48" },
+    { id: "STL-2026-07-0042", period: "July 2026", total: "€ 18.110,00", volume: "602,8 MWh", connectionsCount: 6, coverage: "74,2 %", settledDate: "1 Aug 2026", settledNote: "wallet debit",
       sectionTitle: "Rotterdam DC — EAN 8716 8710 0000 0000 11", sectionSubtitle: "Section 1 of 6 · measured consumption 179,60 MWh",
-      lines: INVOICE_LINES_JUL, volumeCheck: "138,00 + 24,00 + 22,60 − 5,00 = 179,60 MWh — reconciles to measured consumption", subtotal: "€ 13.696,34" },
-    { id: "INV-2026-06-0042", period: "June 2026", total: "€ 22.480,50", volume: "588,1 MWh", connectionsCount: 6, coverage: "71,8 %", settledDate: "1 Jul 2026", settledNote: "wallet debit",
+      lines: SETTLEMENT_LINES_JUL, volumeCheck: "138,00 + 24,00 + 22,60 − 5,00 = 179,60 MWh — reconciles to measured consumption", subtotal: "€ 13.696,34" },
+    { id: "STL-2026-06-0042", period: "June 2026", total: "€ 22.480,50", volume: "588,1 MWh", connectionsCount: 6, coverage: "71,8 %", settledDate: "1 Jul 2026", settledNote: "wallet debit",
       sectionTitle: "Rotterdam DC — EAN 8716 8710 0000 0000 11", sectionSubtitle: "Section 1 of 6 · measured consumption 175,30 MWh",
-      lines: INVOICE_LINES_JUN, volumeCheck: "132,00 + 26,00 + 21,30 − 4,00 = 175,30 MWh — reconciles to measured consumption", subtotal: "€ 13.077,68" },
-    { id: "INV-2026-05-0042", period: "May 2026", total: "€ 19.905,10", volume: "560,4 MWh", connectionsCount: 5, coverage: "69,5 %", settledDate: "1 Jun 2026", settledNote: "wallet debit",
+      lines: SETTLEMENT_LINES_JUN, volumeCheck: "132,00 + 26,00 + 21,30 − 4,00 = 175,30 MWh — reconciles to measured consumption", subtotal: "€ 13.077,68" },
+    { id: "STL-2026-05-0042", period: "May 2026", total: "€ 19.905,10", volume: "560,4 MWh", connectionsCount: 5, coverage: "69,5 %", settledDate: "1 Jun 2026", settledNote: "wallet debit",
       sectionTitle: "Rotterdam DC — EAN 8716 8710 0000 0000 11", sectionSubtitle: "Section 1 of 6 · measured consumption 167,00 MWh",
-      lines: INVOICE_LINES_MAY, volumeCheck: "126,00 + 22,00 + 22,00 − 3,00 = 167,00 MWh — reconciles to measured consumption", subtotal: "€ 12.124,00" }
+      lines: SETTLEMENT_LINES_MAY, volumeCheck: "126,00 + 22,00 + 22,00 − 3,00 = 167,00 MWh — reconciles to measured consumption", subtotal: "€ 12.124,00" }
   ];
 
   var WALLET_AVAILABLE_BALANCE = 19722.00;
@@ -253,7 +253,7 @@
     ["Funds reserved", "€ 9.400,00 · TRD-1072 · Base Oct-26", "13 Aug 10:15", "indigo"],
     ["Wallet deposit", "€ 25.000,00 via iDEAL", "12 Aug 09:14", "green"],
     ["Trade failed", "TRD-1048 · counterparty withdrew", "05 Aug 16:03", "red"],
-    ["Invoice issued", "INV-2026-07-0042 · € 18.110,00", "01 Aug 00:04", "faint"]
+    ["Settlement issued", "STL-2026-07-0042 · € 18.110,00", "01 Aug 00:04", "faint"]
   ];
 
   var BANK_DETAILS = {
@@ -310,7 +310,7 @@
     TRADES_SEED: TRADES_SEED,
     WALLET_LEDGER: WALLET_LEDGER,
     TOPUPS: TOPUPS,
-    INVOICES: INVOICES,
+    SETTLEMENTS: SETTLEMENTS,
     WALLET_AVAILABLE_BALANCE: WALLET_AVAILABLE_BALANCE,
     DASHBOARD_PRICE_TILES: DASHBOARD_PRICE_TILES,
     DASHBOARD_RECENT_ACTIVITY: DASHBOARD_RECENT_ACTIVITY,

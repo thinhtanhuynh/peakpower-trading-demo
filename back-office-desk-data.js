@@ -11,7 +11,7 @@
 (function (root) {
   "use strict";
 
-  var NAV = ["Home", "Trade desk", "Customers", "Wallets", "Invoicing", "Data & feeds", "Reference data", "Audit"];
+  var NAV = ["Home", "Trade desk", "Customers", "Wallets", "Settlements", "Data & feeds", "Reference data", "Audit"];
   var USER_LINE = "M. Bakker · Trading";
 
   var TRADES = [

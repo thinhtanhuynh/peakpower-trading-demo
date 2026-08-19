@@ -1,6 +1,6 @@
 /*
  * Seed data for the Back Office screens cloned from Back Office Portal -
- * Preview.html: Home, Customers, Wallets, Invoicing and Data & feeds.
+ * Preview.html: Home, Customers, Wallets, Settlements and Data & feeds.
  *
  * Every constant here is a VERBATIM port of that mockup's own bundled demo data
  * (the mockup stays a pure design reference and is never hand-edited), plus the
@@ -40,7 +40,7 @@
     { name: "Montel — indications", mode: "Poll · 5 min", last: "30 Jul 14:22", detail: "5 of 6 products fresh", statusTone: "warning", statusLabel: "Degraded" },
     { name: "Montel — day-ahead", mode: "Poll · daily", last: "30 Jul 13:04", detail: "31 Jul complete (96/96)", statusTone: "success", statusLabel: "Healthy" },
     { name: "CM.com payments", mode: "Webhook", last: "30 Jul 09:14", detail: "3 payments today", statusTone: "success", statusLabel: "Healthy" },
-    { name: "Odoo", mode: "Push", last: "05 Jul 02:41", detail: "last run: 47 invoices", statusTone: "success", statusLabel: "Healthy" }
+    { name: "Odoo", mode: "Push", last: "05 Jul 02:41", detail: "last run: 47 settlements", statusTone: "success", statusLabel: "Healthy" }
   ];
 
   var ATTENTION_ITEMS = [
@@ -128,14 +128,14 @@
   ];
 
   var CUSTOMER_LIST = [
-    {name:'Vandersteen Koeling B.V.', kvk:'34215678', connections:'7', status:'Active', statusTone:'success', available:'€ 19.722,00', availableTone:'warning', openTrades:'2', lastInvoice:'€ 18.110,00', contact:'J. de Vries', city:'Rotterdam'},
-    {name:'Kramer Logistics B.V.', kvk:'68812340', connections:'9', status:'Active', statusTone:'success', available:'€ 179.200,00', availableTone:'default', openTrades:'1', lastInvoice:'€ 110.374,26', contact:'R. Kramer', city:'Venlo'},
-    {name:'Van Dijk Glastuinbouw', kvk:'70012399', connections:'3', status:'Active', statusTone:'success', available:'€ 1.650.000,00', availableTone:'default', openTrades:'1', lastInvoice:'€ 172.884,97', contact:'K. van Dijk', city:'Bleiswijk'},
-    {name:'Meijer Koelhuizen', kvk:'61234567', connections:'4', status:'Active', statusTone:'success', available:'€ −4.210,00', availableTone:'critical', openTrades:'1', lastInvoice:'—', contact:'T. Meijer', city:'Barendrecht'},
-    {name:'Hoekstra Staal B.V.', kvk:'65543210', connections:'5', status:'Active', statusTone:'success', available:'—', availableTone:'default', openTrades:'2', lastInvoice:'—', contact:'S. Hoekstra', city:'Enschede'},
-    {name:'De Groot Papier', kvk:'63321098', connections:'4', status:'Active', statusTone:'success', available:'€ 19.650,00', availableTone:'warning', openTrades:'0', lastInvoice:'€ 70.426,97', contact:'A. de Groot', city:'Eerbeek'},
-    {name:'Nolte Chemie', kvk:'69988771', connections:'3', status:'Onboarding', statusTone:'warning', available:'—', availableTone:'default', openTrades:'1', lastInvoice:'—', contact:'M. Nolte', city:'Delfzijl'},
-    {name:'Bosman Tuinbouw', kvk:'67554433', connections:'2', status:'Active', statusTone:'success', available:'€ 1.823,00', availableTone:'critical', openTrades:'0', lastInvoice:'—', contact:'J. Bosman', city:'Naaldwijk'}
+    {name:'Vandersteen Koeling B.V.', kvk:'34215678', connections:'7', status:'Active', statusTone:'success', available:'€ 19.722,00', availableTone:'warning', openTrades:'2', lastSettlement:'€ 18.110,00', contact:'J. de Vries', city:'Rotterdam'},
+    {name:'Kramer Logistics B.V.', kvk:'68812340', connections:'9', status:'Active', statusTone:'success', available:'€ 179.200,00', availableTone:'default', openTrades:'1', lastSettlement:'€ 110.374,26', contact:'R. Kramer', city:'Venlo'},
+    {name:'Van Dijk Glastuinbouw', kvk:'70012399', connections:'3', status:'Active', statusTone:'success', available:'€ 1.650.000,00', availableTone:'default', openTrades:'1', lastSettlement:'€ 172.884,97', contact:'K. van Dijk', city:'Bleiswijk'},
+    {name:'Meijer Koelhuizen', kvk:'61234567', connections:'4', status:'Active', statusTone:'success', available:'€ −4.210,00', availableTone:'critical', openTrades:'1', lastSettlement:'—', contact:'T. Meijer', city:'Barendrecht'},
+    {name:'Hoekstra Staal B.V.', kvk:'65543210', connections:'5', status:'Active', statusTone:'success', available:'—', availableTone:'default', openTrades:'2', lastSettlement:'—', contact:'S. Hoekstra', city:'Enschede'},
+    {name:'De Groot Papier', kvk:'63321098', connections:'4', status:'Active', statusTone:'success', available:'€ 19.650,00', availableTone:'warning', openTrades:'0', lastSettlement:'€ 70.426,97', contact:'A. de Groot', city:'Eerbeek'},
+    {name:'Nolte Chemie', kvk:'69988771', connections:'3', status:'Onboarding', statusTone:'warning', available:'—', availableTone:'default', openTrades:'1', lastSettlement:'—', contact:'M. Nolte', city:'Delfzijl'},
+    {name:'Bosman Tuinbouw', kvk:'67554433', connections:'2', status:'Active', statusTone:'success', available:'€ 1.823,00', availableTone:'critical', openTrades:'0', lastSettlement:'—', contact:'J. Bosman', city:'Naaldwijk'}
   ];
 
   /**
@@ -163,7 +163,7 @@
     if (c.name === 'Vandersteen Koeling B.V.') {
       return {
         status: 'Active', statusTone: 'success', connections: '7', available: '€ 19.722,00', availableTone: 'warning',
-        openTrades: '2', lastInvoice: '€ 18.110,00', meteringSummary: '7 · 1 ending 31 Dec 2026',
+        openTrades: '2', lastSettlement: '€ 18.110,00', meteringSummary: '7 · 1 ending 31 Dec 2026',
         companyFields: customersWithBorders(COMPANY_FIELDS),
         metering: METERING, accounts: ACCOUNTS, accountsSummary: '4 · 3 active'
       };
@@ -195,7 +195,7 @@
     ];
     return {
       status: c.status, statusTone: c.statusTone, connections: c.connections, available: c.available, availableTone: c.availableTone,
-      openTrades: c.openTrades, lastInvoice: c.lastInvoice, meteringSummary: c.connections + ' connections',
+      openTrades: c.openTrades, lastSettlement: c.lastSettlement, meteringSummary: c.connections + ' connections',
       companyFields: company, metering: metering, accounts: accounts, accountsSummary: '2 · 2 active'
     };
   }
@@ -223,7 +223,7 @@
   // ---- wallets -----------------------------------------------------------
 
 var WALLETS = [
-  {name:'Meijer Koelhuizen', settled:'€ −4.210,00', settledColor:'var(--pp-red)', reserved:'€ 0,00', available:'€ −4.210,00', availableColor:'var(--pp-red)', minimum:'€ 15.000,00', statusTone:'critical', statusLabel:'Negative', lastMovement:'01-08 invoice'},
+  {name:'Meijer Koelhuizen', settled:'€ −4.210,00', settledColor:'var(--pp-red)', reserved:'€ 0,00', available:'€ −4.210,00', availableColor:'var(--pp-red)', minimum:'€ 15.000,00', statusTone:'critical', statusLabel:'Negative', lastMovement:'01-08 settlement'},
   {name:'Bosman Tuinbouw', settled:'€ 8.940,00', settledColor:'var(--pp-text-heading)', reserved:'€ 7.117,00', available:'€ 1.823,00', availableColor:'var(--pp-red)', minimum:'€ 10.000,00', statusTone:'critical', statusLabel:'Critical', lastMovement:'29-07 reserved'},
   {name:'Vandersteen Koeling', settled:'€ 29.122,00', settledColor:'var(--pp-text-heading)', reserved:'€ 9.400,00', available:'€ 19.722,00', availableColor:'var(--pp-amber)', minimum:'€ 25.000,00', statusTone:'warning', statusLabel:'Warning', lastMovement:'13-08 reserved'},
   {name:'De Groot Papier', settled:'€ 41.800,00', settledColor:'var(--pp-text-heading)', reserved:'€ 22.150,00', available:'€ 19.650,00', availableColor:'var(--pp-amber)', minimum:'€ 20.000,00', statusTone:'warning', statusLabel:'Warning', lastMovement:'30-07 reserved'},
@@ -241,11 +241,11 @@ var WALLET_STATS = [
   {label:'RECONCILIATION', value:'OK', tone:'success', sublabel:'last check 03:00 · 0 mismatches'},
 ];
 
-  // ---- invoicing ---------------------------------------------------------
+  // ---- settlements ---------------------------------------------------------
 
-  /* --- Invoicing (invoice run — August 2026) -------------------------------
+  /* --- Settlements (settlement run — August 2026) -------------------------------
    * Ported verbatim from the Back Office mockup's script (SKIPPED, DRAFTS).
-   * Both lists are static seed data — the mockup's invoice run is read-only.
+   * Both lists are static seed data — the mockup's settlement run is read-only.
    */
 
   var SKIPPED = [
@@ -269,7 +269,7 @@ var WALLET_STATS = [
    * are lifted here unchanged (label, value, tone, sublabel), in the mockup's
    * own order, so the render fragment stays a loop. `tone:""` is the DS
    * StatCard default tone (heading colour). */
-  var INVOICE_RUN_STATS = [
+  var SETTLEMENT_RUN_STATS = [
     {label:'DRAFTED', value:'41', tone:'success', sublabel:'ready for review'},
     {label:'SKIPPED', value:'5', tone:'warning', sublabel:'pre-flight gate'},
     {label:'FAILED', value:'1', tone:'critical', sublabel:'volume identity'},
@@ -278,7 +278,7 @@ var WALLET_STATS = [
   ];
 
   /* The DS <Banner tone="critical"> above the tables, verbatim. */
-  var INVOICE_RUN_BANNER = {
+  var SETTLEMENT_RUN_BANNER = {
     tone: 'critical',
     title: 'Hoekstra Staal — calculation halted: volume identity did not reconcile on EAN …0233 (difference 4,182 MWh)',
     body: 'This indicates a coverage or calendar defect, not a data gap. No draft was produced. Engineering has been alerted.'
@@ -352,8 +352,8 @@ var WALLET_STATS = [
     WALLET_STATS: WALLET_STATS,
     SKIPPED: SKIPPED,
     DRAFTS: DRAFTS,
-    INVOICE_RUN_STATS: INVOICE_RUN_STATS,
-    INVOICE_RUN_BANNER: INVOICE_RUN_BANNER,
+    SETTLEMENT_RUN_STATS: SETTLEMENT_RUN_STATS,
+    SETTLEMENT_RUN_BANNER: SETTLEMENT_RUN_BANNER,
     CELL_TONE: CELL_TONE,
     CONNECTIONS_RAW: CONNECTIONS_RAW,
     LEGEND: LEGEND,

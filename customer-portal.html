@@ -107,7 +107,7 @@
      would otherwise collapse .page's gap to nothing (one child) and stack its
      own sections with no spacing — so the wrapper carries the gap itself. */
   #dashboard-body, #connections-body, #prices-body,
-  #trading-body, #wallet-body, #invoices-body { display:flex; flex-direction:column; gap:16px; }
+  #trading-body, #wallet-body, #settlements-body { display:flex; flex-direction:column; gap:16px; }
   /* The mockup's Dashboard wrapper is the one screen using a 20px gap. */
   #dashboard-body { gap:20px; }
   .page.active { display:flex; animation:pp-fade-in .18s ease; }
@@ -139,7 +139,7 @@
      The resolution, from the product owner: abbreviate the value text
      itself at the iPad tier rather than changing the layout — this
      product already does that (`back-office-screens-data.js`'s
-     "€ 1,84 M" on Invoicing, "€ 8,42 M" on Wallets), so it's an existing
+     "€ 1,84 M" on Settlements, "€ 8,42 M" on Wallets), so it's an existing
      convention, not a new one. See ConsumptionCalc.formatEurAbbr/
      formatKwhAbbr for the threshold (1,000,000) and formatting — it's a
      presentation-only substitution: the table, CSV export, and tooltips
@@ -485,15 +485,15 @@
   .btn-link { background:none; border:none; padding:0; color:var(--pp-teal-700); font-weight:600; font-size:12px; cursor:pointer; font-family:var(--font-sans); transition:color .15s ease; }
   .btn-link:hover { text-decoration:underline; color:var(--pp-teal-900); }
 
-  /* ---- CSS-grid "tables" used by Dashboard/Connections/Prices/Trading/Wallet/Invoices ---- */
+  /* ---- CSS-grid "tables" used by Dashboard/Connections/Prices/Trading/Wallet/Settlements ---- */
   .grid-table { border:1px solid var(--pp-border); border-radius:var(--radius-lg); overflow:hidden; background:#fff; }
   /* The mockup uses TWO table densities. Default = top-level list tables
-     (Connections / Trading / Invoices lists): head 10px 16px @10.5px,
+     (Connections / Trading / Settlements lists): head 10px 16px @10.5px,
      row 13px 16px @12.5px, 14px column gap. */
   .gt-head { display:grid; background:var(--pp-surface-alt); font-size:10.5px; font-weight:700; color:var(--pp-text-body); letter-spacing:.03em; padding:10px 16px; gap:14px; border-bottom:1px solid var(--pp-border); }
   .gt-row { display:grid; padding:13px 16px; font-size:12.5px; color:var(--pp-text-heading); border-top:1px solid var(--pp-border); align-items:center; gap:14px; transition:background-color .12s ease; }
   .gt-head + .gt-row { border-top:none; }
-  /* .dense = tables nested inside a card (Wallet ledger & top-ups, invoice
+  /* .dense = tables nested inside a card (Wallet ledger & top-ups, settlement
      line items, connection block positions, wizard volumes). */
   .grid-table.dense .gt-head { padding:9px 12px; font-size:10px; gap:10px; }
   .grid-table.dense .gt-row { padding:11px 12px; font-size:12px; gap:10px; }
@@ -522,7 +522,7 @@
      .banner's 12.5px for both, where the design gives them 13px/11.5px
      respectively. Shared by every .banner on the page (Dashboard's offer
      banner, Wallet's low-balance warning, the wizard's volume note, the
-     data-quality and invoice provisional banners, …) — fixing the one
+     data-quality and settlement provisional banners, …) — fixing the one
      component fixes all of them, not just the one that was noticed. */
   .banner { display:flex; align-items:center; gap:14px; border-radius:var(--radius-lg); padding:15px 18px; font-size:12.5px; }
   .banner-amber { background:var(--pp-amber-bg); border:1px solid var(--pp-amber-border); color:var(--pp-amber-text); }
@@ -983,7 +983,7 @@
       <a href="#" data-page="trading"><span class="nav-dot" style="background:#3C93FA"></span>Trading</a>
       <div class="sidebar-group-label">Finance</div>
       <a href="#" data-page="wallet"><span class="nav-dot" style="background:#0FA69D"></span>Wallet</a>
-      <a href="#" data-page="invoices"><span class="nav-dot" style="background:#9151B8"></span>Invoices</a>
+      <a href="#" data-page="settlements"><span class="nav-dot" style="background:#9151B8"></span>Settlements</a>
     </nav>
     <div class="sidebar-footer"><div class="avatar">JV</div><div><div class="who">J. de Vries</div><span>Vandersteen Koeling B.V.</span></div></div>
   </div>
@@ -1124,8 +1124,8 @@
         <div id="wallet-body"></div>
       </div>
 
-      <div class="page" id="page-invoices">
-        <div id="invoices-body"></div>
+      <div class="page" id="page-settlements">
+        <div id="settlements-body"></div>
       </div>
 
       <div class="demo-footer">
@@ -1185,7 +1185,7 @@
 
   // ---------------------------------------------------------------------
   // Multi-page shell: Dashboard/Connections/Consumption/Prices/Trading/
-  // Wallet/Invoices are all native sections of this one page (no iframe,
+  // Wallet/Settlements are all native sections of this one page (no iframe,
   // no separate HTML files) — see CLAUDE.md's "Customer Portal (Live Data)
   // page" section. Consumption is the only screen backed by real
   // per-interval data (consumption-calc.js / consumption-data-loader.js,
@@ -1264,7 +1264,7 @@
     walletLedgerExtra: [], topupsExtra: [], topupAmount: 0, lastTopup: null,
     wizard: { direction: "Buy", shape: "Peak", periodType: "quarter", monthIdx: 0, quarterIdx: 1,
               connIds: ["rot"], volumeMw: 0.200, note: "" },
-    invoiceId: null,
+    settlementId: null,
     trades: PortalSeedData.TRADES_SEED.slice(),
     nextSeq: 1079,
     hoverBar: null,
@@ -1285,7 +1285,7 @@
 
   function resetSubViewsFor(pageCap) {
     state.page = pageCap; state.connId = null; state.tradingView = "list"; state.tradeId = null;
-    state.invoiceId = null; state.wizardStep = 0; state.walletView = "ledger";
+    state.settlementId = null; state.wizardStep = 0; state.walletView = "ledger";
   }
 
   function goTo(pageCap) {
@@ -1732,12 +1732,12 @@
   /** "Back to wallet" from the confirmation screen. */
   function closeTopupSuccess() { state.walletView = "ledger"; renderApp(); }
 
-  function openInvoice(id) {
-    state.page = "Invoices"; activatePageDom("invoices");
-    state.invoiceId = id;
+  function openSettlement(id) {
+    state.page = "Settlements"; activatePageDom("settlements");
+    state.settlementId = id;
     renderApp();
   }
-  function closeInvoice() { state.invoiceId = null; renderApp(); }
+  function closeSettlement() { state.settlementId = null; renderApp(); }
 
   window.PP = {
     goTo: goTo, goToConsumption: goToConsumption, viewTradeOnChart: viewTradeOnChart,
@@ -1755,7 +1755,7 @@
     topUpWallet: topUpWallet, backToWallet: backToWallet, closeTopupSuccess: closeTopupSuccess,
     setTopupAmount: setTopupAmount, setTopupAmountValue: setTopupAmountValue,
     onTopupAmountInput: onTopupAmountInput, performTopup: performTopup,
-    openInvoice: openInvoice, closeInvoice: closeInvoice,
+    openSettlement: openSettlement, closeSettlement: closeSettlement,
     acceptOffer: acceptOffer, rejectOffer: rejectOffer,
     payTradeBalance: payTradeBalance,
     noop: function () {}
@@ -2053,14 +2053,14 @@
       setCrumb("Vandersteen Koeling B.V. · EUR");
       actionsHtml = '<button type="button" class="btn-primary" onclick="PP.topUpWallet()">Deposit funds</button>' +
         '<button type="button" class="btn-secondary" onclick="PP.noop()">Statement</button>';
-    } else if (page === "Invoices" && state.invoiceId) {
-      var inv = PortalSeedData.INVOICES.filter(function (x) { return x.id === state.invoiceId; })[0];
-      title = inv ? "Invoice " + inv.id : "Invoices";
-      setCrumb(inv ? (inv.period + " · settled " + inv.settledDate) : "", "Invoices", "closeInvoice");
+    } else if (page === "Settlements" && state.settlementId) {
+      var inv = PortalSeedData.SETTLEMENTS.filter(function (x) { return x.id === state.settlementId; })[0];
+      title = inv ? "Settlement " + inv.id : "Settlements";
+      setCrumb(inv ? (inv.period + " · settled " + inv.settledDate) : "", "Settlements", "closeSettlement");
       actionsHtml = '<button type="button" class="btn-primary" onclick="PP.noop()">Download PDF</button>' +
         '<button type="button" class="btn-secondary" onclick="PP.noop()">Export CSV</button>';
-    } else if (page === "Invoices") {
-      setCrumb("Vandersteen Koeling B.V. · monthly invoices");
+    } else if (page === "Settlements") {
+      setCrumb("Vandersteen Koeling B.V. · monthly settlements");
     }
 
     pageTitle.textContent = title;
@@ -2075,7 +2075,7 @@
     else if (pageLower === "prices") { renderPricesPage(); }
     else if (pageLower === "trading") { renderTradingPage(); }
     else if (pageLower === "wallet") { renderWalletPage(); }
-    else if (pageLower === "invoices") { renderInvoicesPage(); }
+    else if (pageLower === "settlements") { renderSettlementsPage(); }
   }
 
   function renderCurrentPage() {
@@ -2332,7 +2332,7 @@
     var banner = '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">' +
       'Almere office has reported no data since 10 August. PeakPower has been notified automatically.</div></div>';
 
-    var caption = '<div class="caption">Give a connection a name and description to use it everywhere — charts, trade requests, invoices and alerts.</div>';
+    var caption = '<div class="caption">Give a connection a name and description to use it everywhere — charts, trade requests, settlements and alerts.</div>';
 
     document.getElementById("connections-body").innerHTML = topRow + table + banner + caption;
   }
@@ -3214,8 +3214,8 @@
     var rows = allLedger.slice(0, 12).map(function (l) {
       var refHtml = (l.refKind === "trade")
         ? '<span class="gt-mono" style="color:var(--pp-teal-700);cursor:pointer" onclick="PP.openTrade(\'' + l.ref + '\')">' + l.ref + '</span>'
-        : ((l.refKind === "invoice")
-          ? '<span class="gt-mono" style="color:var(--pp-teal-700);cursor:pointer" onclick="PP.openInvoice(\'' + l.ref + '\')">' + l.ref + '</span>'
+        : ((l.refKind === "settlement")
+          ? '<span class="gt-mono" style="color:var(--pp-teal-700);cursor:pointer" onclick="PP.openSettlement(\'' + l.ref + '\')">' + l.ref + '</span>'
           : '<span class="gt-mono">' + l.ref + '</span>');
       return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
         '<div>' + l.date + '</div>' +
@@ -3228,7 +3228,7 @@
         '<div class="gt-cell-num">' + l.after + '</div></div>';
     }).join("");
     var ledgerCard = cardHtml("Ledger", "Every movement, newest first", '<div class="grid-table dense">' + head + '<div class="gt-scroll">' + rows + '</div></div>' +
-      '<div class="caption" style="margin-top:8px">Every movement names the colleague who caused it. Reference links open the trade, invoice or payment.</div>' +
+      '<div class="caption" style="margin-top:8px">Every movement names the colleague who caused it. Reference links open the trade, settlement or payment.</div>' +
       '<div class="caption">Showing ' + Math.min(12, allLedger.length) + ' of 146 entries</div>');
 
     document.getElementById("wallet-body").innerHTML = '<div class="stat-row">' + kpiHtml + '</div>' +
@@ -3337,7 +3337,7 @@
     var allTopups = state.topupsExtra.concat(PortalSeedData.TOPUPS);
     // Mockup's own gap for this specific table is 12px, wider than the
     // shared .grid-table.dense convention's 10px (used app-wide, e.g. the
-    // Wallet ledger and invoice line items) — not changed here since that
+    // Wallet ledger and settlement line items) — not changed here since that
     // convention serves several other screens; see the note sent to
     // team-lead. cols itself already matches (1.4fr 1.2fr 1.2fr 1fr 1fr).
     var cols = "1.4fr 1.2fr 1.2fr 1fr 1fr";
@@ -3379,29 +3379,29 @@
     document.getElementById("wallet-body").innerHTML = successBanner + '<div style="margin-top:16px;max-width:420px">' + summaryCard + '</div>';
   }
 
-  // --- Invoices ----------------------------------------------------------
+  // --- Settlements ----------------------------------------------------------
 
-  function renderInvoicesPage() {
-    if (state.invoiceId) { renderInvoiceDetail(); return; }
+  function renderSettlementsPage() {
+    if (state.settlementId) { renderSettlementDetail(); return; }
     var cols = "1.4fr 1fr 1fr 1fr 1fr 1fr";
-    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>INVOICE</div><div>PERIOD</div><div>CONNECTIONS</div>' +
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>SETTLEMENT</div><div>PERIOD</div><div>CONNECTIONS</div>' +
       '<div class="gt-cell-num">VOLUME</div><div class="gt-cell-num">TOTAL</div><div>STATUS</div></div>';
-    var rows = PortalSeedData.INVOICES.map(function (inv) {
-      return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openInvoice(\'' + inv.id + '\')">' +
+    var rows = PortalSeedData.SETTLEMENTS.map(function (inv) {
+      return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openSettlement(\'' + inv.id + '\')">' +
         '<div class="gt-mono" style="color:var(--pp-teal-700)">' + inv.id + '</div>' +
         '<div>' + inv.period + '</div><div>' + inv.connectionsCount + '</div>' +
         '<div class="gt-cell-num">' + inv.volume + '</div>' +
         '<div class="gt-cell-num">' + inv.total + '</div>' +
         '<div>' + badge("Settled", "success") + '</div></div>';
     }).join("");
-    document.getElementById("invoices-body").innerHTML = '<div class="grid-table">' + head + rows + '</div>';
+    document.getElementById("settlements-body").innerHTML = '<div class="grid-table">' + head + rows + '</div>';
   }
 
-  function renderInvoiceDetail() {
-    var inv = PortalSeedData.INVOICES.filter(function (x) { return x.id === state.invoiceId; })[0];
-    if (!inv) { closeInvoice(); return; }
+  function renderSettlementDetail() {
+    var inv = PortalSeedData.SETTLEMENTS.filter(function (x) { return x.id === state.settlementId; })[0];
+    if (!inv) { closeSettlement(); return; }
 
-    var kpiHtml = statCardHtml("Invoice total", inv.total, "", "") +
+    var kpiHtml = statCardHtml("Settlement total", inv.total, "", "") +
       statCardHtml("Billed volume", inv.volume, "", "across " + inv.connectionsCount + " connections") +
       (inv.coverage ? statCardHtml("Block coverage", inv.coverage, "brand", "") : "") +
       statCardHtml("Settled", inv.settledDate, "success", inv.settledNote);
@@ -3431,7 +3431,7 @@
 
     var sectionCard = cardHtml(inv.sectionTitle, inv.sectionSubtitle, lineTable + footer, "Expand");
 
-    document.getElementById("invoices-body").innerHTML = '<div class="stat-row">' + kpiHtml + '</div>' + provisional + sectionCard;
+    document.getElementById("settlements-body").innerHTML = '<div class="stat-row">' + kpiHtml + '</div>' + provisional + sectionCard;
   }
 
 
@@ -3456,7 +3456,7 @@
    */
   /**
    * `value` is either a plain string (rendered as-is — the shape Dashboard/
-   * Wallet/Invoices' own statCardHtml calls always use, so they're
+   * Wallet/Settlements' own statCardHtml calls always use, so they're
    * untouched by any of this) or a { full, abbr } pair from dualEurValue/
    * dualKwhValue, rendered as two sibling spans whose visibility is pure
    * CSS (.value-full/.value-abbr, see the 768–1279px media query) — the
@@ -5247,7 +5247,7 @@
   }
 
   // Render whichever page is active immediately with whatever's available
-  // (seed-only data for Dashboard/Wallet/Invoices), then refresh again once
+  // (seed-only data for Dashboard/Wallet/Settlements), then refresh again once
   // the real datasets resolve (see init() above).
   renderCurrentPage();
 

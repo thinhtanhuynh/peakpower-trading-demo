@@ -1173,8 +1173,8 @@
   var WALLET_STATS = S.WALLET_STATS;
   var SKIPPED = S.SKIPPED;
   var DRAFTS = S.DRAFTS;
-  var INVOICE_RUN_STATS = S.INVOICE_RUN_STATS;
-  var INVOICE_RUN_BANNER = S.INVOICE_RUN_BANNER;
+  var SETTLEMENT_RUN_STATS = S.SETTLEMENT_RUN_STATS;
+  var SETTLEMENT_RUN_BANNER = S.SETTLEMENT_RUN_BANNER;
   var CELL_TONE = S.CELL_TONE;
   var CONNECTIONS_RAW = S.CONNECTIONS_RAW;
   var LEGEND = S.LEGEND;
@@ -1200,7 +1200,7 @@
     { label: "AWAITING CUSTOMER", value: "5", tone: "brand", highlight: false, sublabel: "next expiry 04:12" },
     { label: "TO CONFIRM", value: "2", tone: "critical", highlight: false, sublabel: "oldest 22 min" },
     { label: "WALLETS BELOW MIN", value: "4", tone: "warning", highlight: false, sublabel: "of 47 customers" },
-    { label: "INVOICE DRAFTS", value: "0", tone: "", highlight: false, sublabel: "next run 5 Sep" },
+    { label: "SETTLEMENT DRAFTS", value: "0", tone: "", highlight: false, sublabel: "next run 5 Sep" },
     { label: "FEED ISSUES", value: "1", tone: "critical", highlight: false, sublabel: "Montel stale 1h42" }
   ];
 
@@ -1526,7 +1526,7 @@
       customersStatCard('CONNECTIONS', d.connections, 'default') +
       customersStatCard('AVAILABLE BALANCE', d.available, d.availableTone) +
       customersStatCard('OPEN TRADES', d.openTrades, 'default') +
-      customersStatCard('LAST INVOICE', d.lastInvoice, 'default') +
+      customersStatCard('LAST SETTLEMENT', d.lastSettlement, 'default') +
       // Only shown when there is something to show: a card reading "€ 0,00"
       // on every customer would train the desk to ignore the one that matters.
       (outstanding.count
@@ -1762,7 +1762,7 @@
     };
   }
 
-  /* --- Invoicing (invoice run) ---------------------------------------------
+  /* --- Settlements (settlement run) ---------------------------------------------
    * A read-only screen: five run-summary StatCards, one critical Banner for the
    * customer whose calculation halted, and two tables (skipped customers, and
    * the drafts ready for review). Nothing on it is interactive in the mockup —
@@ -1776,20 +1776,20 @@
   /* The page's own StatCard primitive does exactly what the DS StatCard does
      (tone as a class on `.value`, `default`/"" meaning no class) — delegate to
      it rather than re-implementing it. */
-  function invoicingStatCard(s) {
+  function settlementsStatCard(s) {
     return statCard(s.label, s.value, s.tone, s.sublabel, false);
   }
 
-  var INVOICING_SKIPPED_COLS = '1.3fr 1.5fr 2fr 1fr 0.6fr';
-  var INVOICING_DRAFTS_COLS = '1.6fr 0.9fr 1fr 1.1fr 1fr 1.1fr 1fr 0.5fr';
+  var SETTLEMENTS_SKIPPED_COLS = '1.3fr 1.5fr 2fr 1fr 0.6fr';
+  var SETTLEMENTS_DRAFTS_COLS = '1.6fr 0.9fr 1fr 1.1fr 1fr 1.1fr 1fr 0.5fr';
 
-  function invoicingSkippedTable() {
+  function settlementsSkippedTable() {
     var head =
-      '<div style="display:grid;grid-template-columns:' + INVOICING_SKIPPED_COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+      '<div style="display:grid;grid-template-columns:' + SETTLEMENTS_SKIPPED_COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
         '<div>CUSTOMER</div><div>REASON</div><div>DETAIL</div><div>FIX OWNER</div><div></div>' +
       '</div>';
     var rows = SKIPPED.map(function (s) {
-      return '<div style="display:grid;grid-template-columns:' + INVOICING_SKIPPED_COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
+      return '<div style="display:grid;grid-template-columns:' + SETTLEMENTS_SKIPPED_COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
         '<div style="font-weight:600;color:var(--pp-text-heading)">' + esc(s.customer) + '</div>' +
         '<div style="font-family:var(--font-mono);font-size:10.5px;color:var(--pp-amber-text)">' + esc(s.reason) + '</div>' +
         '<div style="color:var(--pp-text-body)">' + esc(s.detail) + '</div>' +
@@ -1801,9 +1801,9 @@
       head + rows + '</div>';
   }
 
-  function invoicingDraftsTable() {
+  function settlementsDraftsTable() {
     var head =
-      '<div style="display:grid;grid-template-columns:' + INVOICING_DRAFTS_COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+      '<div style="display:grid;grid-template-columns:' + SETTLEMENTS_DRAFTS_COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
         '<div>CUSTOMER</div>' +
         '<div style="text-align:right">CONNECTIONS</div>' +
         '<div style="text-align:right">VOLUME</div>' +
@@ -1813,7 +1813,7 @@
         '<div>DATA</div><div></div>' +
       '</div>';
     var rows = DRAFTS.map(function (d) {
-      return '<div style="display:grid;grid-template-columns:' + INVOICING_DRAFTS_COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
+      return '<div style="display:grid;grid-template-columns:' + SETTLEMENTS_DRAFTS_COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
         '<div style="font-weight:600;color:var(--pp-text-heading)">' + esc(d.customer) + '</div>' +
         '<div style="text-align:right">' + esc(d.connections) + '</div>' +
         '<div style="text-align:right">' + esc(d.volume) + '</div>' +
@@ -1828,25 +1828,25 @@
       head + rows + '</div>';
   }
 
-  function renderInvoicing() {
+  function renderSettlements() {
     var stats = '<div class="stat-row" style="gap:14px">' +
-      INVOICE_RUN_STATS.map(invoicingStatCard).join('') + '</div>';
+      SETTLEMENT_RUN_STATS.map(settlementsStatCard).join('') + '</div>';
 
     var draftsAction = cardAction('41 · showing 5');
 
     return '<div style="display:flex;flex-direction:column;gap:16px">' +
       stats +
-      dsBanner(INVOICE_RUN_BANNER.tone, INVOICE_RUN_BANNER.title, INVOICE_RUN_BANNER.body) +
+      dsBanner(SETTLEMENT_RUN_BANNER.tone, SETTLEMENT_RUN_BANNER.title, SETTLEMENT_RUN_BANNER.body) +
       cardHtml('Skipped customers',
         'each skip names its cause — the run continued for everyone else',
-        invoicingSkippedTable()) +
-      cardHtml('Drafts ready for review', '', invoicingDraftsTable(), draftsAction) +
+        settlementsSkippedTable()) +
+      cardHtml('Drafts ready for review', '', settlementsDraftsTable(), draftsAction) +
       '</div>';
   }
 
-  function invoicingChrome() {
+  function settlementsChrome() {
     return {
-      title: 'Invoice run — August 2026',
+      title: 'Settlement run — August 2026',
       subtitle: 'Started 5 Sep 02:00 · completed 02:26 · 47 customers in scope',
       crumb: null,
       actions: [
@@ -2159,7 +2159,7 @@
     "Trade desk": { self: renderDesk },
     "Customers": { body: renderCustomers, chrome: customersChrome },
     "Wallets": { body: renderWallets, chrome: walletsChrome },
-    "Invoicing": { body: renderInvoicing, chrome: invoicingChrome },
+    "Settlements": { body: renderSettlements, chrome: settlementsChrome },
     "Data & feeds": { body: renderDataFeeds, chrome: dataFeedsChrome }
   };
 
