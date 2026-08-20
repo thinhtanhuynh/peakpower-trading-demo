@@ -1472,20 +1472,65 @@ cannot be paid until it is applied.
 | Trade state | `PortalTradeLink.depositState()` | Wallet | Pay balance |
 |---|---|---|---|
 | Accepted, awaiting execution | `on-hold` | available − d, reserved + d | shown, **disabled** |
-| Confirmed | `applied` | reserved − d, settled − d | enabled |
+| Confirmed, before the due date | `applied` | reserved − d, settled − d | enabled |
+| Confirmed, after the due date | `applied` | (already moved) | **gone** |
 | Execution failed | `released` | reserved − d, available + d | gone |
 
-**`PortalTradeLink.balancePayable(req)` is the one rule** — a settlement, not
-already paid, and `isConfirmed`. `payBalance()` guards on it itself, so a stale
-screen cannot pay round the disabled button. Everything that *chases* the
-balance reads the same function: the Dashboard's red/amber banner,
-`overdueCount()`, the Wallet table's due badge, and the desk's own
-`outstandingFor()`.
+### The payment window
 
-**Why the gate exists:** an accepted trade can still fail, and a failed one
-hands the deposit back rather than collecting more. Taking the 80 % before
-execution risks charging for a block the customer never gets, and unwinding
-that needs the refund history this POC deliberately does not have.
+`PortalTradeLink.paymentWindow(req, now)` is the one rule, returning
+`"paid"` | `"not-executed"` | `"open"` | `"closed"`; `balancePayable()` is
+`window === "open"` and `payBalance()` guards on it, so a stale screen cannot
+pay round a disabled button.
+
+**It opens at execution and shuts after `dueDate`** — the day before delivery
+opens. Before execution the trade can still fail, and a failed one hands the
+deposit back rather than collecting more, so charging early risks taking money
+for a block the customer never gets. After it, the period is running: there is
+no longer a block to pay for in advance, so the balance stops being collectable
+in the portal and the desk settles it instead. Unwinding either would need the
+refund history this POC deliberately does not have.
+
+**One exception: a block the desk confirmed *after* its own due date keeps the
+window open.** The customer never had a window to miss — the delay was ours —
+and taking the payment away for it would be punishing them for our lateness.
+
+**The boundary is an ISO `YYYY-MM-DD` comparison**, which is the same line
+`PortalTermsLink.daysUntilDue()` draws at `< 0`. A test walks the days either
+side of a due date and asserts the two still agree; keep it. The day *count*
+stays `daysUntilDue`'s job — `paymentWindow` only decides which side we are on.
+
+**"Overdue" means the window shut, not that the date passed.** `overdueCount()`,
+the Dashboard banner and the desk's `outstandingFor()` all read the window, so
+an unexecuted or late-confirmed balance is never counted late.
+
+**A closed window drops the button entirely** rather than greying it. Elsewhere
+a disabled button says "not yet"; here it would never become active again, so
+it would be decoration — and an invitation.
+
+**The Dashboard warns whether or not the desk has executed it.** A deadline the
+customer cannot act on is the one they most need telling about, so an
+unexecuted balance still raises the amber banner — it just says
+"awaiting execution by PeakPower" and offers *View trade* instead of
+*Review & pay*. A closed one goes red and says the desk will be in touch.
+
+### The status the customer reads
+
+`toCustomerTrade()` folds the balance into the trade's own status, because
+"Confirmed" alone says the block was executed and nothing about whether the
+money behind it is settled:
+
+| Window | Status | Tone |
+|---|---|---|
+| `paid` | `Confirmed · balance paid` | green |
+| `open` | `Confirmed · balance due` | green |
+| `closed` | `Confirmed · balance overdue` | red |
+
+Only for a confirmed trade carrying a schedule — a Sell, a seeded row and an
+unaccepted offer keep the bare lifecycle status. The badge deliberately has no
+amber "due soon" tier: that horizon is `DUE_SOON_DAYS` in
+`portal-terms-link.js`, and honouring it in `portal-trade-link.js` would put
+the rule in two modules. Due-soon is an alert, and it lives on the Dashboard.
 
 **Committed but not chased.** An unexecuted balance still counts in every
 outstanding total and appears in the Wallet's Outstanding balances table — the

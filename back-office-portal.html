@@ -1689,10 +1689,10 @@
       if (status !== Link.STATUS_ACCEPTED && status !== Link.STATUS_CONFIRMED) { return; }
       out.totalEur += st.balanceEur || 0;
       out.count += 1;
-      // Only a balance the customer is allowed to pay can be late. Until the
-      // desk executes the block the customer's Pay balance button is disabled,
-      // so counting it overdue here would chase money we are refusing to take.
-      if (Link.balancePayable(r) && PortalTermsLink.balanceState(st, nowForLink()) === "overdue") {
+      // "Overdue" is the payment window having shut, not the date having
+      // passed: a block the desk has not executed yet was never the customer's
+      // to miss, and one it executed late keeps its window open.
+      if (Link.paymentWindow(r, nowForLink()) === "closed") {
         out.overdueEur += st.balanceEur || 0;
         out.overdueCount += 1;
       }

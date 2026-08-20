@@ -322,8 +322,50 @@
    * overdue counts and the Dashboard's balance banner: an unconfirmed balance
    * is still shown as committed, but nobody asks for it.
    */
-  function balancePayable(req) {
-    return !!(req && req.settlement && !req.settlement.paidAt && isConfirmed(req));
+  function balancePayable(req, now) {
+    return paymentWindow(req, now) === "open";
+  }
+
+  /** Local calendar day of `ms`, as YYYY-MM-DD. */
+  function isoDay(ms) {
+    var d = new Date(ms);
+    var mm = d.getMonth() + 1, dd = d.getDate();
+    return d.getFullYear() + "-" + (mm < 10 ? "0" : "") + mm + "-" + (dd < 10 ? "0" : "") + dd;
+  }
+
+  /**
+   * The balance's payment window:
+   *
+   *   "paid"          settled, nothing further owed
+   *   "not-executed"  the desk has not confirmed the block yet
+   *   "open"          payable now
+   *   "closed"        the due date has passed and delivery has started
+   *
+   * Null for a trade carrying no schedule at all — a Sell, or an offer nobody
+   * has accepted.
+   *
+   * The window shuts the day after `dueDate`, which is itself the day before
+   * delivery opens: once the period is running there is no longer a block to
+   * pay for in advance, so the balance stops being collectable here and the
+   * desk settles it instead.
+   *
+   * One exception. If the desk confirmed *after* that date, the customer never
+   * had a window to miss — the delay was ours — so it stays open.
+   *
+   * The boundary is an ISO YYYY-MM-DD comparison, which is the same line
+   * PortalTermsLink.daysUntilDue() draws at `< 0`; a test walks the days either
+   * side of a due date and asserts the two still agree. The day *count* stays
+   * that function's job — this one only decides which side of the line we are.
+   */
+  function paymentWindow(req, now) {
+    if (!req || !req.settlement) { return null; }
+    if (req.settlement.paidAt) { return "paid"; }
+    if (!isConfirmed(req)) { return "not-executed"; }
+    var due = req.settlement.dueDate;
+    if (!due) { return "open"; }
+    if (req.confirmation && req.confirmation.at &&
+        isoDay(new Date(req.confirmation.at).getTime()) > due) { return "open"; }
+    return isoDay(nowMs(now)) > due ? "closed" : "open";
   }
 
   /**
@@ -348,7 +390,7 @@
    */
   function payBalance(req, opts) {
     opts = opts || {};
-    if (!balancePayable(req)) { return null; }
+    if (!balancePayable(req, opts.now)) { return null; }
     var out = {};
     for (var k in req) { out[k] = req[k]; }
     var s = {};
@@ -505,6 +547,17 @@
     // Only an unanswered, unexpired offer is still actionable.
     var pending = priced && !resolved && left > 0;
 
+    // Where the balance stands, folded into the status the customer reads.
+    // Only once executed: before that the trade's own state is the headline
+    // and the deposit's is said on the Payment card instead.
+    var window = paymentWindow(req, now);
+    var balanceSuffix = null, balanceTone = null;
+    if (confirmed && window) {
+      if (window === "paid") { balanceSuffix = "balance paid"; balanceTone = "success"; }
+      else if (window === "closed") { balanceSuffix = "balance overdue"; balanceTone = "critical"; }
+      else { balanceSuffix = "balance due"; balanceTone = "success"; }
+    }
+
     var events = [{
       title: "Request submitted",
       actor: "J. de Vries · Energy Manager (you)",
@@ -610,15 +663,20 @@
       power: power, volume: volume,
       price: priced ? "€ " + formatNL(req.offer.priceMwh, 4) : null,
       value: priced ? "€ " + formatNL(req.offer.valueEur, 2) : null,
-      status: status,
+      // "Confirmed" alone says the block was executed but not whether the
+      // balance behind it is settled, which is the other half of where a
+      // bought trade stands. A Sell or an unaccepted offer has no schedule and
+      // is left exactly as it was.
+      status: balanceSuffix ? status + " · " + balanceSuffix : status,
       // Failed is bad news, not a pending state — critical (red), not the
       // amber "warning" tone accepted-and-awaiting-execution uses. Checked
       // before confirmed/resolved since it's a terminal outcome like they are.
       statusTone: failed ? "critical"
-        : (confirmed ? "success"
+        : (balanceTone || (confirmed ? "success"
           : (resolved
               ? (req.response.action === "accept" ? "warning" : "critical")
-              : (pending ? "warning" : (priced ? "critical" : "info")))),
+              : (pending ? "warning" : (priced ? "critical" : "info"))))),
+      balanceWindow: window,
       resolved: resolved,
       confirmed: confirmed,
       failed: failed,
@@ -726,6 +784,7 @@
     acceptOffer: acceptOffer,
     payBalance: payBalance,
     balancePayable: balancePayable,
+    paymentWindow: paymentWindow,
     depositState: depositState,
     rejectOffer: rejectOffer,
     isResolved: isResolved,

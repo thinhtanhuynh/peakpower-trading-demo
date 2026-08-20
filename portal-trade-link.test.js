@@ -647,6 +647,50 @@ function pricedFixture(extra) {
   assert.strictEqual(Link.balancePayable(failed), false, "a failed trade's balance is never payable");
   assert.strictEqual(Link.payBalance(failed, { now: T0 }), null, "…and payBalance refuses it");
 
+  // --- the payment window ---------------------------------------------------
+  //
+  // dueDate here is the day before delivery opens. Pick a `now` on each side
+  // of it and check which side the window says we are on.
+  var due = accepted.settlement.dueDate;
+  function at(iso, hh) { var p = iso.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2], hh == null ? 12 : hh).getTime(); }
+  function dayBefore(iso) { var p = iso.split("-").map(Number); var d = new Date(p[0], p[1] - 1, p[2]); d.setDate(d.getDate() - 1); return d; }
+  function dayAfter(iso) { var p = iso.split("-").map(Number); var d = new Date(p[0], p[1] - 1, p[2]); d.setDate(d.getDate() + 1); return d; }
+
+  assert.strictEqual(Link.paymentWindow(accepted, at(due)), "not-executed",
+    "before the desk executes it there is no window to be in");
+  assert.strictEqual(Link.paymentWindow(confirmed, dayBefore(due).getTime()), "open", "the day before the deadline");
+  assert.strictEqual(Link.paymentWindow(confirmed, at(due, 0)), "open", "midnight ON the due date is still in time");
+  assert.strictEqual(Link.paymentWindow(confirmed, at(due, 23)), "open", "…and so is the last hour of it");
+  assert.strictEqual(Link.paymentWindow(confirmed, dayAfter(due).getTime()), "closed",
+    "the day after, delivery has started and the balance is no longer collectable here");
+  assert.strictEqual(Link.balancePayable(confirmed, at(due)), true, "payable on the due date");
+  assert.strictEqual(Link.balancePayable(confirmed, dayAfter(due).getTime()), false, "not payable once closed");
+  assert.strictEqual(Link.payBalance(confirmed, { now: dayAfter(due).getTime() }), null,
+    "payBalance refuses a closed window itself, not just the disabled button");
+  assert.ok(Link.payBalance(confirmed, { now: at(due) }), "…and still takes it inside the window");
+  assert.strictEqual(Link.paymentWindow(paid, dayAfter(due).getTime()), "paid",
+    "paid outranks the clock — a settled balance never reads as overdue");
+  assert.strictEqual(Link.paymentWindow(plain, at(due)), null, "no schedule, no window");
+  assert.strictEqual(Link.paymentWindow(null, at(due)), null, "no trade at all");
+
+  // The boundary must be the same line PortalTermsLink.daysUntilDue draws, or
+  // one screen would call a balance overdue while another still took payment.
+  for (var d = -3; d <= 3; d++) {
+    var probe = new Date(due.split("-").map(Number)[0], due.split("-").map(Number)[1] - 1,
+      due.split("-").map(Number)[2] + d, 9).getTime();
+    var late = Terms.daysUntilDue(confirmed.settlement, probe) < 0;
+    var shut = Link.paymentWindow(confirmed, probe) === "closed";
+    assert.strictEqual(shut, late, "window and daysUntilDue agree " + d + " day(s) from the due date");
+  }
+
+  // Confirmed AFTER the deadline: the customer never had a window to miss, so
+  // our own delay must not cost them the ability to pay.
+  var lateConfirmed = Link.confirmTrade(accepted, { now: dayAfter(due).getTime() + 86400000, reference: "ICE-2" });
+  assert.strictEqual(Link.paymentWindow(lateConfirmed, dayAfter(due).getTime() + 86400000), "open",
+    "a block executed after the due date leaves the window open");
+  assert.ok(Link.payBalance(lateConfirmed, { now: dayAfter(due).getTime() + 86400000 }),
+    "…and the balance can still be paid");
+
   // The deposit's own three-state life, independent of paidAt (which is the
   // BALANCE's state, not the deposit's).
   assert.strictEqual(Link.depositState(accepted), "on-hold", "held while the desk has yet to act");

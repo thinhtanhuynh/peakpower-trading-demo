@@ -2388,13 +2388,12 @@
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#9151B8" stroke-width="2" stroke-dasharray="5,3"></polyline>';
   }
 
-  // Only a balance the customer is actually allowed to pay can be late. An
-  // accepted trade the desk has not executed yet is committed money, so it
-  // still counts as outstanding — but it is never chased.
+  // "Overdue" means the payment window has shut, not merely that the date has
+  // passed: a block the desk executed late keeps its window open, and one it
+  // has not executed at all was never the customer's to miss.
   function overdueCount() {
     return outstandingBalances().filter(function (r) {
-      return PortalTradeLink.balancePayable(r) &&
-        PortalTermsLink.balanceState(r.settlement, nowForLink()) === "overdue";
+      return PortalTradeLink.paymentWindow(r, nowForLink()) === "closed";
     }).length;
   }
 
@@ -2405,26 +2404,40 @@
    * is just an alarm.
    */
   function balanceBannerHtml_() {
+    // Warned on whether or not the desk has executed it yet: a deadline the
+    // customer cannot act on is exactly the one they most need telling about,
+    // and if we are the reason it cannot be paid the banner says so.
     var list = outstandingBalances().filter(function (r) {
-      if (!PortalTradeLink.balancePayable(r)) { return false; }
       var st = PortalTermsLink.balanceState(r.settlement, nowForLink());
       return st === "overdue" || st === "due-soon";
     });
     if (!list.length) { return ""; }
     var first = list[0];
-    var overdue = PortalTermsLink.balanceState(first.settlement, nowForLink()) === "overdue";
+    var win = PortalTradeLink.paymentWindow(first, nowForLink());
+    var closed = win === "closed";
+    var waiting = win === "not-executed";
     var days = PortalTermsLink.daysUntilDue(first.settlement, nowForLink());
     var total = list.reduce(function (sum, r) { return sum + (r.settlement.balanceEur || 0); }, 0);
-    var when = overdue
-      ? "overdue by " + Math.abs(days) + (Math.abs(days) === 1 ? " day" : " days")
-      : "due in " + days + (days === 1 ? " day" : " days");
-    return '<div class="banner ' + (overdue ? "banner-red" : "banner-amber") + '">' +
-      '<div class="banner-icon"' + (overdue ? ' style="background:var(--pp-red)"' : '') + '>!</div>' +
-      '<div class="banner-body"><div class="banner-title">Balance ' + when + ' — ' + eur(total) +
+    var late = Math.abs(days);
+
+    var title = closed
+      ? "Payment window closed — " + eur(total)
+      : "Balance " + (days < 0 ? "due now" : "due in " + days + (days === 1 ? " day" : " days")) + " — " + eur(total);
+    var sub = closed
+      ? "Delivery has started, so this balance can no longer be paid here. PeakPower will contact you to settle it."
+      : (waiting
+        ? "Awaiting execution by PeakPower — the balance becomes payable once the trade is confirmed."
+        : "The balance on a bought block falls due the day before delivery starts.");
+    // "Review & pay" only when paying is actually possible from there.
+    var actionLabel = (closed || waiting) ? "View trade" : "Review &amp; pay";
+
+    return '<div class="banner ' + (closed ? "banner-red" : "banner-amber") + '">' +
+      '<div class="banner-icon"' + (closed ? ' style="background:var(--pp-red)"' : '') + '>!</div>' +
+      '<div class="banner-body"><div class="banner-title">' + esc(title) +
       (list.length > 1 ? ' across ' + list.length + ' trades' : ' on ' + esc(first.id)) + '</div>' +
-      '<div class="banner-sub">The balance on a bought block falls due the day before delivery starts.</div></div>' +
+      '<div class="banner-sub">' + esc(sub) + '</div></div>' +
       '<div class="banner-actions"><button type="button" class="btn-primary" onclick="PP.openTrade(\'' +
-      esc(first.id) + '\')">Review &amp; pay</button></div></div>';
+      esc(first.id) + '\')">' + actionLabel + '</button></div></div>';
   }
 
   /**
@@ -2874,13 +2887,16 @@
     if (!st) { return ""; }
     var state_ = PortalTermsLink.balanceState(st, nowForLink());
     var days = PortalTermsLink.daysUntilDue(st, nowForLink());
-    var paid = state_ === "paid";
     var failed = !!t.failed;
-    // The balance only becomes payable — and only then fair to call late —
-    // once the desk has executed the block. Until then the trade can still
-    // fail, and a failed one hands the deposit back rather than collecting.
-    var payable = !!t.confirmed && !paid && !failed;
-    var overdue = payable && state_ === "overdue";
+    // One rule decides all of this — see PortalTradeLink.paymentWindow. The
+    // balance is payable only between execution and the day before delivery
+    // opens: before that the trade can still fail, after it the period is
+    // running and the desk settles the balance instead.
+    var window = t.balanceWindow;
+    var paid = window === "paid";
+    var payable = window === "open" && !failed;
+    var closed = window === "closed" && !failed;
+    var overdue = closed;
     var deposit = failed ? "released" : (t.confirmed ? "paid" : "on hold");
     var depositColor = failed ? "var(--pp-text-faint)"
       : (t.confirmed ? "var(--pp-green-text)" : "var(--pp-amber-text)");
@@ -2888,7 +2904,8 @@
     var dueText = paid
       ? "paid " + formatDateShort(String(st.paidAt).slice(0, 10))
       : (failed ? "no longer due"
-        : (st.dueDate ? "due " + formatDateShort(st.dueDate) : "due before delivery"));
+        : (!st.dueDate ? "due before delivery"
+          : (closed ? "was due " + formatDateShort(st.dueDate) : "due " + formatDateShort(st.dueDate))));
     var dueTone = paid ? "var(--pp-green)" : (overdue ? "var(--pp-red)" : "var(--pp-text-faint)");
 
     var rows =
@@ -2913,13 +2930,18 @@
     } else if (failed) {
       note = '<div class="banner banner-teal" style="margin-top:12px">This trade was not executed. The ' +
         eur(st.depositEur) + ' deposit has been released back to your wallet — nothing further is due.</div>';
+    } else if (closed) {
+      var late = Math.abs(days);
+      note = '<div class="banner banner-red" style="margin-top:12px"><strong>Overdue by ' + late +
+        (late === 1 ? " day" : " days") + '.</strong> Delivery has started, so this balance can no longer be paid here — ' +
+        'PeakPower will contact you to settle it.</div>';
     } else if (!payable) {
       note = '<div class="banner banner-amber" style="margin-top:12px">PeakPower has not executed this block yet. ' +
         'The ' + eur(st.depositEur) + ' deposit is on hold, and the balance becomes payable once the trade is confirmed.</div>';
-    } else if (overdue) {
-      var late = Math.abs(days);
-      note = '<div class="banner banner-red" style="margin-top:12px"><strong>Overdue by ' + late +
-        (late === 1 ? " day" : " days") + '.</strong> The balance was due the day before delivery started.</div>';
+    } else if (days != null && days < 0) {
+      // Executed after its own deadline: our delay, so the window stays open.
+      note = '<div class="banner banner-amber" style="margin-top:12px">PeakPower confirmed this block after the balance was due, ' +
+        'so the payment window is still open. You can pay it now.</div>';
     } else if (state_ === "due-soon") {
       note = '<div class="banner banner-amber" style="margin-top:12px">Due in ' + days +
         (days === 1 ? " day" : " days") + ' — the day before delivery starts.</div>';
@@ -2927,10 +2949,12 @@
       note = '<div class="banner banner-teal" style="margin-top:12px">The balance falls due the day before delivery starts. You can pay it any time before then.</div>';
     }
 
-    // Shown but disabled before execution, rather than hidden: the customer
-    // can see what is coming and that nothing has gone wrong.
+    // Disabled before execution, rather than hidden: the customer can see what
+    // is coming and that nothing has gone wrong. Once the window has CLOSED it
+    // is dropped entirely — a button that can never become active again is
+    // decoration, and worse, an invitation.
     var action = "";
-    if (!paid && !failed) {
+    if (!paid && !failed && !closed) {
       var afford = st.balanceEur <= state.walletAvailable;
       var blocked = !payable || !afford;
       action = '<div class="card-foot-action">' +
@@ -2946,7 +2970,8 @@
 
     var subtitle = paid ? "Settled in full"
       : (failed ? "Reservation released"
-        : (payable ? "Deposit paid · balance outstanding" : "Deposit on hold · awaiting execution"));
+        : (closed ? "Payment window closed"
+          : (payable ? "Deposit paid · balance outstanding" : "Deposit on hold · awaiting execution")));
     return cardHtml("Payment", subtitle, rows + note + action);
   }
 
@@ -3455,15 +3480,16 @@
       // An unexecuted block is committed but not collectable: it shows what is
       // owed and says why it cannot be paid yet, instead of a due date it
       // would be unfair to count down.
-      var payable = PortalTradeLink.balancePayable(r);
+      var win = PortalTradeLink.paymentWindow(r, nowForLink());
+      var payable = win === "open";
       var state_ = PortalTermsLink.balanceState(st, nowForLink());
       var days = PortalTermsLink.daysUntilDue(st, nowForLink());
-      var dueTone = !payable ? "neutral"
-        : (state_ === "overdue" ? "critical" : (state_ === "due-soon" ? "warning" : "neutral"));
-      var dueText = !payable ? "awaiting confirmation"
-        : (state_ === "overdue"
-          ? formatDateShort(st.dueDate) + " · " + Math.abs(days) + "d late"
-          : formatDateShort(st.dueDate) + (state_ === "due-soon" ? " · in " + days + "d" : ""));
+      var dueTone = win === "closed" ? "critical"
+        : (!payable ? "neutral" : (state_ === "due-soon" || (days != null && days < 0) ? "warning" : "neutral"));
+      var dueText = win === "closed"
+        ? formatDateShort(st.dueDate) + " · window closed"
+        : (!payable ? "awaiting confirmation"
+          : formatDateShort(st.dueDate) + (state_ === "due-soon" && days >= 0 ? " · in " + days + "d" : ""));
       return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openTrade(\'' + esc(r.id) + '\')">' +
         '<div class="gt-mono" style="color:var(--pp-teal-700)">' + esc(r.id) + '</div>' +
         '<div>' + esc((r.shape || "") + " " + (r.period || "")) + '</div>' +
