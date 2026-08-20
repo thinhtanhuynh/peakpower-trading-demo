@@ -79,6 +79,7 @@ node consumption-data-loader.test.js
 node usage-projection.test.js
 node portal-trade-link.test.js
 node portal-terms-link.test.js
+node portal-demo-clock.test.js
 ```
 
 They run against fixtures, not the multi-MB source files. `portal-seed-data.js`
@@ -104,6 +105,7 @@ jsdom or Playwright smoke test after changing a page shell.
 | `usage-projection.js` | Projects a site's usage past the dataset's coverage. Tested |
 | `portal-terms-link.js` | Deposit percentage and settlement maths, shared both ways. Tested |
 | `portal-trade-link.js` | Carries trades between the portals over `localStorage`. Tested |
+| `portal-demo-clock.js` | Shifts what both portals think "now" is, so a demo can reach a date-dependent state without waiting for it. Tested |
 | `portal-seed-data.js` | Static seed data for the customer screens with no live source |
 | `back-office-desk-data.js` | Back-office seeded trades/queues plus `buildQueues()` |
 | `back-office-screens-data.js` | Back-office seeded data for Home, Customers, Wallets, Settlements, Data & feeds |
@@ -435,6 +437,16 @@ point that skips those two lines renders the wizard into a hidden container:
 no error, no visible effect, a dead button. If a fifth "Request a trade"
 button appears, check this before the click handler.
 
+**This is a whole-page rule, not a wizard one.** Any function that moves the
+customer to a different screen owes the same two lines, and `topUpWallet()`
+shipped without them: from the Wallet it worked (the page was already active),
+but the two "Deposit funds →" links that live on *other* screens — the
+wizard's insufficient-funds message and the trade detail's Payment card — were
+dead. The click fired, the handler ran, the top-up form rendered into a hidden
+`#page-wallet`, and the customer stayed where they were with nothing to show
+for it. Same failure signature as the wizard case: a handler that runs and a
+screen that does not change means look here first.
+
 The connection-detail button sits **below** the block-positions table in a
 `.card-foot-action` — a request is a next step after reading the positions,
 not a header control. Connections flagged `notTradeable` (the gas connection) or `notEligible`
@@ -600,15 +612,20 @@ state unambiguously, so there is no extra badge on top of it.
 covers an invalid volume, `NO_CONNECTION_HINT` covers an empty selection
 (only reachable via `Clear all`); `wizardVolumeHint()` picks between them.
 
-**`wizardAllocationNote()` returns `""` when 2+ connections are selected** —
-the checked cards already say which ones. The single-connection message stays,
-because it says what happens next rather than which connection. An empty
-banner must **hide**, not render blank, and that has to be handled in **both**
-`buildWizardVolumeTable()` (full re-render path, e.g. toggling a connection)
-and `refreshWizardVolumeUi()` (live-patch path, e.g. typing a volume). Fixing
-only the first leaves a real bug: clear the field with 2 connections selected
-to show the amber hint, then type a valid volume, and the banner stays visible
-and empty.
+**`wizardAllocationNote()` says what happens next, never which connection** —
+the checked cards already name those. One connection reads "allocated **to**
+Rotterdam DC", two or more "allocated **across** all selected connections":
+*across*, because `wizardVolumes()` divides the total between them, where *to
+all* would read as each one receiving the whole block.
+
+**The banner's text and its visibility are computed from the same string**, in
+**both** `buildWizardVolumeTable()` (full re-render path, e.g. toggling a
+connection) and `refreshWizardVolumeUi()` (live-patch path, e.g. typing a
+volume) — an empty note must hide rather than render as a blank coloured
+rectangle. Neither branch returns `""` today, but keep the pairing: it was
+added for a real bug (clear the field with 2 connections selected to show the
+amber hint, then type a valid volume, and the banner stayed visible and empty),
+and it only stays fixed while both paths derive visibility from the text.
 
 **Ineligible connections get no checkbox**, and `toggleWizardConnection()`
 refuses them — the guard is in the handler, not only in the markup. Same for
@@ -627,8 +644,42 @@ toolbar is omitted entirely.
 field could not be typed into — a full re-render rebuilds the `<input>`
 mid-keystroke and steals focus. `setWizardVolume()` and `stepWizardVolume()`
 patch in place through `refreshWizardVolumeUi()`, which targets
-`#wizard-volume-note`, `#wizard-vol-dec` and `#wizard-continue`. Keep those
-ids, and give any new live-edit field the same treatment.
+`#wizard-volume-note`, `#wizard-vol-dec`, `#wizard-continue` and
+`#wizard-summary-body`. Keep those ids, and give any new live-edit field the
+same treatment.
+
+**Never rewrite DOM that has not changed, and be careful what a blur rebuilds.**
+`refreshWizardVolumeUi()` writes `#wizard-summary-body` only when the new HTML
+differs, and `setWizardVolume()` snaps to the 0,01 MW grid on input so
+`commitWizardVolume()` has nothing left to change on blur. Both exist for one
+failure: blur fires on the **mousedown that begins a click**, so a rebuild
+there replaces the "Deposit funds →" link inside that card between mousedown
+and mouseup — the two land on different nodes and the browser never raises a
+click at all. The link looked dead while its handler was perfectly fine.
+
+**`#wizard-summary-body` is on that list for a reason.** The Summary card is
+every figure the volume decides — power, volume, estimated value, deposit, and
+whether the wallet covers it — and for a while it moved only on the *next*
+full re-render. Typing a volume changed the input and nothing else, so the
+field read as broken even though it was working: you could type 1,5 MW and
+watch the deposit sit at its old number. Patching the summary's own container
+keeps it live without going near the `<input>`.
+
+**A running countdown must never re-render the page.** The 1-second ticker
+used to end in `renderApp()` whenever any pending offer's `secondsRemaining`
+moved — and the seeded `TRD-1078` counts down for ~25 minutes after every
+load, so for 25 minutes the whole Trading page was rebuilt once a second.
+Anything focused was destroyed a second later: the volume field could not be
+typed into, the note textarea dropped keystrokes, and a text selection
+vanished. A countdown is *text*: `refreshCountdowns()` patches `#offer-ring`
+and `#trade-countdown` in place, and only genuine **expiry** — which really
+does change the page's structure — still calls `renderApp()`.
+
+**The volume field selects its contents on focus** (`onfocus="this.select()"`).
+It is `text-align:center`, so a click lands the caret in the *middle* of the
+number and typing inserted there — clicking "0.20" and typing 5 produced
+"0.520". You always replace this value, never edit into it. `onfocus` alone is
+enough; no `onmouseup` guard is needed, and adding one would break drag-select.
 
 `joinWithAnd()` (Oxford "A, B and C") is the single helper for naming the
 selected connections — used by `wizardAllocationNote()`,
@@ -1203,6 +1254,11 @@ Matched to the mockup's bundled styles:
 - The design system already defines `.btn-ghost` as a transparent underlined
   link for the dark offer banner — don't redefine that name for a
   light-background button.
+- `.btn-link` is `white-space:nowrap`. These sit inline at the end of a
+  sentence ("…to cover the 20 % deposit on this block. Deposit funds →"), and
+  wrapped across two lines it becomes two half-width targets whose combined
+  bounding box centres on the text *behind* it — which is exactly how a
+  working link comes to feel unclickable.
 
 Two deliberate divergences, both to protect Consumption, which shares these
 classes:
@@ -1276,7 +1332,7 @@ roundings would miss the total by a cent on every screen showing all three.
 | Back Office | Wallets | An **OUTSTANDING** column between MINIMUM and STATUS, red with an "N overdue" sub-line when late |
 | Customer | Wizard steps 2 & 3 | Deposit and balance rows with the due date, and the balance box's "Deposit reserved" line |
 | Customer | Firm-offer banner | "Accepting reserves € X (20 %) now · balance € Y due …", with Accept **disabled** when the deposit exceeds available balance |
-| Customer | Trade detail | A **Payment** card: value, deposit paid, balance, due date, a **Pay balance** button, and the state in words |
+| Customer | Trade detail | A **Payment** card: value, the deposit and its state, balance, due date, a **Pay balance** button (disabled until the trade is confirmed), and the state in words |
 | Customer | Wallet | A **Balance outstanding** stat card and an **Outstanding balances** table, soonest due first |
 | Customer | Dashboard | A stat card, and a red/amber banner when a balance is overdue or within 14 days |
 
@@ -1286,6 +1342,60 @@ pass step 2. An insufficient wallet names the shortfall and links to the
 deposit flow rather than only refusing. `wizardGoStep2()` and `submitWizard()`
 **re-check it themselves**, so the rule survives a call that bypasses the
 disabled button.
+
+### The demo clock
+
+Every date-dependent state here is decided against "now", and in a demo every
+trade delivers months out — so a balance is permanently `scheduled` and the
+run-up to paying it (due soon → overdue → paid) can only be seen by waiting
+weeks for it. `portal-demo-clock.js` shifts what both portals think "now" is by
+a whole number of days, so that story can be walked through on demand.
+
+**It shifts the clock, never the data.** A Q1 block still starts on 1 January
+and its balance is still due on 31 December; only today moves. Rewriting the
+trade's `dueDate` instead would be quicker and would leave the trade detail
+claiming a due date its own delivery period contradicts.
+
+Same transport and the same failure discipline as the other two links: one
+versioned key (`peakpower.demoClock.v1`), the `storage` event, and every read
+failure landing on 0 — the real clock — rather than throwing. **Both portals
+share one offset**, so the desk's "N overdue" can never disagree with what the
+customer is looking at.
+
+**Whole days, shifted by calendar** (`Date.setDate`), never by
+`offsetDays × 86_400_000`. `daysUntilDue` counts whole local days, so a
+whole-day offset lands exactly on the intended date's state; and a flat 24h per
+day lands an hour early across a DST change, which silently moves the date when
+the real time is near midnight. Both are pinned by tests.
+
+**The seam already existed.** Every clock-reading function in
+`portal-trade-link.js` and `portal-terms-link.js` already took an optional
+`now` — `balanceState`, `daysUntilDue`, `effectiveStatus`, `secondsRemaining`,
+`isExpired`, and the `{now}` opts on `priceRequest` / `respondToOffer` /
+`payBalance` / `confirmTrade` / `failTrade` — and no caller passed one. Each
+page now funnels every one of them through its own `nowForLink()`. **A new call
+site that reads a date must go through `nowForLink()`**, or that one screen
+quietly runs on a different day from every other.
+
+**One honest clock, and it costs something:** jumping forward expires an open
+firm offer, exactly as real elapsed time would. Demo the offer flow before
+jumping, or Reset first.
+
+**Anything that latched on "this already happened" has to reset when the clock
+moves.** The desk's `state.expiredShown` marks an offer as re-rendered at the
+moment it expired, so the ticker flips the banner over exactly once — correct
+while time only ran forward, wrong as soon as Reset can un-expire an offer,
+because the second expiry would then never re-render and the desk would keep
+showing a live offer that has actually lapsed. `clearExpiryLatch()` is called
+from `applyDemoOffset()` and from `syncDemoClock()`, and `syncDemoClock()`
+compares before clearing so an ordinary `focus` does not reset it.
+
+The control is a topbar strip in both portals — neutral at `today`, amber once
+shifted, because a faked present must never read as the real one. It is static
+markup patched in place by `refreshDemoClockUi()`, never re-rendered: the date
+input is a live field and a re-render would steal focus mid-keystroke. In the
+Back Office it sits in a `.topbar-right` wrapper *beside* `#topbar-actions`,
+whose `innerHTML` is replaced on every render.
 
 ### Two things called settlement
 
@@ -1332,7 +1442,8 @@ this block", with the link — not the sentence — carrying "Deposit funds →"
   deliberately — "available" is not "free" once a balance is coming.
 - **A confirmed trade still owes its balance.** Confirmation is execution, not
   payment. `confirmTrade()` leaves `settlement` untouched; there is a test
-  pinning this.
+  pinning this. What confirmation *does* change is that the balance becomes
+  payable at all — see "The deposit's three states".
 - **The accept guard is in the handler, not only the button** — a stale screen
   must not accept its way into a negative wallet. Rejecting is never blocked.
 - **A missing or corrupt setting falls back to 20%, never to 0.** The safe
@@ -1347,9 +1458,55 @@ this block", with the link — not the sentence — carrying "Deposit funds →"
   "Vandersteen Koeling".
 
 **Not implemented:** wallet movements are in-memory, so a reload resets the
-balances (trade records themselves persist on the link). Nothing is billed,
-there is no dunning, and nothing stops delivery when a balance goes unpaid — the
-overdue state is surfaced, not enforced.
+balances (trade records themselves persist on the link). There is no refund
+history — a deposit is held, then either applied or released, and the ledger
+row is the whole record. Nothing is billed, there is no dunning, and nothing
+stops delivery when a balance goes unpaid — the overdue state is surfaced,
+not enforced.
+
+### The deposit's three states
+
+A deposit is **held**, then either **applied** or **released**, and the balance
+cannot be paid until it is applied.
+
+| Trade state | `PortalTradeLink.depositState()` | Wallet | Pay balance |
+|---|---|---|---|
+| Accepted, awaiting execution | `on-hold` | available − d, reserved + d | shown, **disabled** |
+| Confirmed | `applied` | reserved − d, settled − d | enabled |
+| Execution failed | `released` | reserved − d, available + d | gone |
+
+**`PortalTradeLink.balancePayable(req)` is the one rule** — a settlement, not
+already paid, and `isConfirmed`. `payBalance()` guards on it itself, so a stale
+screen cannot pay round the disabled button. Everything that *chases* the
+balance reads the same function: the Dashboard's red/amber banner,
+`overdueCount()`, the Wallet table's due badge, and the desk's own
+`outstandingFor()`.
+
+**Why the gate exists:** an accepted trade can still fail, and a failed one
+hands the deposit back rather than collecting more. Taking the 80 % before
+execution risks charging for a block the customer never gets, and unwinding
+that needs the refund history this POC deliberately does not have.
+
+**Committed but not chased.** An unexecuted balance still counts in every
+outstanding total and appears in the Wallet's Outstanding balances table — the
+money *is* committed, and hiding it would understate the obligation — but it is
+never counted overdue and never fires a banner. Its row reads *awaiting
+confirmation* in place of a due date, and its deposit shows *· held*. The
+Payment card withholds the due-soon and overdue notes for the same reason:
+telling someone a balance is late on a block that may never exist is exactly
+what this gate removes.
+
+**`reconcileDeposits()` moves the wallet** when the desk's outcome arrives,
+from this tab or another — it runs inside `syncLinkedTrades()`. It acts only on
+ids **this session reserved** (`state.depositReserved`, set in
+`respondToOffer`) and not already resolved (`state.depositResolved`). That
+scoping is what keeps it honest: the wallet is in-memory and resets on reload,
+so a trade confirmed before the page loaded never had a reservation *here* to
+release, and releasing one anyway would eat into the seeded figures.
+
+The confirm ledger row carries **equal debit and credit**, netting to no change
+in available — the shape the seeded `TRD-1051` "reservation settled" row
+already uses, because the money left available at reservation, not now.
 
 ## Cross-portal trade flow
 
@@ -1499,6 +1656,24 @@ both — a detail screen gets the crumb, a list screen the subtitle.
 The mockup's source was read by decoding its own gzip+base64 bundle rather
 than guessed at from rendered markup, so every ported constant is its literal
 value. `Back Office Portal - Preview.html` was **not** edited.
+
+**A live request's "The request" card lists connections and nothing else.**
+Columns are `CONNECTION` and `EAN`; the totals sit in a footer built in
+TRD-1058's own format — a 2px `--pp-border-strong` rule, "Total requested"
+at 12.5px/700 with a direction+shape badge beside it, and
+`formatMw(powerMw) + " · " + formatMwh(volumeMwh)` right-aligned at 14px/700.
+The desk prices the whole request, so the per-connection split is not a
+pricing input; everything else about the request stays in the **Request
+details** card in the side column. The split is still on the record — it is
+just not shown.
+
+**The EAN on a published request comes from the record, not a lookup.**
+`WIZARD_CONNECTIONS` carries no EAN (deliberately — see the wizard's step 2),
+so `submitWizard()` maps `connectionEan(id)` onto each connection's `sub`
+before `buildRequest()` sees it. Without that the desk's EAN column renders
+blank, which is what it did for as long as the column was a small grey
+sub-line nobody looked at. `connectionEan()` is the single lookup, shared with
+the wizard's own cards.
 
 **Three deliberate divergences**, all because the mockup is static and these
 screens are meant to work:

@@ -613,22 +613,48 @@ function pricedFixture(extra) {
   var plain = Link.acceptOffer(priced, { now: T0 });
   assert.strictEqual(plain.settlement, undefined, "no settlement passed, none attached");
 
-  var paid = Link.payBalance(accepted, { now: T0, by: "J. de Vries" });
-  assert.ok(paid.settlement.paidAt, "payBalance stamps the payment");
-  assert.strictEqual(paid.settlement.paidBy, "J. de Vries", "…and who made it");
-  assert.strictEqual(accepted.settlement.paidAt, null, "payBalance is pure — the input is untouched");
-  assertClose(paid.settlement.balanceEur, accepted.settlement.balanceEur, "the amount does not change on payment");
-
-  assert.strictEqual(Link.payBalance(paid, { now: T0 }), null, "a paid balance cannot be paid twice");
-  assert.strictEqual(Link.payBalance(plain, { now: T0 }), null, "a trade with no schedule has nothing to pay");
-  assert.strictEqual(Link.payBalance(null, {}), null, "no trade at all");
+  // The balance is not payable until the desk has executed the trade. An
+  // accepted trade can still fail, and a failed one hands the deposit back
+  // rather than collecting more — so charging the balance before execution
+  // risks taking money for a block the customer never gets.
+  assert.strictEqual(Link.balancePayable(accepted), false, "an accepted trade's balance is not payable yet");
+  assert.strictEqual(Link.payBalance(accepted, { now: T0 }), null,
+    "…and payBalance refuses it itself, so a stale screen cannot pay round the disabled button");
 
   // A confirmed trade still owes its balance — confirmation is execution, not
   // payment — so the schedule must survive confirmTrade untouched.
   var confirmed = Link.confirmTrade(accepted, { now: T0, reference: "ICE-1" });
   assert.ok(confirmed.settlement && !confirmed.settlement.paidAt,
     "confirming does not settle the balance");
-  assert.ok(Link.payBalance(confirmed, { now: T0 }), "…and it can still be paid afterwards");
+  assert.strictEqual(Link.balancePayable(confirmed), true, "…it only makes it payable");
+
+  var paid = Link.payBalance(confirmed, { now: T0, by: "J. de Vries" });
+  assert.ok(paid.settlement.paidAt, "payBalance stamps the payment");
+  assert.strictEqual(paid.settlement.paidBy, "J. de Vries", "…and who made it");
+  assert.strictEqual(confirmed.settlement.paidAt, null, "payBalance is pure — the input is untouched");
+  assertClose(paid.settlement.balanceEur, confirmed.settlement.balanceEur, "the amount does not change on payment");
+
+  assert.strictEqual(Link.payBalance(paid, { now: T0 }), null, "a paid balance cannot be paid twice");
+  assert.strictEqual(Link.balancePayable(paid), false, "…and it stops being payable once paid");
+  assert.strictEqual(Link.payBalance(plain, { now: T0 }), null, "a trade with no schedule has nothing to pay");
+  assert.strictEqual(Link.balancePayable(plain), false, "…and nothing to chase either");
+  assert.strictEqual(Link.payBalance(null, {}), null, "no trade at all");
+  assert.strictEqual(Link.balancePayable(null), false, "…which is not payable");
+
+  // A failed trade owes nothing: the deposit goes back and the balance is
+  // never collected, so it must never be payable or chaseable.
+  var failed = Link.failTrade(accepted, { now: T0, reason: "Counterparty withdrew" });
+  assert.strictEqual(Link.balancePayable(failed), false, "a failed trade's balance is never payable");
+  assert.strictEqual(Link.payBalance(failed, { now: T0 }), null, "…and payBalance refuses it");
+
+  // The deposit's own three-state life, independent of paidAt (which is the
+  // BALANCE's state, not the deposit's).
+  assert.strictEqual(Link.depositState(accepted), "on-hold", "held while the desk has yet to act");
+  assert.strictEqual(Link.depositState(confirmed), "applied", "spent once the trade is executed");
+  assert.strictEqual(Link.depositState(failed), "released", "handed back once it fails");
+  assert.strictEqual(Link.depositState(paid), "applied", "paying the balance does not change the deposit's state");
+  assert.strictEqual(Link.depositState(plain), null, "no schedule, no deposit state");
+  assert.strictEqual(Link.depositState(null), null, "no trade at all");
 })();
 
 console.log("portal-trade-link.test.js: all assertions passed");

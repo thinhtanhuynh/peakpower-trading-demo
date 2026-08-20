@@ -313,14 +313,42 @@
   function rejectOffer(req, opts) { return respondToOffer(req, "reject", opts); }
 
   /**
+   * Whether a trade's balance can be paid — and therefore chased — yet.
+   *
+   * Only once the desk has executed it. An accepted trade can still fail, and
+   * a failed one gives the deposit back rather than collecting more, so taking
+   * the balance before execution risks charging for a block the customer never
+   * gets. This is the single source of truth for the Pay balance button, the
+   * overdue counts and the Dashboard's balance banner: an unconfirmed balance
+   * is still shown as committed, but nobody asks for it.
+   */
+  function balancePayable(req) {
+    return !!(req && req.settlement && !req.settlement.paidAt && isConfirmed(req));
+  }
+
+  /**
+   * What has become of the deposit: "on-hold" while the desk has yet to act,
+   * "applied" once the trade is executed, "released" once it has failed. Null
+   * when the trade carries no schedule at all (a Sell, or an unanswered offer).
+   *
+   * Independent of `paidAt`, which is the *balance's* state, not the deposit's.
+   */
+  function depositState(req) {
+    if (!req || !req.settlement) { return null; }
+    if (isFailed(req)) { return "released"; }
+    return isConfirmed(req) ? "applied" : "on-hold";
+  }
+
+  /**
    * Records the balance as paid. Pure; returns a new record, or null when
-   * there is nothing to pay — no schedule on this trade, or it is already
-   * settled. Guarded here rather than only in the UI, so a stale screen can't
-   * pay the same balance twice.
+   * there is nothing to pay — no schedule on this trade, it is already
+   * settled, or the desk has not executed it yet. Guarded here rather than
+   * only in the UI, so a stale screen can neither pay the same balance twice
+   * nor pay one for a block that may still fail.
    */
   function payBalance(req, opts) {
     opts = opts || {};
-    if (!req || !req.settlement || req.settlement.paidAt) { return null; }
+    if (!balancePayable(req)) { return null; }
     var out = {};
     for (var k in req) { out[k] = req[k]; }
     var s = {};
@@ -697,6 +725,8 @@
     respondToOffer: respondToOffer,
     acceptOffer: acceptOffer,
     payBalance: payBalance,
+    balancePayable: balancePayable,
+    depositState: depositState,
     rejectOffer: rejectOffer,
     isResolved: isResolved,
     secondsRemaining: secondsRemaining,

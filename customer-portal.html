@@ -91,6 +91,19 @@
   .topbar .crumb .crumb-back:hover { color:var(--pp-teal-700); }
   .topbar .title { font-size:var(--text-lg); font-weight:700; color:var(--pp-text-heading); margin-top:2px; }
   .topbar-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+  /* Demo clock — shifts what the portal thinks "now" is by whole days, so the
+     run-up to a balance falling due can be shown on demand instead of waited
+     for. Amber once shifted: a faked present must never read as the real one. */
+  .demo-clock { display:flex; align-items:center; gap:8px; padding:5px 8px 5px 10px; border:1px solid var(--pp-border); border-radius:var(--radius-md); background:var(--pp-surface-alt); }
+  .demo-clock .demo-clock-dot { width:8px; height:8px; border-radius:2px; background:var(--pp-border-strong); flex-shrink:0; }
+  .demo-clock .demo-clock-text { font-size:11px; font-weight:600; color:var(--pp-text-body); white-space:nowrap; }
+  .demo-clock input[type="date"] { font-family:inherit; font-size:11px; color:var(--pp-text-heading); border:1px solid var(--pp-border); border-radius:var(--radius-sm); padding:3px 6px; background:#fff; }
+  .demo-clock .demo-clock-reset-btn { font-family:inherit; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--radius-sm); border:1px solid var(--pp-border); background:#fff; color:var(--pp-text-body); cursor:pointer; }
+  .demo-clock .demo-clock-reset-btn:hover:not(:disabled) { border-color:var(--pp-border-strong); color:var(--pp-text-heading); }
+  .demo-clock .demo-clock-reset-btn:disabled { opacity:.45; cursor:default; }
+  .demo-clock.shifted { background:var(--pp-amber-bg); border-color:var(--pp-amber-border); }
+  .demo-clock.shifted .demo-clock-dot { background:var(--pp-amber); }
+  .demo-clock.shifted .demo-clock-text { color:var(--pp-amber-text); }
   /* Badge — matches PeakPowerDesignSystem Badge.jsx exactly (11px/600,
      4px 12px, and every tone carries a real 1px border). */
   .badge { display:inline-block; padding:4px 12px; border-radius:var(--radius-pill); font-size:11px; font-weight:600; line-height:1.2; border:1px solid transparent; white-space:nowrap; }
@@ -482,7 +495,9 @@
   .btn-secondary:hover:not(:disabled) { background:var(--pp-surface-alt); }
   .btn-secondary:disabled { opacity:.5; cursor:not-allowed; }
   .btn-sm { padding:7px 14px; font-size:12px; }
-  .btn-link { background:none; border:none; padding:0; color:var(--pp-teal-700); font-weight:600; font-size:12px; cursor:pointer; font-family:var(--font-sans); transition:color .15s ease; }
+  /* nowrap: these sit inline at the end of a sentence, and a link broken
+     across two lines is two half-sized targets rather than one. */
+  .btn-link { background:none; border:none; padding:0; color:var(--pp-teal-700); font-weight:600; font-size:12px; cursor:pointer; font-family:var(--font-sans); transition:color .15s ease; white-space:nowrap; }
   .btn-link:hover { text-decoration:underline; color:var(--pp-teal-900); }
 
   /* ---- CSS-grid "tables" used by Dashboard/Connections/Prices/Trading/Wallet/Settlements ---- */
@@ -994,6 +1009,12 @@
         <div class="title" id="page-title">Dashboard</div>
       </div>
       <div class="topbar-actions">
+        <div class="demo-clock" id="demo-clock">
+          <span class="demo-clock-dot"></span>
+          <span class="demo-clock-text" id="demo-clock-label">Demo clock — today</span>
+          <input type="date" id="demo-clock-date" aria-label="Demo clock date">
+          <button type="button" class="demo-clock-reset-btn" id="demo-clock-reset" disabled>Reset</button>
+        </div>
         <span id="topbar-page-actions"></span>
       </div>
     </div>
@@ -1146,6 +1167,7 @@
 <script src="portal-seed-data.js"></script>
 <script src="portal-trade-link.js"></script>
 <script src="portal-terms-link.js"></script>
+<script src="portal-demo-clock.js"></script>
 <script>
 (function () {
   "use strict";
@@ -1273,7 +1295,16 @@
     // by render() on every genuine range/site change; left alone by a zoom
     // click or a window resize, which redraw through drawMonthCharts()
     // instead of render() for exactly that reason.
-    chartZoom: 1
+    chartZoom: 1,
+    // Deposits this session reserved, and those whose reservation the desk has
+    // since settled or released. Both in-memory, like every wallet figure —
+    // see reconcileDeposits().
+    depositReserved: {},
+    depositResolved: {},
+    // Whole days the demo clock is shifted by; 0 is the real clock. Read from
+    // the link at load and on every storage event, so moving it in the Back
+    // Office moves it here too.
+    demoOffsetDays: 0
   };
 
   function activatePageDom(pageLower) {
@@ -1514,9 +1545,22 @@
    * banner, Continue button, stepper buttons) are patched in place; the
    * input is left alone until it loses focus.
    */
+  /**
+   * oninput. Snaps to the 0,01 MW grid here as well as on blur, so the stored
+   * volume is always on the grid the field advertises — and so blur has
+   * nothing left to change.
+   *
+   * That second part matters: blur fires on the mousedown that begins a click,
+   * and if it moves the volume it rebuilds the Summary card, destroying the
+   * "Deposit funds →" link inside it before the mouseup. Snapping once, here,
+   * means commitWizardVolume() is idempotent and the link survives the click.
+   * The field's own text is deliberately not rewritten — that would fight the
+   * caret mid-entry; commitWizardVolume() tidies the display on blur.
+   */
   function setWizardVolume(raw) {
     var n = parseFloat(String(raw).replace(",", "."));
-    state.wizard.volumeMw = isNaN(n) ? 0 : n;
+    if (isNaN(n)) { state.wizard.volumeMw = 0; }
+    else { state.wizard.volumeMw = Math.round(Math.round(n / VOLUME_STEP_MW) * VOLUME_STEP_MW * 1000) / 1000; }
     refreshWizardVolumeUi();
   }
 
@@ -1563,6 +1607,26 @@
     if (dec) { dec.disabled = (state.wizard.volumeMw || 0) <= MIN_VOLUME_MW; }
     var btn = document.getElementById("wizard-continue");
     if (btn) { btn.disabled = invalid || !wizardFundsSufficient(); }
+    // The Summary beside the field is every figure the volume decides — power,
+    // volume, estimated value, deposit, and whether the wallet covers it. It
+    // used to move only on the next full re-render, so typing a volume changed
+    // the input and nothing else, which reads as a field that does not work.
+    // Patched here rather than through renderApp() for the usual reason: a
+    // re-render would rebuild #wizard-vol mid-keystroke and take the focus.
+    var summary = document.getElementById("wizard-summary-body");
+    if (summary) {
+      var period = getSelectedWizardPeriod();
+      var totalMW = wizardTotalMW();
+      var hours = wizardHours(period);
+      var priceVal = state.wizard.shape === "Base" ? period.base : period.peak;
+      var html = buildWizardSummaryBody(period, totalMW, hours, priceVal, priceVal * totalMW * hours);
+      // Only write when it actually differs. Blur fires this (via
+      // commitWizardVolume) on the mousedown that starts a click, so rewriting
+      // identical HTML would replace the "Deposit funds →" link inside this
+      // card between mousedown and mouseup — the two land on different nodes
+      // and the browser never raises a click at all.
+      if (summary.innerHTML !== html) { summary.innerHTML = html; }
+    }
   }
   function onWizardNoteChange(val) { state.wizard.note = val; renderApp(); }
 
@@ -1588,9 +1652,17 @@
       id: id,
       customer: PortalSeedData.CUSTOMER_NAME,
       customerId: PortalSeedData.CUSTOMER_ID,
-      connections: PortalSeedData.WIZARD_CONNECTIONS,
+      // Carrying the EAN onto the published record, not just the name: the
+      // desk identifies a connection by its metering point, and it has no
+      // business joining against this customer's own seed list to find one.
+      connections: PortalSeedData.WIZARD_CONNECTIONS.map(function (c) {
+        var out = {};
+        for (var k in c) { if (c.hasOwnProperty(k)) { out[k] = c[k]; } }
+        out.sub = connectionEan(c.id);
+        return out;
+      }),
       periods: PortalSeedData.WIZARD_PERIODS,
-      submittedAt: new Date().toISOString()
+      submittedAt: new Date(nowForLink()).toISOString()
     });
 
     var power = PortalTradeLink.formatMw(req.powerMw);
@@ -1641,12 +1713,22 @@
     return Math.max(0, MIN_BALANCE_ALERT - state.walletAvailable);
   }
 
+  /**
+   * Opens the wallet's funding screen — from the Wallet itself, and from the
+   * "Deposit funds →" links on the wizard and the trade detail.
+   *
+   * Those two are on OTHER screens, so this has to switch page like every
+   * cross-page entry point: renderApp() only redraws whichever `.page` is
+   * already visible, so setting walletView alone rendered the top-up form into
+   * a hidden container and the link did nothing at all.
+   */
   function topUpWallet() {
     // Default to the real amount that clears the low-balance alert, if any
     // — otherwise a plain round default. Either way this is a real number
     // computed from state, never a hardcoded one.
     var shortfall = balanceAlertShortfall();
     state.topupAmount = shortfall > 0 ? shortfall : 10000;
+    state.page = "Wallet"; activatePageDom("wallet");
     state.walletView = "topup";
     renderApp();
   }
@@ -1704,7 +1786,7 @@
   function performTopup() {
     if (!topupAmountValid()) { return; }
     var amt = state.topupAmount;
-    var now = new Date();
+    var now = new Date(nowForLink());
     var pad = function (n) { return String(n).padStart(2, "0"); };
     var dateStr = pad(now.getDate()) + "-" + pad(now.getMonth() + 1) + " " + pad(now.getHours()) + ":" + pad(now.getMinutes());
     var monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -1807,6 +1889,17 @@
   function eur(v) { return "€ " + ConsumptionCalc.formatNL(v, 2); }
 
   /**
+   * A connection's full EAN, read live from CONNECTIONS by id. Kept in one
+   * place so the wizard's cards and the request it publishes can't drift —
+   * WIZARD_CONNECTIONS deliberately carries no EAN of its own, which would be
+   * a second copy free to go stale.
+   */
+  function connectionEan(id) {
+    var c = PortalSeedData.CONNECTIONS.filter(function (x) { return x.id === id; })[0];
+    return c ? c.ean : "";
+  }
+
+  /**
    * Every live trade of this customer's with a balance still outstanding, in
    * due-date order — the soonest deadline first, which is the order anyone
    * chasing a payment wants them in.
@@ -1819,7 +1912,7 @@
     try { live = PortalTradeLink.read(window.localStorage) || []; } catch (e) { return []; }
     return live.filter(function (r) {
       if (!r.settlement || r.settlement.paidAt) { return false; }
-      var st = PortalTradeLink.effectiveStatus(r);
+      var st = PortalTradeLink.effectiveStatus(r, nowForLink());
       return st === PortalTradeLink.STATUS_ACCEPTED || st === PortalTradeLink.STATUS_CONFIRMED;
     }).sort(function (a, b) {
       return String(a.settlement.dueDate || "").localeCompare(String(b.settlement.dueDate || ""));
@@ -1828,6 +1921,24 @@
 
   function outstandingTotal() {
     return outstandingBalances().reduce(function (sum, r) { return sum + (r.settlement.balanceEur || 0); }, 0);
+  }
+
+  /**
+   * How many deposits are sitting on hold, for the Wallet's Reserved card.
+   *
+   * The seeded reserved balance stands for one accepted seed trade (TRD-1072
+   * in WALLET_LEDGER) that has no record behind it, so it is counted in
+   * alongside the live ones rather than leaving the card reading "nothing on
+   * hold" over a € 9.400,00 figure.
+   */
+  var SEEDED_DEPOSITS_ON_HOLD = 1;
+  function depositsOnHoldLabel() {
+    var live = [];
+    try { live = PortalTradeLink.read(window.localStorage) || []; } catch (e) { /* seed count only */ }
+    var n = SEEDED_DEPOSITS_ON_HOLD + live.filter(function (r) {
+      return PortalTradeLink.depositState(r) === "on-hold";
+    }).length;
+    return n + " accepted trade" + (n === 1 ? "" : "s") + " awaiting confirmation";
   }
 
   /**
@@ -1848,7 +1959,7 @@
     if (!req || !req.settlement || req.settlement.paidAt) { return; }
     var amount = req.settlement.balanceEur || 0;
     if (amount > state.walletAvailable) { return; }   // the button is disabled too
-    var next = PortalTradeLink.payBalance(req, {});
+    var next = PortalTradeLink.payBalance(req, { now: nowForLink() });
     if (!next) { return; }
     try { PortalTradeLink.publish(window.localStorage, next); } catch (e) { /* keep going */ }
     state.walletAvailable -= amount;
@@ -1865,7 +1976,7 @@
 
   /** "18-08 14:07" — the wallet ledger's own date format (see WALLET_LEDGER). */
   function ledgerStamp() {
-    var d = new Date();
+    var d = new Date(nowForLink());
     function p(v) { return (v < 10 ? "0" : "") + v; }
     return p(d.getDate()) + "-" + p(d.getMonth() + 1) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
   }
@@ -1895,13 +2006,16 @@
       renderApp();   // re-draws the banner, which already names the shortfall
       return;
     }
-    var next = PortalTradeLink.respondToOffer(req, action, { settlement: settlement });
+    var next = PortalTradeLink.respondToOffer(req, action, { settlement: settlement, now: nowForLink() });
     if (next) {
       try { PortalTradeLink.publish(window.localStorage, next); } catch (e) { /* keep going */ }
       // Accepting reserves the deposit, not the whole value — that is the
       // point of the deposit. In-memory only, like every other wallet
       // movement on this page.
       if (settlement) {
+        // Noted so reconcileDeposits() knows this session is the one holding
+        // the reservation, and may therefore settle or release it later.
+        state.depositReserved[req.id] = true;
         state.walletAvailable -= settlement.depositEur;
         state.walletReserved += settlement.depositEur;
         state.walletLedgerExtra.unshift({
@@ -1918,6 +2032,47 @@
   function acceptOffer(id) { respondToOffer(id, "accept"); }
   function rejectOffer(id) { respondToOffer(id, "reject"); }
 
+  /**
+   * Applies the desk's outcome to the wallet: a confirmed trade spends its
+   * deposit, a failed one hands it straight back.
+   *
+   * Only for deposits THIS session actually reserved. The wallet is in-memory
+   * and resets on reload, so a trade confirmed before the page loaded never
+   * had a reservation here to release, and releasing one anyway would eat into
+   * the seeded figures. `depositResolved` makes it once-only, since this runs
+   * on every storage event and every focus.
+   */
+  function reconcileDeposits(linked) {
+    linked.forEach(function (r) {
+      if (!state.depositReserved[r.id] || state.depositResolved[r.id]) { return; }
+      var failed = PortalTradeLink.isFailed(r);
+      if (!failed && !PortalTradeLink.isConfirmed(r)) { return; }
+      var amount = (r.settlement && r.settlement.depositEur) || 0;
+      state.depositResolved[r.id] = true;
+      state.walletReserved -= amount;
+      if (failed) {
+        state.walletAvailable += amount;
+        state.walletLedgerExtra.unshift({
+          date: ledgerStamp(), type: "Reservation released", tone: "info",
+          desc: r.id + " failed" + (r.failure && r.failure.reason ? " — " + r.failure.reason : ""),
+          by: (r.failure && r.failure.by) || "PeakPower Trading", byNote: "",
+          ref: r.id, refKind: "trade", debit: "", credit: eur(amount), after: eur(state.walletAvailable)
+        });
+      } else {
+        // Debit and credit both, netting to no change in available — the shape
+        // the seeded "reservation settled" row already uses, because the money
+        // left available when it was reserved, not now.
+        state.walletSettled -= amount;
+        state.walletLedgerExtra.unshift({
+          date: ledgerStamp(), type: "Trade confirmed", tone: "success",
+          desc: (r.shape || "") + " " + (r.period || "") + " · deposit settled",
+          by: (r.confirmation && r.confirmation.by) || "PeakPower Trading", byNote: "",
+          ref: r.id, refKind: "trade", debit: eur(amount), credit: eur(amount), after: eur(state.walletAvailable)
+        });
+      }
+    });
+  }
+
   function syncLinkedTrades() {
     var linked = [];
     try {
@@ -1925,13 +2080,14 @@
     } catch (e) {
       return; // an unavailable link must never break the Trading screen
     }
+    reconcileDeposits(linked);
     var linkedIds = {};
     linked.forEach(function (r) { linkedIds[r.id] = true; });
 
     var seeded = PortalSeedData.TRADES_SEED.filter(function (t) { return !linkedIds[t.id]; });
     // Newest request first, above the seeded history.
     var fromLink = linked.slice().reverse().map(function (r) {
-      return PortalTradeLink.toCustomerTrade(r);
+      return PortalTradeLink.toCustomerTrade(r, nowForLink());
     });
     state.trades = fromLink.concat(seeded);
 
@@ -1953,7 +2109,7 @@
     state.trades.forEach(function (t) {
       if (!t.pending) { return; }
       if (t.linked && t.expiresAt) {
-        var left = Math.max(0, Math.floor((new Date(t.expiresAt).getTime() - Date.now()) / 1000));
+        var left = Math.max(0, Math.floor((new Date(t.expiresAt).getTime() - nowForLink()) / 1000));
         if (left !== t.secondsRemaining) { t.secondsRemaining = left; changed = true; }
         if (left === 0) { expired = true; }
       } else if (typeof t.secondsRemaining === "number" && t.secondsRemaining > 0) {
@@ -1963,15 +2119,107 @@
     });
     // Re-read the link once at expiry so the trade flips to "Offer expired".
     if (expired) { syncLinkedTrades(); }
-    if ((changed || expired) && (state.page === "Trading" || state.page === "Dashboard")) { renderApp(); }
+    // A running countdown is TEXT, not structure, so patch the two places it
+    // shows. This used to call renderApp(), which rebuilt the whole Trading
+    // page every second — and the seeded TRD-1078 counts down for 25 minutes
+    // after every load, so for 25 minutes anything focused on that page was
+    // destroyed a second later: the wizard's volume field could not be typed
+    // into and the note textarea dropped keystrokes. Only expiry, which really
+    // does change the page's structure, re-renders.
+    if (changed) { refreshCountdowns(); }
+    if (expired && (state.page === "Trading" || state.page === "Dashboard")) { renderApp(); }
   }, 1000);
+
+  /** The Dashboard ring's contents — the arc and the mm:ss inside it. */
+  function offerRingInner(t) {
+    return countdownRingSvg(t.secondsRemaining, t.secondsTotal) +
+      '<div class="os-countdown">' + mmss(t.secondsRemaining) + '</div>';
+  }
+
+  /**
+   * Patches every visible countdown in place. Both targets are optional: only
+   * one of the two screens is ever mounted, and neither is mounted while the
+   * customer is somewhere else.
+   */
+  function refreshCountdowns() {
+    var ring = document.getElementById("offer-ring");
+    if (ring) {
+      var pending = state.trades.filter(function (t) { return t.pending; })[0];
+      if (pending) { ring.innerHTML = offerRingInner(pending); }
+    }
+    var det = document.getElementById("trade-countdown");
+    if (det) {
+      var open = state.trades.filter(function (t) { return t.id === state.tradeId; })[0];
+      if (open) { det.textContent = mmss(open.secondsRemaining); }
+    }
+  }
+
+  // --- Demo clock -----------------------------------------------------------
+
+  var demoClockEl = document.getElementById("demo-clock");
+  var demoClockLabelEl = document.getElementById("demo-clock-label");
+  var demoClockDateEl = document.getElementById("demo-clock-date");
+  var demoClockResetEl = document.getElementById("demo-clock-reset");
+
+  /** The shared offset, off the link. Any failure lands on the real clock. */
+  function syncDemoClock() {
+    try { state.demoOffsetDays = PortalDemoClock.read(window.localStorage); }
+    catch (e) { state.demoOffsetDays = 0; }
+  }
+
+  /** Patched in place, never re-rendered — rebuilding the date input mid-edit steals focus. */
+  function refreshDemoClockUi() {
+    var off = state.demoOffsetDays;
+    var iso = PortalDemoClock.dateForOffset(off);
+    demoClockEl.classList.toggle("shifted", off !== 0);
+    demoClockLabelEl.textContent = "Demo clock — " +
+      (off === 0 ? "today" : formatDateShort(iso) + " · " + PortalDemoClock.label(off));
+    demoClockDateEl.value = iso;
+    demoClockResetEl.disabled = off === 0;
+  }
+
+  /** An unusable date snaps the control back rather than storing anything. */
+  function setDemoClockDate(iso) {
+    // Measured from the REAL today, never from the shifted one: picking a
+    // second date must land on that date, not that many days past the first.
+    var off = PortalDemoClock.offsetForDate(iso, Date.now());
+    if (off == null) { refreshDemoClockUi(); return; }
+    applyDemoOffset(off);
+  }
+
+  // Trades are rebuilt before the re-render: toCustomerTrade() bakes a status
+  // and a countdown against whatever `now` it was handed.
+  function applyDemoOffset(off) {
+    state.demoOffsetDays = off;
+    try { PortalDemoClock.write(window.localStorage, off); } catch (e) { /* a broken link must not break the page */ }
+    syncLinkedTrades();
+    refreshDemoClockUi();
+    renderCurrentPage();
+  }
+
+  /** Offset 0, not "today's date" — a date round trip reads the clock twice and can land on −1. */
+  function resetDemoClock() { applyDemoOffset(0); }
+
+  demoClockDateEl.addEventListener("change", function () { setDemoClockDate(this.value); });
+  demoClockResetEl.addEventListener("click", resetDemoClock);
 
   // Initial load, plus live updates when the Back Office prices something in
   // another tab. `storage` only fires in OTHER tabs, which is the cross-portal
   // case; `focus` covers coming back to this one.
+  //
+  // The clock is read BEFORE the trades: toCustomerTrade() resolves a status
+  // and a countdown against the `now` it is given, so syncing them the other
+  // way round would build the first render against the real clock.
+  syncDemoClock();
+  refreshDemoClockUi();
   syncLinkedTrades();
   PortalTradeLink.subscribe(window, function () { syncLinkedTrades(); renderApp(); });
-  window.addEventListener("focus", function () { syncLinkedTrades(); renderApp(); });
+  PortalDemoClock.subscribe(window, function () {
+    syncDemoClock(); refreshDemoClockUi(); syncLinkedTrades(); renderCurrentPage();
+  });
+  window.addEventListener("focus", function () {
+    syncDemoClock(); refreshDemoClockUi(); syncLinkedTrades(); renderApp();
+  });
 
   (function attachSidebarNav() {
     var links = document.querySelectorAll("#sidebar-nav a");
@@ -2140,9 +2388,13 @@
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#9151B8" stroke-width="2" stroke-dasharray="5,3"></polyline>';
   }
 
+  // Only a balance the customer is actually allowed to pay can be late. An
+  // accepted trade the desk has not executed yet is committed money, so it
+  // still counts as outstanding — but it is never chased.
   function overdueCount() {
     return outstandingBalances().filter(function (r) {
-      return PortalTermsLink.balanceState(r.settlement) === "overdue";
+      return PortalTradeLink.balancePayable(r) &&
+        PortalTermsLink.balanceState(r.settlement, nowForLink()) === "overdue";
     }).length;
   }
 
@@ -2154,13 +2406,14 @@
    */
   function balanceBannerHtml_() {
     var list = outstandingBalances().filter(function (r) {
-      var st = PortalTermsLink.balanceState(r.settlement);
+      if (!PortalTradeLink.balancePayable(r)) { return false; }
+      var st = PortalTermsLink.balanceState(r.settlement, nowForLink());
       return st === "overdue" || st === "due-soon";
     });
     if (!list.length) { return ""; }
     var first = list[0];
-    var overdue = PortalTermsLink.balanceState(first.settlement) === "overdue";
-    var days = PortalTermsLink.daysUntilDue(first.settlement);
+    var overdue = PortalTermsLink.balanceState(first.settlement, nowForLink()) === "overdue";
+    var days = PortalTermsLink.daysUntilDue(first.settlement, nowForLink());
     var total = list.reduce(function (sum, r) { return sum + (r.settlement.balanceEur || 0); }, 0);
     var when = overdue
       ? "overdue by " + Math.abs(days) + (Math.abs(days) === 1 ? " day" : " days")
@@ -2253,7 +2506,7 @@
         '<div class="os-headline">' + esc(pending.shape) + ' ' + esc(pending.period) + ' · ' + esc(pending.power) + ' · ' + esc(pending.price) + '/MWh</div>' +
         '<div class="os-sub">Total ' + esc(pending.value) + ' · respond before the countdown reaches zero.</div>' +
         '<div style="margin-top:16px"><button type="button" class="btn-accept" onclick="PP.openTrade(\'' + pending.id + '\')">View offer</button></div></div>' +
-        '<div><div class="os-countdown-ring">' + countdownRingSvg(pending.secondsRemaining, pending.secondsTotal) + '<div class="os-countdown">' + mmss(pending.secondsRemaining) + '</div></div><div class="os-countdown-label">to respond</div></div>' +
+        '<div><div class="os-countdown-ring" id="offer-ring">' + offerRingInner(pending) + '</div><div class="os-countdown-label">to respond</div></div>' +
         '</div></div>';
     }
 
@@ -2529,7 +2782,7 @@
           : '<button type="button" class="btn-accept" onclick="PP.noop()">Accept</button>' +
             '<button type="button" class="btn-reject" onclick="PP.noop()">Reject</button>') +
         '<button type="button" class="btn-ghost" onclick="PP.noop()">Ask a question</button>' +
-        '<span class="ob-countdown">' + mmss(t.secondsRemaining) + '</span>' +
+        '<span class="ob-countdown" id="trade-countdown">' + mmss(t.secondsRemaining) + '</span>' +
         '</div></div>';
     }
 
@@ -2619,31 +2872,50 @@
   function settlementCardHtml(t) {
     var st = t.settlement;
     if (!st) { return ""; }
-    var state_ = PortalTermsLink.balanceState(st);
-    var days = PortalTermsLink.daysUntilDue(st);
+    var state_ = PortalTermsLink.balanceState(st, nowForLink());
+    var days = PortalTermsLink.daysUntilDue(st, nowForLink());
     var paid = state_ === "paid";
-    var overdue = state_ === "overdue";
+    var failed = !!t.failed;
+    // The balance only becomes payable — and only then fair to call late —
+    // once the desk has executed the block. Until then the trade can still
+    // fail, and a failed one hands the deposit back rather than collecting.
+    var payable = !!t.confirmed && !paid && !failed;
+    var overdue = payable && state_ === "overdue";
+    var deposit = failed ? "released" : (t.confirmed ? "paid" : "on hold");
+    var depositColor = failed ? "var(--pp-text-faint)"
+      : (t.confirmed ? "var(--pp-green-text)" : "var(--pp-amber-text)");
 
     var dueText = paid
       ? "paid " + formatDateShort(String(st.paidAt).slice(0, 10))
-      : (st.dueDate ? "due " + formatDateShort(st.dueDate) : "due before delivery");
+      : (failed ? "no longer due"
+        : (st.dueDate ? "due " + formatDateShort(st.dueDate) : "due before delivery"));
     var dueTone = paid ? "var(--pp-green)" : (overdue ? "var(--pp-red)" : "var(--pp-text-faint)");
 
     var rows =
       '<div class="kv-row"><span class="k">Trade value</span><span class="v">' + eur(st.valueEur) + '</span></div>' +
       '<div class="kv-row"><span class="k">Deposit (' + pctLabel(st.depositPct) + ')</span>' +
-        '<span class="v" style="color:var(--pp-green-text)">' + eur(st.depositEur) + ' · paid</span></div>' +
+        '<span class="v" style="color:' + depositColor + '">' + eur(st.depositEur) + ' · ' + deposit + '</span></div>' +
       '<div class="kv-row"><span class="k">Balance (' + pctLabel(100 - st.depositPct) + ')</span>' +
-        '<span class="v"' + (paid ? ' style="color:var(--pp-green-text)"' : (overdue ? ' style="color:var(--pp-red-text)"' : '')) + '>' +
+        '<span class="v"' + (paid ? ' style="color:var(--pp-green-text)"'
+          : (overdue ? ' style="color:var(--pp-red-text)"'
+            : (failed ? ' style="color:var(--pp-text-faint)"' : ''))) + '>' +
         eur(st.balanceEur) + '</span></div>' +
       '<div class="kv-row"><span class="k">' + (paid ? "Settled" : "Payment due") + '</span>' +
         '<span class="v" style="color:' + dueTone + '">' + esc(dueText) + '</span></div>';
 
     // The state is said in words as well as colour: a red number alone does
-    // not tell you whether it is late or merely large.
+    // not tell you whether it is late or merely large. Due-soon and overdue
+    // are withheld until the block is executed — chasing a balance on a trade
+    // that may still fail is exactly what this card must not do.
     var note = "";
     if (paid) {
       note = '<div class="banner banner-green" style="margin-top:12px">Paid in full. Nothing further is due on this trade.</div>';
+    } else if (failed) {
+      note = '<div class="banner banner-teal" style="margin-top:12px">This trade was not executed. The ' +
+        eur(st.depositEur) + ' deposit has been released back to your wallet — nothing further is due.</div>';
+    } else if (!payable) {
+      note = '<div class="banner banner-amber" style="margin-top:12px">PeakPower has not executed this block yet. ' +
+        'The ' + eur(st.depositEur) + ' deposit is on hold, and the balance becomes payable once the trade is confirmed.</div>';
     } else if (overdue) {
       var late = Math.abs(days);
       note = '<div class="banner banner-red" style="margin-top:12px"><strong>Overdue by ' + late +
@@ -2655,21 +2927,27 @@
       note = '<div class="banner banner-teal" style="margin-top:12px">The balance falls due the day before delivery starts. You can pay it any time before then.</div>';
     }
 
+    // Shown but disabled before execution, rather than hidden: the customer
+    // can see what is coming and that nothing has gone wrong.
     var action = "";
-    if (!paid) {
+    if (!paid && !failed) {
       var afford = st.balanceEur <= state.walletAvailable;
+      var blocked = !payable || !afford;
       action = '<div class="card-foot-action">' +
-        '<button type="button" class="btn-primary"' + (afford ? "" : " disabled") +
+        '<button type="button" class="btn-primary"' + (blocked ? " disabled" : "") +
         ' onclick="PP.payTradeBalance(\'' + esc(t.id) + '\')">Pay balance ' + eur(st.balanceEur) + '</button>' +
-        (afford
-          ? ''
-          : '<div style="font-size:11px;color:var(--pp-red-text);margin-top:8px">Available balance is ' +
+        (payable && !afford
+          ? '<div style="font-size:11px;color:var(--pp-red-text);margin-top:8px">Available balance is ' +
             eur(state.walletAvailable) + ' — add ' + eur(st.balanceEur - state.walletAvailable) +
-            ' to cover this. <a class="btn-link" onclick="PP.topUpWallet()">Deposit funds →</a></div>') +
+            ' to cover this. <a class="btn-link" onclick="PP.topUpWallet()">Deposit funds →</a></div>'
+          : '') +
         '</div>';
     }
 
-    return cardHtml("Payment", paid ? "Settled in full" : "Deposit paid · balance outstanding", rows + note + action);
+    var subtitle = paid ? "Settled in full"
+      : (failed ? "Reservation released"
+        : (payable ? "Deposit paid · balance outstanding" : "Deposit on hold · awaiting execution"));
+    return cardHtml("Payment", subtitle, rows + note + action);
   }
 
   function countDaysInRange(startStr, endStr) {
@@ -2757,7 +3035,8 @@
     if (list.length === 1) {
       return "This block will be allocated to " + list[0].name + " once the trade is confirmed.";
     }
-    return "";
+    // "across", not "to": wizardVolumes() divides the total between them.
+    return "This block will be allocated across all selected connections once the trade is confirmed.";
   }
   function wizardHours(period) {
     if (state.wizard.shape === "Base") { return countDaysInRange(period.start, period.end) * 24; }
@@ -2989,7 +3268,7 @@
         // this checkbox's toggle.
         : '<input type="checkbox"' + (sel ? " checked" : "") + (locked ? " disabled" : "") + '>';
       var click = (c.notEligible || locked) ? "" : ' onclick="PP.toggleWizardConnection(\'' + c.id + '\')"';
-      var fullEan = (PortalSeedData.CONNECTIONS.filter(function (x) { return x.id === c.id; })[0] || {}).ean || c.id;
+      var fullEan = connectionEan(c.id) || c.id;
       var foot;
       if (c.notEligible) {
         foot = '<span class="cc-pill ineligible">Not eligible' + (c.note ? " · " + c.note : "") + '</span>';
@@ -3018,9 +3297,14 @@
         '<button type="button" class="volume-step-btn" id="wizard-vol-dec"' + (atMin ? " disabled" : "") +
           ' aria-label="Decrease volume" onclick="PP.stepWizardVolume(-1)">−</button>' +
         '<div class="volume-input-wrap">' +
+          // Selected on focus: the field is centre-aligned, so a click lands the
+          // caret in the middle of the number and typing inserted there —
+          // "0.20" + "5" came out as "0.520". You always replace this value,
+          // never edit into it.
           '<input id="wizard-vol" type="number" inputmode="decimal"' +
           ' min="' + MIN_VOLUME_MW + '" step="' + VOLUME_STEP_MW + '"' +
           ' value="' + (state.wizard.volumeMw || 0).toFixed(2) + '"' +
+          ' onfocus="this.select()"' +
           ' oninput="PP.setWizardVolume(this.value)" onchange="PP.commitWizardVolume(this)">' +
           '<span class="viw-unit">MW</span>' +
         '</div>' +
@@ -3135,13 +3419,15 @@
         '<div>' + cardHtml("Connection & volume",
           state.wizard.lockedConn ? "Requested from this connection" : "Pick one or more connections this block is traded for",
           buildWizardVolumeTable()) + '</div>' +
-        '<div>' + cardHtml("Summary", "", buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
+        '<div>' + cardHtml("Summary", "", '<div id="wizard-summary-body">' +
+          buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue) + '</div>') + '</div>' +
         '</div>';
     } else {
       bodyHtml = '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">' +
         '<div>' + cardHtml("Review & submit", "This submits a request only. PeakPower will respond with a firm, time-limited price; you then accept or reject it.",
           buildWizardReviewBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
-        '<div>' + cardHtml("Summary", "", buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
+        '<div>' + cardHtml("Summary", "", '<div id="wizard-summary-body">' +
+          buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue) + '</div>') + '</div>' +
         '</div>';
     }
 
@@ -3162,25 +3448,32 @@
     if (!list.length) { return ""; }
     var cols = "1fr 1.4fr 1.2fr 1fr 1.2fr 1.1fr";
     var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>TRADE</div><div>BLOCK</div>' +
-      '<div class="gt-cell-num">TRADE VALUE</div><div class="gt-cell-num">DEPOSIT PAID</div>' +
+      '<div class="gt-cell-num">TRADE VALUE</div><div class="gt-cell-num">DEPOSIT</div>' +
       '<div class="gt-cell-num">BALANCE DUE</div><div>DUE</div></div>';
     var rows = list.map(function (r) {
       var st = r.settlement;
-      var state_ = PortalTermsLink.balanceState(st);
-      var days = PortalTermsLink.daysUntilDue(st);
-      var dueTone = state_ === "overdue" ? "critical" : (state_ === "due-soon" ? "warning" : "neutral");
-      var dueText = state_ === "overdue"
-        ? formatDateShort(st.dueDate) + " · " + Math.abs(days) + "d late"
-        : formatDateShort(st.dueDate) + (state_ === "due-soon" ? " · in " + days + "d" : "");
+      // An unexecuted block is committed but not collectable: it shows what is
+      // owed and says why it cannot be paid yet, instead of a due date it
+      // would be unfair to count down.
+      var payable = PortalTradeLink.balancePayable(r);
+      var state_ = PortalTermsLink.balanceState(st, nowForLink());
+      var days = PortalTermsLink.daysUntilDue(st, nowForLink());
+      var dueTone = !payable ? "neutral"
+        : (state_ === "overdue" ? "critical" : (state_ === "due-soon" ? "warning" : "neutral"));
+      var dueText = !payable ? "awaiting confirmation"
+        : (state_ === "overdue"
+          ? formatDateShort(st.dueDate) + " · " + Math.abs(days) + "d late"
+          : formatDateShort(st.dueDate) + (state_ === "due-soon" ? " · in " + days + "d" : ""));
       return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openTrade(\'' + esc(r.id) + '\')">' +
         '<div class="gt-mono" style="color:var(--pp-teal-700)">' + esc(r.id) + '</div>' +
         '<div>' + esc((r.shape || "") + " " + (r.period || "")) + '</div>' +
         '<div class="gt-cell-num">' + eur(st.valueEur) + '</div>' +
-        '<div class="gt-cell-num" style="color:var(--pp-green-text)">' + eur(st.depositEur) + '</div>' +
+        '<div class="gt-cell-num" style="color:' + (payable ? "var(--pp-green-text)" : "var(--pp-amber-text)") + '">' +
+          eur(st.depositEur) + (payable ? "" : " · held") + '</div>' +
         '<div class="gt-cell-num" style="font-weight:600">' + eur(st.balanceEur) + '</div>' +
         '<div>' + badge(dueText, dueTone) + '</div></div>';
     }).join("");
-    return cardHtml("Outstanding balances", "Committed on accepted blocks · payable any time before the due date",
+    return cardHtml("Outstanding balances", "Committed on accepted blocks · payable once PeakPower confirms the trade",
       '<div class="grid-table dense">' + head + rows + '</div>' +
       '<div class="caption" style="margin-top:8px">The balance on a bought block is due the day before its delivery period starts. Open a trade to pay it.</div>');
   }
@@ -3192,7 +3485,7 @@
     var kpiHtml =
       statCardHtml("Available balance", "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2), "brand", "ready to reserve for new trades") +
       statCardHtml("Settled balance", "€ " + ConsumptionCalc.formatNL(state.walletSettled, 2), "", "cleared funds") +
-      statCardHtml("Reserved", "€ " + ConsumptionCalc.formatNL(state.walletReserved, 2), "warning", "1 accepted trade awaiting confirmation") +
+      statCardHtml("Reserved", "€ " + ConsumptionCalc.formatNL(state.walletReserved, 2), "warning", depositsOnHoldLabel()) +
       // Outstanding is NOT reserved: it is money still in the wallet that is
       // already committed to a date. Keeping the two cards side by side is the
       // point — "available" is not "free" once a balance is coming.
@@ -4272,7 +4565,16 @@
     try { return PortalTradeLink.read(window.localStorage) || []; } catch (e) { return []; }
   }
 
-  function nowForLink() { return Date.now(); }
+  /**
+   * What time it is, everywhere that a date decides something: a balance
+   * falling due, an offer's window closing, the stamp on a new ledger row.
+   *
+   * Normally the real clock. During a demo it is the real clock shifted by a
+   * whole number of days, so the run-up to paying a balance can be walked
+   * through on demand instead of waited for — see portal-demo-clock.js. The
+   * shift is in the clock only; no trade's dates are ever rewritten.
+   */
+  function nowForLink() { return PortalDemoClock.now(state.demoOffsetDays); }
 
   function coversRange(req, siteId, from, to) {
     if (!req.periodStart || !req.periodEnd || req.periodEnd < from || req.periodStart > to) { return false; }

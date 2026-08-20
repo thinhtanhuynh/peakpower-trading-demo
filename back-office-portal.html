@@ -78,6 +78,22 @@
   .topbar .title { font-size:var(--text-lg); font-weight:700; color:var(--pp-text-heading); margin-top:2px; }
   .topbar .subtitle { font-size:11px; color:var(--pp-text-body); }
   .topbar-actions { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  /* Holds the demo clock beside the screen's own actions. #topbar-actions has
+     its innerHTML replaced on every render, so the clock cannot live inside it. */
+  .topbar-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  /* Demo clock — shifts what the desk thinks "now" is by whole days, so a
+     balance's run-up to its due date can be shown on demand instead of waited
+     for. Amber once shifted: a faked present must never read as the real one. */
+  .demo-clock { display:flex; align-items:center; gap:8px; padding:5px 8px 5px 10px; border:1px solid var(--pp-border); border-radius:var(--radius-md); background:var(--pp-surface-alt); }
+  .demo-clock .demo-clock-dot { width:8px; height:8px; border-radius:2px; background:var(--pp-border-strong); flex-shrink:0; }
+  .demo-clock .demo-clock-text { font-size:11px; font-weight:600; color:var(--pp-text-body); white-space:nowrap; }
+  .demo-clock input[type="date"] { font-family:inherit; font-size:11px; color:var(--pp-text-heading); border:1px solid var(--pp-border); border-radius:var(--radius-sm); padding:3px 6px; background:#fff; }
+  .demo-clock .demo-clock-reset-btn { font-family:inherit; font-size:11px; font-weight:600; padding:4px 10px; border-radius:var(--radius-sm); border:1px solid var(--pp-border); background:#fff; color:var(--pp-text-body); cursor:pointer; }
+  .demo-clock .demo-clock-reset-btn:hover:not(:disabled) { border-color:var(--pp-border-strong); color:var(--pp-text-heading); }
+  .demo-clock .demo-clock-reset-btn:disabled { opacity:.45; cursor:default; }
+  .demo-clock.shifted { background:var(--pp-amber-bg); border-color:var(--pp-amber-border); }
+  .demo-clock.shifted .demo-clock-dot { background:var(--pp-amber); }
+  .demo-clock.shifted .demo-clock-text { color:var(--pp-amber-text); }
   /* Badge — matches PeakPowerDesignSystem Badge.jsx exactly (11px/600,
      4px 12px, and every tone carries a real 1px border). */
   .badge { display:inline-block; padding:4px 12px; border-radius:var(--radius-pill); font-size:11px; font-weight:600; line-height:1.2; border:1px solid transparent; white-space:nowrap; }
@@ -256,7 +272,15 @@
         <div class="title" id="page-title">Trade desk</div>
         <div class="subtitle" id="page-subtitle"></div>
       </div>
-      <div class="topbar-actions" id="topbar-actions"></div>
+      <div class="topbar-right">
+        <div class="demo-clock" id="demo-clock">
+          <span class="demo-clock-dot"></span>
+          <span class="demo-clock-text" id="demo-clock-label">Demo clock — today</span>
+          <input type="date" id="demo-clock-date" aria-label="Demo clock date">
+          <button type="button" class="demo-clock-reset-btn" id="demo-clock-reset" disabled>Reset</button>
+        </div>
+        <div class="topbar-actions" id="topbar-actions"></div>
+      </div>
     </div>
     <div class="content">
       <div class="page active" id="page-desk">
@@ -277,6 +301,7 @@
 <script src="portal-seed-data.js"></script>
 <script src="back-office-desk-data.js"></script>
 <script src="back-office-screens-data.js"></script>
+<script src="portal-demo-clock.js"></script>
 <script>
 (function () {
   "use strict";
@@ -306,7 +331,10 @@
     // per-customer term the Customer Portal obeys, and one shared list would
     // have meant editing Vandersteen's deposit silently changed Kramer's.
     commercialByCustomer: {},
-    commercialSnapshot: null   // pre-edit copy, so Cancel can actually cancel
+    commercialSnapshot: null,  // pre-edit copy, so Cancel can actually cancel
+    // Whole days the demo clock is shifted by; 0 is the real clock. Shared
+    // with the Customer Portal over the link, so both agree on what day it is.
+    demoOffsetDays: 0
   };
 
   /**
@@ -416,7 +444,7 @@
    * countdown to the epoch.
    */
   function liveCards() {
-    return state.requests.map(function (r) { return Link.toDeskCard(r); });
+    return state.requests.map(function (r) { return Link.toDeskCard(r, nowForLink()); });
   }
 
   /** The seeded rows still on the desk (confirmed ones are cleared out). */
@@ -525,9 +553,9 @@
     var confirmed = Link.isConfirmed(req);
     var failed = Link.isFailed(req);
     var accepted = resolved && req.response.action === "accept";
-    var left = Link.secondsRemaining(req);
+    var left = Link.secondsRemaining(req, nowForLink());
     var facts = [
-      ["Reference", req.id], ["Customer", req.customer], ["State", Link.effectiveStatus(req)],
+      ["Reference", req.id], ["Customer", req.customer], ["State", Link.effectiveStatus(req, nowForLink())],
       ["Direction", req.direction], ["Shape", req.shape], ["Delivery period", req.period],
       ["Period start", req.periodStart], ["Period end", req.periodEnd],
       ["Total power", Link.formatMw(req.powerMw)], ["Total volume", Link.formatMwh(req.volumeMwh)],
@@ -544,18 +572,30 @@
       return '<div class="kv-row"><span class="k">' + esc(f[0]) + '</span><span class="v">' + esc(f[1]) + "</span></div>";
     }).join("");
 
-    var cols = "2fr 1fr 1fr";
+    // The connections this block is traded for, and nothing else: the desk
+    // prices the whole request, so the per-connection split is not a pricing
+    // input. The one figure that is — the total — sits in the footer, in
+    // TRD-1058's own format (2px rule, label + badge left, 14px/700 right).
+    var cols = "2fr 1fr";
     var rows = req.connections.map(function (c) {
       return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
-        "<div>" + esc(c.name) + '<div class="gt-sub">' + esc(c.sub) + "</div></div>" +
-        '<div class="gt-num">' + Link.formatMw(c.powerMw) + "</div>" +
-        '<div class="gt-num">' + Link.formatMwh(Link.volumeMwh(c.powerMw, req.periodStart, req.periodEnd, req.shape)) + "</div>" +
+        "<div>" + esc(c.name) + "</div>" +
+        '<div style="font-family:var(--font-mono)">' + esc(c.sub) + "</div>" +
         "</div>";
     }).join("");
+    var totalLabel = Link.formatMw(req.powerMw) + " · " + Link.formatMwh(req.volumeMwh);
     var connTable = '<div class="grid-table">' +
       '<div class="gt-head" style="grid-template-columns:' + cols + '">' +
-        "<div>CONNECTION</div><div class=\"gt-num\">POWER</div><div class=\"gt-num\">VOLUME</div>" +
-      "</div>" + rows + "</div>";
+        "<div>CONNECTION</div><div>EAN</div>" +
+      "</div>" + rows +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-top:2px solid var(--pp-border-strong)">' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+          '<span style="font-size:12.5px;font-weight:700;color:var(--pp-text-heading)">Total requested</span>' +
+          badge(String(req.direction).toUpperCase() + " · " + String(req.shape).toUpperCase(),
+            String(req.direction).toLowerCase() === "sell" ? "warning" : "brand") +
+        "</div>" +
+        '<span style="font-size:14px;font-weight:700;color:var(--pp-text-heading)">' + esc(totalLabel) + "</span>" +
+      "</div></div>";
 
     // The pricing form (unpriced) or the sent-offer summary (priced).
     var pricePanel;
@@ -622,7 +662,7 @@
       banner +
       '<div class="detail-grid">' +
         '<div class="detail-main">' +
-          cardHtml("The request", req.direction + " " + req.shape + " · " + req.period, connTable) +
+          cardHtml("The request", req.direction + " · " + req.shape + " · " + req.period, connTable) +
           (req.note ? cardHtml("Customer note", "", '<div class="empty-note">' + esc(req.note) + "</div>") : "") +
         "</div>" +
         // Wallet check only when this customer has a real row on the
@@ -1142,6 +1182,7 @@
     if (!card || !card.request) { return; }
     var v = priceFormValues();
     var priced = Link.priceRequest(card.request, {
+      now: nowForLink(),
       priceMwh: v.price,
       reactionMinutes: v.minutes,
       pricedBy: BackOfficeDeskData.USER_LINE
@@ -1644,11 +1685,14 @@
       if (!st || st.paidAt) { return; }
       // Only a trade the customer is actually committed to owes anything —
       // an offer they have not answered yet is not a debt.
-      var status = Link.effectiveStatus(r);
+      var status = Link.effectiveStatus(r, nowForLink());
       if (status !== Link.STATUS_ACCEPTED && status !== Link.STATUS_CONFIRMED) { return; }
       out.totalEur += st.balanceEur || 0;
       out.count += 1;
-      if (PortalTermsLink.balanceState(st) === "overdue") {
+      // Only a balance the customer is allowed to pay can be late. Until the
+      // desk executes the block the customer's Pay balance button is disabled,
+      // so counting it overdue here would chase money we are refusing to take.
+      if (Link.balancePayable(r) && PortalTermsLink.balanceState(st, nowForLink()) === "overdue") {
         out.overdueEur += st.balanceEur || 0;
         out.overdueCount += 1;
       }
@@ -2106,6 +2150,7 @@
     if (!card) { return; }
     if (card.request) {
       var next = Link.confirmTrade(card.request, {
+        now: nowForLink(),
         by: D.USER_LINE,
         reference: "ICE-" + String(id).replace(/\D/g, "") + "-A"
       });
@@ -2134,7 +2179,7 @@
     var card = findCard(id);
     if (!card) { return; }
     if (card.request) {
-      var next = Link.failTrade(card.request, { by: D.USER_LINE });
+      var next = Link.failTrade(card.request, { by: D.USER_LINE, now: nowForLink() });
       if (next) {
         try { Link.publish(window.localStorage, next); } catch (e) {
           console.warn("Failure not published to the Customer Portal:", e);
@@ -2237,7 +2282,7 @@
     }
     var req = (findCard(state.tradeId) || {}).request;
     if (!req || !Link.isPriced(req)) { return; }
-    var left = Link.secondsRemaining(req);
+    var left = Link.secondsRemaining(req, nowForLink());
     var a = document.getElementById("detail-countdown");
     var b = document.getElementById("banner-countdown");
     if (a) { a.textContent = left > 0 ? Link.mmss(left) : "—"; }
@@ -2248,17 +2293,94 @@
 
   // --- init -----------------------------------------------------------------
 
+  // --- Demo clock -------------------------------------------------------------
+
+  /**
+   * What time it is, everywhere a date decides something here. Normally the real
+   * clock; during a demo, shifted by whole days and shared with the Customer
+   * Portal so the two never disagree. The shift is in the clock only — no
+   * trade's own dates are rewritten. See portal-demo-clock.js.
+   */
+  function nowForLink() { return PortalDemoClock.now(state.demoOffsetDays); }
+
+  var demoClockEl = document.getElementById("demo-clock");
+  var demoClockLabelEl = document.getElementById("demo-clock-label");
+  var demoClockDateEl = document.getElementById("demo-clock-date");
+  var demoClockResetEl = document.getElementById("demo-clock-reset");
+
+  function demoClockDateLabel(dateStr) {
+    var parts = dateStr.split("-").map(Number);
+    var months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return parts[2] + " " + months[parts[1] - 1] + " " + parts[0];
+  }
+
+  /**
+   * `expiredShown` latches an offer as "already re-rendered at expiry" so the
+   * ticker flips the banner over exactly once. That was safe while time only
+   * moved forward; the clock can now move back, un-expiring an offer, so the
+   * latch has to reset with it or the second expiry never re-renders.
+   */
+  function clearExpiryLatch() { state.expiredShown = {}; }
+
+  /** The shared offset, off the link. Any failure lands on the real clock. */
+  function syncDemoClock() {
+    var next = 0;
+    try { next = PortalDemoClock.read(window.localStorage); } catch (e) { next = 0; }
+    if (next === state.demoOffsetDays) { return; }
+    state.demoOffsetDays = next;
+    clearExpiryLatch();
+  }
+
+  /** Patched in place, never re-rendered — rebuilding the date input mid-edit steals focus. */
+  function refreshDemoClockUi() {
+    var off = state.demoOffsetDays;
+    var iso = PortalDemoClock.dateForOffset(off);
+    demoClockEl.classList.toggle("shifted", off !== 0);
+    demoClockLabelEl.textContent = "Demo clock — " +
+      (off === 0 ? "today" : demoClockDateLabel(iso) + " · " + PortalDemoClock.label(off));
+    demoClockDateEl.value = iso;
+    demoClockResetEl.disabled = off === 0;
+  }
+
+  /** An unusable date snaps the control back rather than storing anything. */
+  function setDemoClockDate(iso) {
+    // Measured from the REAL today, never from the shifted one: picking a
+    // second date must land on that date, not that many days past the first.
+    var off = PortalDemoClock.offsetForDate(iso, Date.now());
+    if (off == null) { refreshDemoClockUi(); return; }
+    applyDemoOffset(off);
+  }
+
+  function applyDemoOffset(off) {
+    state.demoOffsetDays = off;
+    clearExpiryLatch();
+    try { PortalDemoClock.write(window.localStorage, off); } catch (e) { /* a broken link must not break the desk */ }
+    refreshDemoClockUi();
+    render();
+  }
+
+  /** Offset 0, not "today's date" — a date round trip reads the clock twice and can land on −1. */
+  function resetDemoClock() { applyDemoOffset(0); }
+
+  demoClockDateEl.addEventListener("change", function () { setDemoClockDate(this.value); });
+  demoClockResetEl.addEventListener("click", resetDemoClock);
+
   renderSidebar();
 
+  // Read before the first render: every queue tag and status on this screen is
+  // resolved against nowForLink(), so the clock has to be right first.
+  syncDemoClock();
+  refreshDemoClockUi();
   state.requests = Link.read(window.localStorage);
   render();
 
   // Live updates from a Customer Portal tab. storage events only fire in OTHER
   // tabs, which is exactly the cross-portal case we care about.
   Link.subscribe(window, function (list) { refresh(list); });
+  PortalDemoClock.subscribe(window, function () { syncDemoClock(); refreshDemoClockUi(); render(); });
 
   // A same-tab fallback: if the desk is reopened or focused, re-read the link.
-  window.addEventListener("focus", function () { refresh(); });
+  window.addEventListener("focus", function () { syncDemoClock(); refreshDemoClockUi(); refresh(); });
 })();
 </script>
 </body>
