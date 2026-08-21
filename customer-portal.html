@@ -38,10 +38,20 @@
        chart builders below keep their own literal-hex constants (SVG string
        templates can't read a CSS var), kept byte-identical to these. */
     --pp-chart-usage:#006ECF; --pp-chart-hedge:#9151B8;
-    --pp-chart-short:#F24F4F; --pp-chart-short-stroke:#F24F4F;
-    --pp-chart-covered:#004C94;
-    --pp-chart-long:#0FA69D; --pp-chart-long-fill:#00D4C6;
+    --pp-chart-short:#E09B2D; --pp-chart-short-stroke:#E09B2D;
+    --pp-chart-covered:#C6CBD4;
+    --pp-chart-long:#4A3AA7; --pp-chart-long-fill:#4A3AA7;
     --pp-chart-peak:#3C93FA;
+    /* Text tiers for the two roles that also print as numbers. Short's fill is
+       2,3:1 on white, so the table column and the stat values read the amber
+       ramp's own text step; Long's fill is 8,6:1 and needs no pair. The chart
+       roles carry their own tiers rather than borrowing the red/teal status
+       ones, which is what let the table drift from the bars before. */
+    --pp-chart-short-text:#8A6710; --pp-chart-long-text:#4A3AA7;
+    /* Ink for a label sitting inside a composition-bar segment. White is 2,4:1
+       on Short and 1,6:1 on Covered; the heading ink is 4,6:1 and 6,6:1, the
+       only one of the three that clears AA on both. Long keeps white at 8,6:1. */
+    --pp-chart-ink-on-light:#2D3F54;
     /* legacy aliases — every var() written against these names keeps
        working; write new code against the ramps above. */
     --pp-teal-900:#2D3F54; --pp-teal-700:#004C94; --pp-teal-600:#004C94;
@@ -244,8 +254,8 @@
   .stat-card.critical::before, .stat-card.negative::before { background:var(--pp-red); }
   .stat-card.warning::before { background:var(--pp-amber); }
   .stat-card.success::before { background:var(--pp-green); }
-  .stat-card.export::before { background:var(--pp-teal); }
-  .stat-card.short::before { background:var(--pp-red); }
+  .stat-card.export::before { background:var(--pp-chart-long); }
+  .stat-card.short::before { background:var(--pp-chart-short); }
   .stat-card.hedge::before { background:var(--pp-violet); }
   /* Auto-scales alongside the value (same card-relative cqw) — at the
      narrowest one-line widths this is what keeps "Total cost" legible
@@ -323,9 +333,9 @@
   .stat-card .value.critical { color:var(--pp-red-text); }
   .stat-card .value.negative { color:var(--pp-red-text); }
   .stat-card .value.success { color:var(--pp-green-text); }
-  /* .export / .short match the chart's Long (cyan) and Short (red) bars. */
-  .stat-card .value.export { color:var(--pp-teal-text); }
-  .stat-card .value.short { color:var(--pp-red-text); }
+  /* .export / .short match the chart's Long and Short bars. */
+  .stat-card .value.export { color:var(--pp-chart-long-text); }
+  .stat-card .value.short { color:var(--pp-chart-short-text); }
   .stat-card .value.brand { color:var(--pp-teal-600); }
   .stat-card .value.hedge { color:var(--pp-violet-text); }
   .stat-card .value.warning { color:var(--pp-amber-text); }
@@ -364,6 +374,9 @@
   .position-note { font-size:11px; color:var(--pp-text-faint); margin-top:8px; }
   .composition-bar { display:flex; height:34px; border-radius:8px; overflow:hidden; margin-top:6px; }
   .composition-seg { display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#fff; white-space:nowrap; overflow:hidden; }
+  /* A label inside a light segment: white on Covered is 1,6:1 and on Short
+     2,4:1. Only Long is dark enough to keep the white. */
+  .composition-seg.on-light { color:var(--pp-chart-ink-on-light); }
   .composition-legend { display:flex; gap:20px; margin-top:14px; flex-wrap:wrap; }
   .composition-legend .cl-item { font-size:11px; color:var(--pp-text-body); }
   .composition-legend .cl-swatch { width:9px; height:9px; border-radius:2px; display:inline-block; margin-right:6px; vertical-align:middle; }
@@ -412,17 +425,13 @@
      Intervals table sets both in the mono stack; every other numeric column
      stays the table's own sans-serif. */
   td.mono { font-family:var(--font-mono); }
-  /* Short/Long text mirrors their own chart-bar hue, the same "card tone
-     mirrors the chart" rule the Short/Long stat cards already follow (see
-     CLAUDE.md). The design's own Intervals table sets these with the bright
-     chart-fill hex directly (var(--pp-red)/var(--pp-cyan)) — checked
-     against white, that is 3,50:1 and 1,87:1, nowhere near AA for text. Text
-     here reads the paired darker tier instead (red-text/teal-text — cyan
-     has no -text of its own; teal is the same "long" role one tier darker,
-     already what .net-export below uses), same fix already applied
-     everywhere else this sync touched a bright fill used as text. */
-  td.short { color:var(--pp-red-text); }
-  td.long { color:var(--pp-teal-text); }
+  /* Short/Long text mirrors their own chart-bar role, the same "card tone
+     mirrors the chart" rule the Short/Long stat cards follow (see CLAUDE.md).
+     It reads the role's own text tier, not the bright fill: Short's fill is
+     2,3:1 against white, nowhere near AA at 11px. Long's tier happens to be
+     the fill itself, which is already 8,6:1. */
+  td.short { color:var(--pp-chart-short-text); }
+  td.long { color:var(--pp-chart-long-text); }
   /* The 17 columns are 4 groups (identity / metered / position / money) with
      nothing today marking where one ends and the next begins — a rule at
      each boundary (stronger than the hairline row dividers, so it reads as
@@ -451,7 +460,7 @@
     border-right:1px solid var(--pp-border-strong);
     padding-right:var(--space-5);
   }
-  td.net-export { color:var(--pp-teal-text); font-weight:600; }
+  td.net-export { color:var(--pp-chart-long-text); font-weight:600; }
   /* Certainty-layer text treatment for the table (see customer-portal.html's
      renderTable) — a projected row's numbers are real (historical-profile
      estimate) but must never read like a measurement. Placeholder-neutral
@@ -1071,9 +1080,9 @@
           <div class="legend">
             <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Actual usage</div>
             <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed #9151B8"></span>Hedge volume</div>
-            <div><span class="swatch" style="background:#004C94;opacity:.45"></span>Covered (min of actual &amp; hedge)</div>
-            <div><span class="swatch" style="background:var(--pp-red)"></span>Short — bought at day-ahead</div>
-            <div><span class="swatch" style="background:var(--pp-teal)"></span>Long — sold at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-chart-covered)"></span>Covered (min of actual &amp; hedge)</div>
+            <div><span class="swatch" style="background:var(--pp-chart-short)"></span>Short — bought at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-chart-long)"></span>Long — sold at day-ahead</div>
           </div>
         </div>
         <div class="card">
@@ -1098,8 +1107,8 @@
           <div class="legend">
             <div><span class="swatch" style="background:var(--pp-teal-700);height:2px"></span>Total cost</div>
             <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px dashed #9151B8"></span>Hedge cost</div>
-            <div><span class="swatch" style="background:var(--pp-red)"></span>Buy — uncovered volume at day-ahead</div>
-            <div><span class="swatch" style="background:var(--pp-teal)"></span>Sell — surplus hedge at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-chart-short)"></span>Buy — uncovered volume at day-ahead</div>
+            <div><span class="swatch" style="background:var(--pp-chart-long)"></span>Sell — surplus hedge at day-ahead</div>
           </div>
         </div>
         <div class="card">
@@ -2465,14 +2474,14 @@
         '<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--pp-text-faint)"><span>Composition</span><span>1.291,4 MWh</span></div>' +
         '<div style="display:flex;height:34px;border-radius:8px;overflow:hidden;margin-top:6px">' +
           '<div style="width:63%;background:#9151B8;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">Hedged 63 %</div>' +
-          '<div style="width:16.6%;background:#F24F4F;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">Short</div>' +
-          '<div style="width:9.4%;background:#0FA69D;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">Long</div>' +
+          '<div style="width:16.6%;background:var(--pp-chart-short);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--pp-chart-ink-on-light)">Short</div>' +
+          '<div style="width:9.4%;background:var(--pp-chart-long);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">Long</div>' +
           '<div style="width:11%;background:var(--pp-border-strong);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#43536b">Open</div>' +
         '</div>' +
         '<div style="display:flex;gap:20px;margin-top:14px;flex-wrap:wrap">' +
           '<div style="font-size:11px;color:var(--pp-text-body)"><span style="width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;background:#9151B8"></span>Hedged<b style="display:block;font-size:14px;color:var(--pp-text-heading);margin-top:3px">812,8 MWh</b></div>' +
-          '<div style="font-size:11px;color:var(--pp-text-body)"><span style="width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;background:#F24F4F"></span>Short — day-ahead<b style="display:block;font-size:14px;color:var(--pp-red-text);margin-top:3px">214,4 MWh</b></div>' +
-          '<div style="font-size:11px;color:var(--pp-text-body)"><span style="width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;background:#0FA69D"></span>Long — sold<b style="display:block;font-size:14px;color:var(--pp-teal-text);margin-top:3px">121,3 MWh</b></div>' +
+          '<div style="font-size:11px;color:var(--pp-text-body)"><span style="width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;background:var(--pp-chart-short)"></span>Short — day-ahead<b style="display:block;font-size:14px;color:var(--pp-chart-short-text);margin-top:3px">214,4 MWh</b></div>' +
+          '<div style="font-size:11px;color:var(--pp-text-body)"><span style="width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;background:var(--pp-chart-long)"></span>Long — sold<b style="display:block;font-size:14px;color:var(--pp-chart-long-text);margin-top:3px">121,3 MWh</b></div>' +
           '<div style="font-size:11px;color:var(--pp-text-body)"><span style="width:9px;height:9px;border-radius:2px;display:inline-block;margin-right:6px;background:var(--pp-border-strong)"></span>Unpriced<b style="display:block;font-size:14px;color:var(--pp-text-heading);margin-top:3px">142,9 MWh</b></div>' +
         '</div>' +
       '</div>' +
@@ -3940,23 +3949,26 @@
     // percentage suffix below 20% (room for the name alone but not both) —
     // the legend beneath always carries the real number regardless, so
     // nothing is lost when a mark goes text-less, only the in-bar label.
-    function seg(label, kwh, color) {
+    function seg(label, kwh, color, onLight) {
       if (kwh <= 0) { return ""; }
       var pct = totalKwh > 0 ? (kwh / totalKwh * 100) : 0;
       var text = pct >= 8 ? (label + (pct >= 20 ? " " + Math.round(pct) + " %" : "")) : "";
-      return '<div class="composition-seg" style="width:' + pct.toFixed(2) + '%;background:' + color + '">' + text + '</div>';
+      return '<div class="composition-seg' + (onLight ? " on-light" : "") +
+        '" style="width:' + pct.toFixed(2) + '%;background:' + color + '">' + text + '</div>';
     }
     var barHtml = totalKwh > 0
-      ? seg("Covered", coveredKwh, "var(--pp-blue-700)") + seg("Short", shortKwh, "var(--pp-red)") + seg("Long", longKwh, "var(--pp-teal)")
-      : '<div class="composition-seg" style="width:100%;background:var(--pp-border-strong);color:#43536b">No position for this range</div>';
+      ? seg("Covered", coveredKwh, "var(--pp-chart-covered)", true) +
+        seg("Short", shortKwh, "var(--pp-chart-short)", true) +
+        seg("Long", longKwh, "var(--pp-chart-long)")
+      : '<div class="composition-seg on-light" style="width:100%;background:var(--pp-border-strong)">No position for this range</div>';
 
     function legendItem(label, kwh, swatch, valueColor) {
       return '<div class="cl-item"><span class="cl-swatch" style="background:' + swatch + '"></span>' + label +
         '<b class="cl-value"' + (valueColor ? ' style="color:' + valueColor + '"' : '') + '>' + kwhValue(kwh) + '</b></div>';
     }
-    var legendHtml = legendItem("Covered", coveredKwh, "var(--pp-blue-700)") +
-      legendItem("Short — bought at day-ahead", shortKwh, "var(--pp-red)", "var(--pp-red-text)") +
-      legendItem("Long — sold at day-ahead", longKwh, "var(--pp-teal)", "var(--pp-teal-text)");
+    var legendHtml = legendItem("Covered", coveredKwh, "var(--pp-chart-covered)") +
+      legendItem("Short — bought at day-ahead", shortKwh, "var(--pp-chart-short)", "var(--pp-chart-short-text)") +
+      legendItem("Long — sold at day-ahead", longKwh, "var(--pp-chart-long)", "var(--pp-chart-long-text)");
 
     var panelClass = "position-panel" + ((totalCostOpts.projected || isRangeProjected) ? " projected" : "");
 
@@ -4119,7 +4131,7 @@
   /** The 3 hues the covered/short/long bars hatch with, all at the one pitch this chart's bars actually render at. */
   function usageChartHatchEntries(rbw) {
     var pitch = hatchPitchFor(rbw);
-    return ["#F24F4F", "#0FA69D", "#004C94"].map(function (hue) { return { hue: hue, pitch: pitch }; });
+    return ["#E09B2D", "#4A3AA7", "#C6CBD4"].map(function (hue) { return { hue: hue, pitch: pitch }; });
   }
 
   /**
@@ -4196,13 +4208,13 @@
       var yHedge = yFor(hedgeVolume[i]);
       var barTop = Math.min(yNet, yHedge);
       var barH = Math.abs(yNet - yHedge);
-      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#F24F4F" : "#0FA69D", 1, measured, rbw);
+      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#E09B2D" : "#4A3AA7", 1, measured, rbw);
 
       var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      var covAttrs = barFillAttrs("#004C94", 0.45, measured, rbw);
+      var covAttrs = barFillAttrs("#C6CBD4", 1, measured, rbw);
       coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
 
@@ -4859,13 +4871,13 @@
       var yHedge = yFor(hedgeVolume[i]);
       var barTop = Math.min(yNet, yHedge);
       var barH = Math.abs(yNet - yHedge);
-      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#F24F4F" : "#0FA69D", 1, measured, rbw);
+      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#E09B2D" : "#4A3AA7", 1, measured, rbw);
 
       var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      var covAttrs = barFillAttrs("#004C94", 0.45, measured, rbw);
+      var covAttrs = barFillAttrs("#C6CBD4", 1, measured, rbw);
       coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
         '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
 
@@ -4954,8 +4966,8 @@
 
   var COST_HEDGE_LINE = "#9151B8";   // violet, matching the hedge-volume line
   var COST_TOTAL_LINE = "#006ECF";   // blue-500, matching the actual-usage line
-  var COST_BUY_FILL = "#F24F4F";     // red, matching Short
-  var COST_SELL_FILL = "#0FA69D";    // teal, matching Long — see Dashboard's composition bar
+  var COST_BUY_FILL = "#E09B2D";     // amber, matching Short
+  var COST_SELL_FILL = "#4A3AA7";    // indigo, matching Long — see Dashboard's composition bar
 
   /**
    * Shared bar/line geometry for both cost charts.

@@ -756,8 +756,11 @@ bar can show honestly either way. In-bar segment labels drop below 8% width
 and their `%` suffix below 20%; the legend underneath always carries the real
 number.
 
-Colours match the chart directly above: Covered blue-700, Short red, Long
-teal. Cost is red for an additional cost, green for savings, neutral at zero.
+Colours match the chart directly above: Covered grey, Short amber, Long
+indigo. Cost is red for an additional cost, green for savings, neutral at zero.
+The in-bar segment labels are the one place a chart hue carries text on top of
+it: white clears AA only on Long, so Covered and Short take `.on-light`, which
+swaps in `--pp-chart-ink-on-light`.
 
 `.position-panel` needs `flex:1; min-width:0` — `#stat-row` is a flex row, and
 a flex item with no grow shrink-wraps to its content instead of filling.
@@ -772,11 +775,17 @@ Two lines — actual usage (solid blue-500 `#006ECF`) and hedge volume (dashed
 violet `#9151B8`) — with each interval drawn as a stacked bar from the zero
 baseline:
 
-- a blue-700 `#004C94` segment at 45% opacity from zero to `MIN(Actual Usage,
-  Hedge Volume)` — the covered portion;
-- topped by the gap between the two lines: red `#F24F4F` at full opacity when
-  Uncovered ≥ 0 ("Short — bought at day-ahead"), teal `#0FA69D` at full
-  opacity when Uncovered < 0 ("Long — sold at day-ahead").
+- a grey `#C6CBD4` segment from zero to `MIN(Actual Usage, Hedge Volume)` —
+  the covered portion;
+- topped by the gap between the two lines: amber `#E09B2D` when Uncovered ≥ 0
+  ("Short — bought at day-ahead"), indigo `#4A3AA7` when Uncovered < 0
+  ("Long — sold at day-ahead").
+
+All three render at **full opacity**. Opacity in this chart means one thing and
+one thing only — projected rather than measured (`CERTAINTY_PROVISIONAL_OPACITY`).
+The covered band used to be drawn at 45% to keep it subordinate; the grey does
+that job now, and reintroducing the 45% would put it at ~`#E5E8EC`, lighter than
+the page's own borders and effectively invisible.
 
 Consumption and production are not plotted. The y-axis is bipolar — a real
 zero baseline, so intervals where Actual Usage goes negative read correctly.
@@ -1220,30 +1229,47 @@ cover: `--pp-indigo` used to mean both "the hedge line" and
 |---|---|---|
 | Actual usage / total cost line | blue-500 `#006ECF` | `--pp-chart-usage`, `COST_TOTAL_LINE` |
 | Hedge volume / hedge cost line | violet `#9151B8` (dashed) | `--pp-chart-hedge`, `COST_HEDGE_LINE` |
-| Covered band | blue-700 `#004C94` at 45% | `--pp-chart-covered` |
-| Short / buy | red `#F24F4F`, full opacity | `--pp-chart-short`, `COST_BUY_FILL` |
-| Long / sell | teal `#0FA69D`, full opacity | `--pp-chart-long`, `COST_SELL_FILL` |
+| Covered band | grey `#C6CBD4` | `--pp-chart-covered` |
+| Short / buy | amber `#E09B2D` | `--pp-chart-short`, `COST_BUY_FILL` |
+| Long / sell | indigo `#4A3AA7` | `--pp-chart-long`, `COST_SELL_FILL` |
+
+Every one of them is drawn at full opacity — see the usage chart above for why.
+Short and Long also print as numbers (the interval table's two columns, the
+Short/Long stat values, both composition legends), and a fill is not a text
+colour: `--pp-chart-short-text` (`#8A6710`, 5,2:1) and `--pp-chart-long-text`
+(`#4A3AA7` itself, 8,6:1) are the tiers those read. **The chart roles carry
+their own text tiers rather than borrowing `--pp-red-text`/`--pp-teal-text`** —
+those are status colours, and the table quietly kept the old red long after the
+bars had moved on.
 
 `--pp-chart-peak` (blue-300) is defined and currently unused. The `--pp-chart-*`
 tokens are the reference values; the SVG builders carry the literal hexes,
 so a recolor touches both.
 
-Short/Long render at full opacity to match the Dashboard hero's composition
-bar, which draws the same two roles as flat saturated blocks. The certainty
-multiply inside `barFillAttrs` is untouched, so a projected bar still reads
-lighter than a measured one. The covered band's 45% is deliberate — it stays
-subordinate to the segment above it. Legend swatches carry the same full
-opacity as what the chart draws; a paler swatch than the real mark is its own
-small lie.
+The certainty multiply inside `barFillAttrs` is the only thing that changes a
+fill's opacity, so a projected bar reads lighter than a measured one and nothing
+else does. Legend swatches carry the same full opacity as what the chart draws;
+a paler swatch than the real mark is its own small lie.
+
+**Read the roles through the `--pp-chart-*` tokens, never the status palette.**
+The legend swatches, both composition bars and the stat-card accent caps used to
+write `var(--pp-red)`/`var(--pp-teal)` directly, which is how a recolour of the
+bars could leave every swatch behind. `--pp-teal` and `--pp-cyan` now have no
+reader in `customer-portal.html` at all.
 
 Hedge cost and Hedge volume stat cards use a dedicated `tone="hedge"`
 (`--pp-violet`/`--pp-violet-text`) rather than `.brand`, because the
 Dashboard's "Coverage — August" card also carries `.brand` for an unrelated
 figure. A ratio is not a hedge position.
 
-The tritanopia ΔE figures once cited for the Short/Long pair are stale after
-the red/blue/violet recolor — re-run the dataviz validator before quoting a
-number rather than trusting an old one.
+**Measured, not guessed** (`dataviz` skill's `validate_palette.js`, light mode):
+the Short/Long pair separates at ΔE 42,9 normal, 38,8 protan, 37,5 tritan — the
+old red/teal pair was 30,8 and only 12,4 under deuteranopia. Two knowingly
+accepted warnings: Short is 2,3:1 against the card, which the legend, the
+tooltip and the interval table relieve; and Long sits ΔE 13,9 from the actual-
+usage line `#006ECF`, under the validator's floor of 15, which form separates —
+Long is a filled bar, actual usage a 2px line. Re-run the validator before
+quoting any of these rather than trusting the numbers here.
 
 ### Components
 
