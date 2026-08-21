@@ -325,6 +325,15 @@
     flashIds: {},          // ids to pulse once, so a new arrival is noticeable
     expiredShown: {},      // ids already re-rendered at the moment of expiry
     customerId: null,      // open customer on the Customers screen
+    customerView: "list",  // "list" | "new" (the Customers screen's own views)
+    // Customers added on this page, newest first. Page-local on purpose: there
+    // is no backend, and a reload is back to the eight seeded rows.
+    newCustomers: [],
+    // The new-customer wizard: {step, draft, errors}, or null when not in it.
+    customerWizard: null,
+    // An inline row being added on a created customer's detail page:
+    // {kind: "connections" | "accounts", row, err}, or null.
+    detailRowDraft: null,
     commercialEditing: false,
     // Per customer, keyed by kvk. It used to be one shared list, which was
     // harmless while every field was decorative — but the deposit % is a real
@@ -413,6 +422,21 @@
         (body ? '<div class="db-body">' + esc(body) + "</div>" : "") +
       "</div>" + (actionHtml || "") + "</div>";
   }
+
+  /**
+   * Form chrome, shared by the Wallets forms and the new-customer form. The
+   * first three are the mockup's own strings; the error variant is derived from
+   * the default so a change to one border cannot leave the other behind.
+   */
+  var FORM_FIELD_LABEL = "font-size:10.5px;font-weight:600;color:var(--pp-text-body);margin-bottom:6px";
+  var FORM_INPUT = "width:100%;padding:9px 12px;border:1px solid var(--pp-border-strong);border-radius:7px;font-size:13px;font-family:var(--font-sans);color:var(--pp-text-heading)";
+  var FORM_INPUT_ACCENT = "width:100%;padding:9px 12px;border:1px solid var(--pp-teal-600);border-radius:7px;font-size:13px;font-weight:600;font-family:var(--font-sans);color:var(--pp-text-heading)";
+  var FORM_INPUT_ERROR = FORM_INPUT.replace("var(--pp-border-strong)", "var(--pp-red)");
+  // Same control at a table row's own metrics: the standard one is 13px on
+  // 12px of side padding, which leaves a select in a 1fr column showing "Ele".
+  var FORM_INPUT_ROW = FORM_INPUT.replace("padding:9px 12px", "padding:8px 8px")
+    .replace("font-size:13px", "font-size:12px");
+  var FORM_ERROR_NOTE = "font-size:10.5px;color:var(--pp-red-text);margin-top:5px";
 
   function noop() {}
 
@@ -1357,10 +1381,23 @@
    * page's own primitives.
    * ------------------------------------------------------------------ */
 
-  /** CUSTOMER_LIST lookup by KvK number (the list's own row id). */
+  /**
+   * Every customer the screen knows: the ones added on this page first, then
+   * the seeded list.
+   *
+   * The Wallets screen's own walletKvk() deliberately does NOT read this — a
+   * wallet row is a seeded fixture belonging to a seeded customer, so a
+   * page-added company sharing a name prefix could only mis-match it.
+   */
+  function customersAll() {
+    return state.newCustomers.concat(CUSTOMER_LIST);
+  }
+
+  /** Customer lookup by KvK number (the list's own row id). */
   function customersFind(kvk) {
-    for (var i = 0; i < CUSTOMER_LIST.length; i++) {
-      if (CUSTOMER_LIST[i].kvk === kvk) { return CUSTOMER_LIST[i]; }
+    var all = customersAll();
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].kvk === kvk) { return all[i]; }
     }
     return null;
   }
@@ -1368,6 +1405,12 @@
   /** The DS StatCard; the customer detail cards carry no sublabel. */
   function customersStatCard(label, value, tone) {
     return statCard(label, value, tone, "", false);
+  }
+
+  /** One muted row standing in for a table body with nothing in it yet. */
+  function emptyTableRow(text) {
+    return '<div style="padding:14px 12px;border-top:1px solid var(--pp-border);font-size:11.5px;color:var(--pp-text-faint)">' +
+      esc(text) + '</div>';
   }
 
   // --- list -----------------------------------------------------------------
@@ -1379,7 +1422,7 @@
       '<div>COMPANY</div><div>KVK</div><div style="text-align:right">CONNECTIONS</div><div style="text-align:right">AVAILABLE BALANCE</div><div>STATUS</div><div></div>' +
       '</div>';
 
-    var rows = CUSTOMER_LIST.map(function (c) {
+    var rows = customersAll().map(function (c) {
       // NOTE: the mockup interpolates {{ c.availableColor }} here, a key that
       // CUSTOMER_LIST does not define — the declaration is empty and the
       // browser drops it, so the balance renders in the inherited colour.
@@ -1387,7 +1430,11 @@
       return '<div onclick="BO.selectCustomer(\'' + esc(c.kvk) + '\')" style="cursor:pointer;display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:11px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
         '<div style="font-weight:600;color:var(--pp-teal-700)">' + esc(c.name) + '</div>' +
         '<div>' + esc(c.kvk) + '</div>' +
-        '<div style="text-align:right">' + esc(c.connections) + '</div>' +
+        // Derived for a customer created here, exactly as the detail card
+        // derives it, so the two can never disagree — and so a connection added
+        // later shows up here without anything having to remember to update it.
+        '<div style="text-align:right">' +
+          esc(c.meteringRows ? String(c.meteringRows.length) : c.connections) + '</div>' +
         '<div style="text-align:right;color:">' + esc(c.available) + '</div>' +
         '<div>' + badge(c.status, c.statusTone) + '</div>' +
         '<div style="text-align:right;color:var(--pp-teal-600)">→</div>' +
@@ -1412,8 +1459,10 @@
         '</div>';
     }).join('');
 
+    // The mockup's fixtures carry no badge fields and keep the verified badge;
+    // a customer created on this page has no bank details to have verified.
     var foot = '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px">' +
-      badge('BANK DETAILS VERIFIED', 'success') +
+      badge(d.bankBadgeLabel || 'BANK DETAILS VERIFIED', d.bankBadgeTone || 'success') +
       '<button type="button" class="btn-secondary btn-sm" onclick="BO.noop()">Edit</button>' +
       '</div>';
 
@@ -1423,7 +1472,13 @@
   // --- detail: Metering points ----------------------------------------------
 
   function customersMeteringCardHtml(d) {
-    var COLS = '0.8fr 1.6fr 1fr 1fr 1fr 1.1fr 0.6fr';
+    // The mockup's fixtures carry a truncated "…0011" and its 0.8fr fits that.
+    // A customer created here shows the whole 18-digit EAN — it is what the desk
+    // typed, and hiding it makes the row unverifiable — so the column has to
+    // grow, or the name and date columns wrap instead.
+    var longEan = isAddingRow('connections') ||
+      d.metering.some(function (m) { return String(m.ean).length > 8; });
+    var COLS = (longEan ? '1.5fr' : '0.8fr') + ' 1.6fr 1fr 1fr 1fr 1.1fr 0.6fr';
 
     var head = '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
       '<div>EAN</div><div>CONNECTION NAME</div><div>COMMODITY</div><div>VALID FROM</div><div>VALID TO</div><div>DATA</div><div></div>' +
@@ -1431,18 +1486,23 @@
 
     var rows = d.metering.map(function (m) {
       return '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
-        '<div style="font-family:var(--font-mono)">' + esc(m.ean) + '</div>' +
+        // Every row is its own grid, so a column is only as wide as that row's
+        // own min-content: without nowrap, the row with the wider DATA badge
+        // steals width from the dates and wraps them out of line with the row
+        // above. Only the fixed-width cells are pinned; a long name may wrap.
+        '<div style="font-family:var(--font-mono);white-space:nowrap">' + esc(m.ean) + '</div>' +
         '<div style="color:' + esc(m.nameColor) + '">' + esc(m.name) + '</div>' +
         '<div style="color:' + esc(m.commodityColor) + '">' + esc(m.commodity) + '</div>' +
-        '<div>' + esc(m.validFrom) + '</div>' +
-        '<div style="color:' + esc(m.validToColor) + '">' + esc(m.validTo) + '</div>' +
+        '<div style="white-space:nowrap">' + esc(m.validFrom) + '</div>' +
+        '<div style="color:' + esc(m.validToColor) + ';white-space:nowrap">' + esc(m.validTo) + '</div>' +
         '<div>' + badge(m.dataLabel, m.dataTone) + '</div>' +
         '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer">edit</div>' +
         '</div>';
-    }).join('');
+    }).join('') || (isAddingRow('connections') ? '' :
+      emptyTableRow("No metering points yet — add the customer's first connection."));
 
     var table = '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
-      head + rows + '</div>';
+      head + rows + detailRowEditorHtml('connections', COLS) + '</div>';
 
     // The mockup passes meteringSummary as the Card's `action` prop, i.e. a
     // bare text node in the card header (no styling of its own).
@@ -1485,6 +1545,13 @@
               '<input value="' + esc(f.numeric) + '" oninput="BO.updateCommercialField(' + i + ', this.value)" style="flex:1;min-width:0;padding:8px 10px;border:none;outline:none;font-size:12.5px;font-family:var(--font-sans);color:var(--pp-text-heading)">' +
               '<span style="padding:8px 10px 8px 0;font-size:12.5px;color:var(--pp-text-faint);background:var(--pp-surface-alt)">' + esc(f.suffix) + '</span>' +
               '</div>';
+          } else if (f.choices) {
+            control = '<select onchange="BO.updateCommercialField(' + i + ', this.value)" ' +
+              'style="width:100%;padding:8px 10px;border:1px solid var(--pp-border-strong);border-radius:7px;font-size:12.5px;font-family:var(--font-sans);color:var(--pp-text-heading)">' +
+              f.choices.map(function (c) {
+                return '<option value="' + esc(c) + '"' + (f.value === c ? ' selected' : '') + '>' + esc(c) + '</option>';
+              }).join('') +
+              '</select>';
           } else {
             control = '<div style="padding:8px 10px;border:1px solid var(--pp-border);border-radius:7px;font-size:12.5px;color:var(--pp-text-faint);background:var(--pp-surface-alt)">' + esc(f.value) + '</div>';
           }
@@ -1508,6 +1575,18 @@
         '</div>'
       : '';
 
+    // Same treatment, and the same reason: the word "On" alone says nothing
+    // about what it would stop. It is recorded, not enforced — and saying so
+    // here is cheaper than someone discovering it during a demo.
+    var fourEyes = null;
+    fields.forEach(function (fld) { if (fld.key === "fourEyes") { fourEyes = fld; } });
+    var fourEyesNote = fourEyes
+      ? '<div style="margin-top:8px;padding:9px 11px;background:var(--pp-surface-alt);border-radius:7px;font-size:11px;color:var(--pp-text-body);line-height:1.5">' +
+        'Four-eyes approval is <strong>' + esc(fourEyes.value) + '</strong>. When on, a second Admin on the customer would have to approve a trade or a withdrawal before it goes through. ' +
+        '<strong>Recorded, not enforced:</strong> neither portal has a second-approver step yet.' +
+        '</div>'
+      : '';
+
     // Hand-rolled card (not the DS Card) because the header carries buttons —
     // geometry copied verbatim from the mockup.
     return '<div style="background:#fff;border:1px solid var(--pp-border);border-radius:10px;padding:18px 20px">' +
@@ -1517,6 +1596,7 @@
       '</div>' +
       body +
       depositNote +
+      fourEyesNote +
       '</div>';
   }
 
@@ -1526,40 +1606,155 @@
     var COLS = '1.2fr 1.2fr 1fr 1.1fr 1fr 0.6fr';
 
     var head = '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
-      '<div>NAME</div><div>ROLE IN COMPANY</div><div>USERNAME</div><div>LAST SIGN-IN</div><div>STATUS</div><div></div>' +
+      '<div>NAME</div><div>ROLE</div><div>USERNAME</div><div>LAST SIGN-IN</div><div>STATUS</div><div></div>' +
       '</div>';
 
     var rows = d.accounts.map(function (a) {
       return '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center;color:' + esc(a.textColor) + '">' +
         '<div style="font-weight:600">' + esc(a.name) + '</div>' +
-        '<div>' + esc(a.role) + '</div>' +
+        '<div>' + badge(a.role, S.roleTone(a.role)) + '</div>' +
         '<div style="font-family:var(--font-mono);font-size:11px">' + esc(a.username) + '</div>' +
         '<div>' + esc(a.lastSignIn) + '</div>' +
         '<div>' + badge(a.statusLabel, a.statusTone) + '</div>' +
         '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer">' + esc(a.actionLabel) + '</div>' +
         '</div>';
-    }).join('');
+    }).join('') || (isAddingRow('accounts') ? '' :
+      emptyTableRow("No accounts yet — invite the customer's first user."));
+
+    var addBtn = d.editable
+      ? '<button type="button" class="btn-primary btn-sm" onclick="BO.startDetailRow(\'accounts\')">Add account</button>'
+      : '<button type="button" class="btn-primary btn-sm" onclick="BO.noop()">Add account</button>';
 
     return '<div style="background:#fff;border:1px solid var(--pp-border);border-radius:10px;padding:18px 20px">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
         '<div>' +
           '<div style="font-size:13.5px;font-weight:700;color:var(--pp-text-heading)">Customer accounts</div>' +
-          '<div style="font-size:11.5px;color:var(--pp-text-body);margin-top:4px">all accounts have identical privileges</div>' +
+          '<div style="font-size:11.5px;color:var(--pp-text-body);margin-top:4px">each account holds one role</div>' +
         '</div>' +
         '<div style="display:flex;align-items:center;gap:12px">' +
           '<span style="font-size:11.5px;color:var(--pp-text-body)">' + esc(d.accountsSummary) + '</span>' +
-          '<button type="button" class="btn-primary btn-sm" onclick="BO.noop()">Add account</button>' +
+          addBtn +
         '</div>' +
       '</div>' +
-      '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:14px">' + head + rows + '</div>' +
+      '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:14px">' +
+        head + rows + detailRowEditorHtml('accounts', COLS) + '</div>' +
+      // A warning here rather than a refusal on the way in: adding a Viewer
+      // before the Admin is a normal order to work in, and the customer already
+      // exists. The wizard blocks instead, because there the whole set is being
+      // decided at once.
+      (customerAccountsFormError(d.accounts)
+        ? '<div style="margin-top:14px">' + dsBanner('warning', 'No Admin on this customer',
+            'Nobody on this customer can manage its users, EANs or four-eyes setting.') + '</div>'
+        : '') +
+      rolePermissionsHtml() +
       '<div style="font-size:10.5px;color:var(--pp-text-faint);margin-top:14px">Deactivated accounts stay on record so past trades still name a person.</div>' +
+      '</div>';
+  }
+
+  // --- detail: adding a row in place ----------------------------------------
+
+  function isAddingRow(kind) {
+    return !!(state.detailRowDraft && state.detailRowDraft.kind === kind);
+  }
+
+  /**
+   * The draft row is laid out on the **table's own** grid, in the table's own
+   * column order — which is not the order the wizard asks for the same fields.
+   * An account is typed name/email/role but displayed name/role/username, so
+   * reusing the wizard's order here put the email input under the ROLE heading
+   * and moved it again on save. `blank` covers the columns a new row has nothing
+   * for (valid-to, last-sign-in); Save/Cancel take the last two.
+   */
+  var DETAIL_ROW_EDITORS = {
+    connections: { order: ['ean', 'name', 'commodity', 'validFrom'], blank: 1 },
+    accounts: { order: ['name', 'role', 'email'], blank: 1 }
+  };
+
+  function detailRowEditorHtml(kind, cols) {
+    if (!isAddingRow(kind)) { return ''; }
+    var draft = state.detailRowDraft;
+    var spec = DETAIL_ROW_EDITORS[kind];
+    // Read at call time, not above: these lists are declared with the wizard,
+    // further down the file, so at this point in the load they are still var-
+    // hoisted undefined.
+    var fields = kind === 'accounts' ? ACCOUNT_ROW_FIELDS : CONNECTION_ROW_FIELDS;
+
+    var cells = spec.order.map(function (key) {
+      var f = null;
+      fields.forEach(function (c) { if (c.key === key) { f = c; } });
+      return '<div>' + wizardControlHtml(f, draft.row[key], draft.err[key],
+        "BO.updateDetailRow('" + key + "', this.value, this)", FORM_INPUT_ROW) + '</div>';
+    }).join('');
+    for (var i = 0; i < spec.blank; i++) { cells += '<div></div>'; }
+
+    return '<div style="display:grid;grid-template-columns:' + cols +
+        ';gap:10px;padding:10px 12px;border-top:1px solid var(--pp-border);align-items:start;background:var(--pp-surface-alt)">' +
+      cells +
+      '<div style="grid-column:span 2;display:flex;gap:8px;justify-content:flex-end">' +
+        '<button type="button" class="btn-secondary btn-sm" onclick="BO.cancelDetailRow()">Cancel</button>' +
+        '<button type="button" class="btn-primary btn-sm" onclick="BO.saveDetailRow()">Save</button>' +
+      '</div>' +
       '</div>';
   }
 
   // --- detail ---------------------------------------------------------------
 
+  /**
+   * The detail for a customer the desk created on this page. Deliberately NOT
+   * buildCustomerDetail(): that synthesises a VAT number, an IBAN, up to four
+   * metering points and two staff accounts out of the KvK. For the mockup's own
+   * fixtures that is furniture; for a record made a minute ago it is invention —
+   * and it would sit under a card badged BANK DETAILS VERIFIED. Only what the
+   * desk typed is shown, and everything else says it is missing.
+   */
+  /** A field the desk was asked for but left blank says so, rather than lying. */
+  function orDash(value) {
+    var v = String(value == null ? '' : value).trim();
+    return v || '—';
+  }
+
+  function buildNewCustomerDetail(c) {
+    var co = c.company || {};
+    var metering = c.meteringRows || [];
+    var accounts = c.accountRows || [];
+    // Present but unverified is not the same as verified: nobody checked these.
+    var bankOnFile = co.iban && co.bic && co.accountHolder;
+
+    return {
+      status: c.status, statusTone: c.statusTone,
+      // Derived, never stored: the connection count IS the metering table's own
+      // length, so the stat card cannot contradict the rows underneath it.
+      connections: String(metering.length),
+      available: c.available, availableTone: c.availableTone,
+      openTrades: c.openTrades, lastSettlement: c.lastSettlement,
+      bankBadgeLabel: bankOnFile ? 'BANK DETAILS UNVERIFIED' : 'BANK DETAILS PENDING',
+      bankBadgeTone: bankOnFile ? 'neutral' : 'warning',
+      companyFields: customersWithBorders([
+        {label:'Legal name', value: c.name},
+        {label:'Trade name', value: orDash(co.tradeName)},
+        {label:'KvK', value: c.kvk},
+        {label:'VAT', value: orDash(co.vat)},
+        {label:'IBAN', value: orDash(co.iban)},
+        {label:'BIC', value: orDash(co.bic)},
+        {label:'Account holder', value: orDash(co.accountHolder)},
+        {label:'Billing address', value: orDash(co.billingAddress)},
+        {label:'Visiting address', value: orDash(co.visitingAddress)},
+        {label:'Primary contact', value: orDash(co.contactName)},
+        {label:'Email', value: orDash(co.contactEmail)},
+        {label:'Phone', value: orDash(co.contactPhone)}
+      ]),
+      metering: metering,
+      meteringSummary: metering.length ? metering.length + ' · all new' : 'none yet',
+      accounts: accounts,
+      accountsSummary: accounts.length ? accounts.length + ' · all invited' : 'none yet',
+      // Only a record this page owns can take new rows; the seeded customers
+      // are fixtures and their Add buttons stay inert.
+      editable: true
+    };
+  }
+
   function customersDetailHtml(c) {
-    var d = buildCustomerDetail(c);
+    var d = c.isNew ? buildNewCustomerDetail(c) : buildCustomerDetail(c);
     var outstanding = outstandingFor(c.kvk, c.name);
 
     var stats = '<div style="display:flex;flex-wrap:wrap;gap:14px">' +
@@ -1591,23 +1786,401 @@
       '</div>';
   }
 
+  // --- new customer ---------------------------------------------------------
+  //
+  // A three-step wizard: company details, then the connections the customer
+  // brings, then the people who sign in. state.customerWizard holds all of it;
+  // each step validates only its own slice, so a mistake on step 1 cannot block
+  // step 3 and vice versa.
+
+  var WIZARD_STEPS = ['Company', 'Connections', 'Accounts'];
+
+  /**
+   * Step 1's fields, in the cards they are grouped into. `key` is both the draft
+   * key and the field it becomes on the record; `wide` spans both grid columns.
+   * Only legal name, KvK and the contact's name and email are required — the
+   * rest is onboarding paperwork that arrives later and renders as "—" until it
+   * does.
+   */
+  var NEW_CUSTOMER_FIELD_GROUPS = [
+    {title:'Company', subtitle:'the customer is a legal entity', fields:[
+      {key:'name', label:'LEGAL NAME', placeholder:'Vandersteen Koeling B.V.', wide:true},
+      {key:'tradeName', label:'TRADE NAME', placeholder:'Vandersteen Cooling', wide:true},
+      {key:'kvk', label:'KVK', placeholder:'8 digits'},
+      {key:'vat', label:'VAT', placeholder:'NL812345678B01'}
+    ]},
+    {title:'Bank details', subtitle:'where settlements are paid', fields:[
+      {key:'iban', label:'IBAN', placeholder:'NL18 INGB 0002 4455 66', wide:true},
+      {key:'bic', label:'BIC', placeholder:'INGBNL2A'},
+      {key:'accountHolder', label:'ACCOUNT HOLDER', placeholder:'Vandersteen Koeling B.V.'}
+    ]},
+    {title:'Addresses', subtitle:'billing need not be where they work', fields:[
+      {key:'billingAddress', label:'BILLING ADDRESS', placeholder:'Havenweg 22, Rotterdam', wide:true},
+      {key:'visitingAddress', label:'VISITING ADDRESS', placeholder:'Havenweg 22, Rotterdam', wide:true}
+    ]},
+    {title:'Primary contact', subtitle:'who the desk calls', fields:[
+      {key:'contactName', label:'NAME', placeholder:'J. de Vries', wide:true},
+      {key:'contactEmail', label:'EMAIL', placeholder:'j.devries@vandersteen.nl'},
+      {key:'contactPhone', label:'PHONE', placeholder:'+31 10 240 1188'}
+    ]}
+  ];
+
+  /** The two statuses the desk can start a customer on, with the list's tone. */
+  var CUSTOMER_STATUSES = [
+    {label:'Onboarding', tone:'warning'},
+    {label:'Active', tone:'success'}
+  ];
+
+  var CONNECTION_ROW_FIELDS = [
+    {key:'ean', label:'EAN', placeholder:'871687100000000011', mono:true},
+    {key:'name', label:'CONNECTION NAME', placeholder:'Rotterdam DC'},
+    {key:'commodity', label:'COMMODITY', choices:['Electricity', 'Gas']},
+    {key:'validFrom', label:'VALID FROM', type:'date'}
+  ];
+  var CONNECTION_ROW_COLS = '1.6fr 1.4fr 1fr 1fr 32px';
+
+  var ACCOUNT_ROW_FIELDS = [
+    {key:'name', label:'NAME', placeholder:'J. de Vries'},
+    {key:'email', label:'EMAIL', placeholder:'j.devries@vandersteen.nl'},
+    {key:'role', label:'ROLE', choices: S.ACCOUNT_ROLES.map(function (r) { return r.label; })}
+  ];
+  var ACCOUNT_ROW_COLS = '1.3fr 1.7fr 1fr 32px';
+
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  /** Two letters, two check digits, then the country's own account part. */
+  var IBAN_RE = /^[A-Za-z]{2}\d{2}[A-Za-z0-9]{6,30}$/;
+
+  function emptyCustomerDraft() {
+    return {
+      name:'', tradeName:'', kvk:'', vat:'',
+      iban:'', bic:'', accountHolder:'',
+      billingAddress:'', visitingAddress:'',
+      contactName:'', contactEmail:'', contactPhone:'',
+      status:'Onboarding', connections:[], accounts:[]
+    };
+  }
+  function emptyConnectionRow() {
+    return {ean:'', name:'', commodity:'Electricity', validFrom: isoToday()};
+  }
+  function emptyAccountRow() {
+    return {name:'', email:'', role: S.ROLE_VIEWER};
+  }
+  function emptyWizardErrors() {
+    return {company:{}, connections:[], accounts:[], form:''};
+  }
+
+  /** Today by the demo clock, so a new connection starts on the demo's date. */
+  function isoToday() {
+    return PortalDemoClock.dateForOffset(state.demoOffsetDays);
+  }
+  /** ISO yyyy-mm-dd to the metering table's own dd-mm-yyyy. */
+  function isoToDutchDate(iso) {
+    var p = String(iso).split('-');
+    return p.length === 3 && p[0] ? p[2] + '-' + p[1] + '-' + p[0] : '—';
+  }
+
+  // --- new customer: validation ---------------------------------------------
+
+  /**
+   * Step 1. The KvK rules are the ones with teeth: state.commercialByCustomer
+   * and the cross-portal terms link are both keyed by KvK, so a number already
+   * in use would hand the new customer another company's deposit percentage.
+   */
+  function customerCompanyErrors(draft) {
+    var errors = {};
+    if (!String(draft.name).trim()) { errors.name = 'Required'; }
+    if (!String(draft.contactName).trim()) { errors.contactName = 'Required'; }
+
+    var kvk = String(draft.kvk).trim();
+    if (!kvk) { errors.kvk = 'Required'; }
+    else if (!/^\d{8}$/.test(kvk)) { errors.kvk = 'Eight digits'; }
+    else if (customersFind(kvk)) { errors.kvk = 'Already in use'; }
+
+    var email = String(draft.contactEmail).trim();
+    if (!email) { errors.contactEmail = 'Required'; }
+    else if (!EMAIL_RE.test(email)) { errors.contactEmail = 'Not an email address'; }
+
+    // Optional, but a typo in the one field that names a bank account is worth
+    // catching while someone is still looking at it.
+    var iban = String(draft.iban).replace(/\s+/g, '');
+    if (iban && !IBAN_RE.test(iban)) { errors.iban = 'Not an IBAN'; }
+    return errors;
+  }
+
+  /** Step 2, per row. An EAN is 18 digits and identifies one metering point. */
+  function customerConnectionErrors(rows) {
+    var seen = {};
+    return rows.map(function (r) {
+      var err = {};
+      var ean = String(r.ean).replace(/\s+/g, '');
+      if (!ean) { err.ean = 'Required'; }
+      else if (!/^\d{18}$/.test(ean)) { err.ean = 'Eighteen digits'; }
+      else if (seen[ean]) { err.ean = 'Already on this customer'; }
+      if (!err.ean) { seen[ean] = true; }
+      return err;
+    });
+  }
+
+  /** Step 3, per row. */
+  function customerAccountErrors(rows) {
+    var seen = {};
+    return rows.map(function (r) {
+      var err = {};
+      if (!String(r.name).trim()) { err.name = 'Required'; }
+      var email = String(r.email).trim().toLowerCase();
+      if (!email) { err.email = 'Required'; }
+      else if (!EMAIL_RE.test(email)) { err.email = 'Not an email address'; }
+      else if (seen[email]) { err.email = 'Already on this customer'; }
+      if (!err.email) { seen[email] = true; }
+      return err;
+    });
+  }
+
+  /**
+   * Accounts are optional, but a customer that has some and no Admin among them
+   * has nobody who can manage its own users — a dead end the desk would have to
+   * unpick by hand.
+   */
+  function customerAccountsFormError(rows) {
+    if (!rows.length) { return ''; }
+    var hasAdmin = rows.some(function (r) { return r.role === S.ROLE_ADMIN; });
+    return hasAdmin ? '' : 'At least one account must be an Admin — otherwise nobody can manage this customer’s users.';
+  }
+
+  function hasRowErrors(list) {
+    return list.some(function (e) { return Object.keys(e).length > 0; });
+  }
+
+  // --- new customer: controls -----------------------------------------------
+
+  /**
+   * One control — text, date or select — flagged when refused. `base` swaps the
+   * input chrome; the error variant is derived from whichever is in use, so the
+   * two cannot come apart.
+   */
+  function wizardControlHtml(f, value, err, handler, base) {
+    var normal = base || FORM_INPUT;
+    var style = err ? normal.replace('var(--pp-border-strong)', 'var(--pp-red)') : normal;
+    var control;
+    if (f.choices) {
+      control = '<select onchange="' + handler + '" style="' + style + '">' +
+        f.choices.map(function (c) {
+          return '<option value="' + esc(c) + '"' + (value === c ? ' selected' : '') + '>' + esc(c) + '</option>';
+        }).join('') +
+        '</select>';
+    } else {
+      control = '<input type="' + (f.type || 'text') + '" value="' + esc(value) + '"' +
+        (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') +
+        ' oninput="' + handler + '"' +
+        ' style="' + style + (f.mono ? ';font-family:var(--font-mono)' : '') + '">';
+    }
+    return control +
+      (err ? '<div class="field-err" style="' + FORM_ERROR_NOTE + '">' + esc(err) + '</div>' : '');
+  }
+
+  /**
+   * Drops the red flag off one control the moment it is edited. Without this the
+   * mark stays until the step is submitted again, so a field that has just been
+   * corrected goes on claiming it is wrong. Patched in place rather than
+   * re-rendered, for the usual reason: a re-render would take the cursor with it.
+   */
+  function clearControlError(elm) {
+    if (!elm) { return; }
+    elm.style.borderColor = 'var(--pp-border-strong)';
+    var note = elm.nextElementSibling;
+    if (note && note.className === 'field-err') { note.parentNode.removeChild(note); }
+  }
+
+  /** Takes the refusal banner away once nothing is left for it to point at. */
+  function refreshWizardBanner() {
+    var banner = document.getElementById('wizard-refusal');
+    if (!banner || !state.customerWizard) { return; }
+    var e = state.customerWizard.errors;
+    if (!e.form && !Object.keys(e.company).length &&
+        !hasRowErrors(e.connections) && !hasRowErrors(e.accounts)) {
+      banner.parentNode.removeChild(banner);
+    }
+  }
+
+  function wizardFieldHtml(f, draft, errors) {
+    return '<div' + (f.wide ? ' style="grid-column:1 / 3"' : '') + '>' +
+      '<div style="' + FORM_FIELD_LABEL + '">' + esc(f.label) + '</div>' +
+      wizardControlHtml(f, draft[f.key], errors[f.key],
+        "BO.updateCustomerField('" + f.key + "', this.value, this)") +
+      '</div>';
+  }
+
+  /**
+   * One editable row of the connections or accounts table. The row index is
+   * baked into each handler, which is why adding or removing a row re-renders
+   * (the indices below it shift) while typing into one does not.
+   */
+  function wizardRowHtml(kind, fields, cols, row, i, err) {
+    return '<div style="display:grid;grid-template-columns:' + cols + ';gap:10px;padding:10px 12px;border-top:1px solid var(--pp-border);align-items:start">' +
+      fields.map(function (f) {
+        return '<div>' + wizardControlHtml(f, row[f.key], err[f.key],
+          "BO.updateCustomerRow('" + kind + "', " + i + ", '" + f.key + "', this.value, this)") + '</div>';
+      }).join('') +
+      '<button type="button" title="Remove" onclick="BO.removeCustomerRow(\'' + kind + '\', ' + i + ')" ' +
+        'style="background:none;border:none;cursor:pointer;color:var(--pp-text-faint);font-size:16px;line-height:1;padding:8px 0">×</button>' +
+      '</div>';
+  }
+
+  function wizardRowTableHtml(kind, fields, cols, rows, errs, emptyText, addLabel) {
+    var head = '<div style="display:grid;grid-template-columns:' + cols + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+      fields.map(function (f) { return '<div>' + esc(f.label) + '</div>'; }).join('') + '<div></div>' +
+      '</div>';
+
+    var body = rows.map(function (r, i) {
+      return wizardRowHtml(kind, fields, cols, r, i, errs[i] || {});
+    }).join('') || emptyTableRow(emptyText);
+
+    return '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
+      head + body + '</div>' +
+      '<div style="margin-top:12px">' +
+        '<button type="button" class="btn-secondary btn-sm" onclick="BO.addCustomerRow(\'' + kind + '\')">' +
+          esc(addLabel) + '</button>' +
+      '</div>';
+  }
+
+  /** The three roles and what each one grants, said once under the table. */
+  function rolePermissionsHtml() {
+    var rows = S.ACCOUNT_ROLES.map(function (r) {
+      return '<div style="display:grid;grid-template-columns:110px 1fr;gap:12px;padding:8px 0;border-top:1px solid var(--pp-border);align-items:start">' +
+        '<div>' + badge(r.label, r.tone) + '</div>' +
+        '<div style="font-size:11px;color:var(--pp-text-body);line-height:1.5">' + esc(r.extra.join(' · ')) + '</div>' +
+        '</div>';
+    }).join('');
+    return '<div style="margin-top:16px">' +
+      '<div style="font-size:10.5px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">WHAT EACH ROLE GRANTS</div>' +
+      '<div style="font-size:10.5px;color:var(--pp-text-faint);margin-top:4px">Each role includes everything the one above it can do.</div>' +
+      rows +
+      '</div>';
+  }
+
+  // --- new customer: the wizard ---------------------------------------------
+
+  function wizardStepStripHtml(step) {
+    return '<div style="display:flex;align-items:center;gap:10px">' +
+      WIZARD_STEPS.map(function (label, i) {
+        var done = i < step, here = i === step;
+        var bg = here ? 'var(--pp-teal-700)' : (done ? 'var(--pp-teal-100)' : 'var(--pp-surface-alt)');
+        var fg = here ? '#fff' : (done ? 'var(--pp-teal-700)' : 'var(--pp-text-faint)');
+        return (i ? '<div style="flex:0 0 24px;height:1px;background:var(--pp-border-strong)"></div>' : '') +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<div style="width:22px;height:22px;border-radius:11px;background:' + bg + ';color:' + fg +
+              ';font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">' + (i + 1) + '</div>' +
+            '<div style="font-size:12px;font-weight:' + (here ? '700' : '600') + ';color:' +
+              (here ? 'var(--pp-text-heading)' : 'var(--pp-text-faint)') + '">' + esc(label) + '</div>' +
+          '</div>';
+      }).join('') +
+      '</div>';
+  }
+
+  function wizardCompanyStepHtml(draft, errors) {
+    var grid = 'display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:4px';
+
+    var cards = NEW_CUSTOMER_FIELD_GROUPS.map(function (g) {
+      var body = '<div style="' + grid + '">' +
+        g.fields.map(function (f) { return wizardFieldHtml(f, draft, errors); }).join('') +
+        (g.title === 'Company' ? wizardFieldHtml(
+          {key:'status', label:'STATUS', choices: CUSTOMER_STATUSES.map(function (s) { return s.label; })},
+          draft, errors) : '') +
+        '</div>';
+      return cardHtml(g.title, g.subtitle, body);
+    });
+
+    return '<div style="display:flex;gap:16px;align-items:flex-start">' +
+        '<div style="flex:1;display:flex;flex-direction:column;gap:16px">' + cards[0] + cards[2] + '</div>' +
+        '<div style="flex:1;display:flex;flex-direction:column;gap:16px">' + cards[1] + cards[3] + '</div>' +
+      '</div>';
+  }
+
+  function wizardConnectionsStepHtml(draft, errors) {
+    var body = wizardRowTableHtml('connections', CONNECTION_ROW_FIELDS, CONNECTION_ROW_COLS,
+      draft.connections, errors.connections,
+      'No connections yet — a customer can be created without any and gain them later.',
+      '+ Add connection');
+    return cardHtml('Connections', 'one row per metering point, identified by its EAN', body);
+  }
+
+  function wizardAccountsStepHtml(draft, errors) {
+    var body = wizardRowTableHtml('accounts', ACCOUNT_ROW_FIELDS, ACCOUNT_ROW_COLS,
+      draft.accounts, errors.accounts,
+      'No accounts yet — the customer can be created without any and be invited later.',
+      '+ Add account') +
+      rolePermissionsHtml();
+    return cardHtml('Accounts', 'who can sign in to the Customer Portal, and as what', body);
+  }
+
+  function newCustomerFormHtml() {
+    var w = state.customerWizard;
+    var draft = w.draft, errors = w.errors, step = w.step;
+
+    var refusedText = errors.form ||
+      (Object.keys(errors.company).length || hasRowErrors(errors.connections) || hasRowErrors(errors.accounts)
+        ? 'Check the fields marked below, then try again.'
+        : '');
+    var refused = refusedText
+      ? '<div id="wizard-refusal">' + dsBanner('critical', 'Not saved', refusedText) + '</div>'
+      : '';
+
+    var body;
+    if (step === 0) { body = wizardCompanyStepHtml(draft, errors.company); }
+    else if (step === 1) { body = wizardConnectionsStepHtml(draft, errors); }
+    else { body = wizardAccountsStepHtml(draft, errors); }
+
+    // Said once, before Create is pressed, rather than discovered after.
+    var note = step === 2
+      ? '<div style="background:var(--pp-surface-alt);border:1px solid var(--pp-border);border-radius:8px;padding:12px 14px;font-size:11px;color:var(--pp-text-body);line-height:1.5">' +
+        'Commercial terms start at the 20 % default deposit until the desk changes them. ' +
+        '<strong>Demo build:</strong> customers added here live on this page only and are gone after a reload.' +
+        '</div>'
+      : '';
+
+    return '<div style="display:flex;flex-direction:column;gap:16px">' +
+      wizardStepStripHtml(step) + refused + body + note +
+      '</div>';
+  }
+
   // --- entry points ---------------------------------------------------------
 
-  /** The screen body: the customer list, or one customer's detail page. */
+  /** The screen body: the customer list, the new-customer form, or a detail. */
   function renderCustomers() {
     var c = state.customerId ? customersFind(state.customerId) : null;
-    return c ? customersDetailHtml(c) : customersListHtml();
+    if (c) { return customersDetailHtml(c); }
+    return state.customerView === 'new' ? newCustomerFormHtml() : customersListHtml();
   }
 
   /** Topbar for this screen, ported from the mockup's renderVals() branch. */
   function customersChrome() {
     var c = state.customerId ? customersFind(state.customerId) : null;
+    if (!c && state.customerView === 'new') {
+      var step = state.customerWizard ? state.customerWizard.step : 0;
+      var last = step === WIZARD_STEPS.length - 1;
+      return {
+        title: 'New customer',
+        subtitle: '',
+        crumb: {
+          backLabel: 'Customers', backFn: 'BO.cancelNewCustomer()',
+          rest: 'step ' + (step + 1) + ' of ' + WIZARD_STEPS.length + ' · not created yet'
+        },
+        actions: [
+          { label: step ? 'Back' : 'Cancel', variant: 'secondary', onClick: 'BO.wizardBack()' },
+          last
+            ? { label: 'Create customer', variant: 'primary', onClick: 'BO.createCustomer()' }
+            : { label: 'Next', variant: 'primary', onClick: 'BO.wizardNext()' }
+        ]
+      };
+    }
     if (!c) {
       return {
         title: 'Customers',
-        subtitle: CUSTOMER_LIST.length + ' companies',
+        subtitle: customersAll().length + ' companies',
         crumb: null,
-        actions: []
+        actions: [
+          { label: 'Add customer', variant: 'primary', onClick: 'BO.startNewCustomer()' }
+        ]
       };
     }
     return {
@@ -1616,7 +2189,8 @@
       crumb: { backLabel: 'Customers', backFn: 'BO.closeCustomerDetail()', rest: 'KvK ' + c.kvk },
       actions: [
         { label: 'View as customer', variant: 'secondary', onClick: 'BO.noop()' },
-        { label: 'Add connection', variant: 'primary', onClick: 'BO.noop()' }
+        { label: 'Add connection', variant: 'primary',
+          onClick: c.isNew ? 'BO.startDetailRow(\'connections\')' : 'BO.noop()' }
       ]
     };
   }
@@ -1644,12 +2218,6 @@
     }
     return null;
   }
-  /** Field label above each input in the two forms. */
-  var WALLET_FIELD_LABEL = "font-size:10.5px;font-weight:600;color:var(--pp-text-body);margin-bottom:6px";
-  /** Default input chrome, and the teal-bordered emphasised variant (AMOUNT). */
-  var WALLET_INPUT = "width:100%;padding:9px 12px;border:1px solid var(--pp-border-strong);border-radius:7px;font-size:13px;font-family:var(--font-sans);color:var(--pp-text-heading)";
-  var WALLET_INPUT_ACCENT = "width:100%;padding:9px 12px;border:1px solid var(--pp-teal-600);border-radius:7px;font-size:13px;font-weight:600;font-family:var(--font-sans);color:var(--pp-text-heading)";
-
 
   /**
    * One DS StatCard, via the page's own primitive. Wrapped rather than passed
@@ -1747,7 +2315,7 @@
    */
   function walletFieldHtml(label, attrHtml, inputStyle, wrapStyle) {
     return "<div" + (wrapStyle ? ' style="' + wrapStyle + '"' : "") + ">" +
-      '<div style="' + WALLET_FIELD_LABEL + '">' + esc(label) + "</div>" +
+      '<div style="' + FORM_FIELD_LABEL + '">' + esc(label) + "</div>" +
       "<input " + attrHtml + ' style="' + inputStyle + '">' +
       "</div>";
   }
@@ -1757,10 +2325,10 @@
   function walletDepositCardHtml() {
     var body =
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;margin-top:6px">' +
-        walletFieldHtml("CUSTOMER", walletValueAttr("Meijer Koelhuizen"), WALLET_INPUT) +
-        walletFieldHtml("AMOUNT", walletValueAttr("€ 20.000,00"), WALLET_INPUT_ACCENT) +
-        walletFieldHtml("VALUE DATE", walletValueAttr("13-08-2026"), WALLET_INPUT) +
-        walletFieldHtml("BANK REFERENCE", walletValueAttr("PP-9014-TR"), WALLET_INPUT) +
+        walletFieldHtml("CUSTOMER", walletValueAttr("Meijer Koelhuizen"), FORM_INPUT) +
+        walletFieldHtml("AMOUNT", walletValueAttr("€ 20.000,00"), FORM_INPUT_ACCENT) +
+        walletFieldHtml("VALUE DATE", walletValueAttr("13-08-2026"), FORM_INPUT) +
+        walletFieldHtml("BANK REFERENCE", walletValueAttr("PP-9014-TR"), FORM_INPUT) +
       "</div>" +
       '<div style="display:flex;justify-content:flex-end;margin-top:16px">' +
         '<button type="button" class="btn-primary" onclick="BO.noop()">Register deposit</button>' +
@@ -1771,11 +2339,11 @@
   function walletAdjustmentCardHtml() {
     var body =
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;margin-top:6px">' +
-        walletFieldHtml("DIRECTION", walletValueAttr("Credit"), WALLET_INPUT) +
-        walletFieldHtml("AMOUNT", walletValueAttr("€ 0,00"), WALLET_INPUT) +
+        walletFieldHtml("DIRECTION", walletValueAttr("Credit"), FORM_INPUT) +
+        walletFieldHtml("AMOUNT", walletValueAttr("€ 0,00"), FORM_INPUT) +
         walletFieldHtml("REASON — SHOWN TO THE CUSTOMER",
           'placeholder="' + esc("e.g. “Goodwill credit agreed with J. de Vries on 12 Aug”") + '"',
-          WALLET_INPUT, "grid-column:1 / 3") +
+          FORM_INPUT, "grid-column:1 / 3") +
       "</div>" +
       '<div style="display:flex;justify-content:flex-end;margin-top:16px">' +
         '<button type="button" class="btn-secondary" disabled onclick="BO.noop()">Post adjustment</button>' +
@@ -2051,13 +2619,269 @@
   function selectCustomer(kvk) {
     state.customerId = kvk;
     state.commercialEditing = false;
+    state.detailRowDraft = null;
     render();
   }
   function closeCustomerDetail(quiet) {
     state.customerId = null;
     state.commercialEditing = false;
     state.commercialSnapshot = null;
+    state.detailRowDraft = null;
+    clearNewCustomerForm();
     if (!quiet) { render(); }
+  }
+
+  /**
+   * Adding one connection or account to a customer created on this page. The
+   * row is validated against what that customer already has, so an EAN or an
+   * email cannot arrive twice by a different door than the wizard.
+   */
+  function startDetailRow(kind) {
+    var c = customersFind(state.customerId);
+    if (!c || !c.isNew) { return; }
+    state.detailRowDraft = {
+      kind: kind,
+      row: kind === 'accounts' ? emptyAccountRow() : emptyConnectionRow(),
+      err: {}
+    };
+    render();
+  }
+  function cancelDetailRow() {
+    state.detailRowDraft = null;
+    render();
+  }
+  function updateDetailRow(key, value, elm) {
+    if (!state.detailRowDraft) { return; }
+    state.detailRowDraft.row[key] = value;
+    delete state.detailRowDraft.err[key];
+    clearControlError(elm);
+  }
+  function saveDetailRow() {
+    var draft = state.detailRowDraft;
+    var c = customersFind(state.customerId);
+    if (!draft || !c || !c.isNew) { return; }
+
+    var accounts = draft.kind === 'accounts';
+    // Checked as the last row of what is already there, which is what makes the
+    // "already on this customer" test see the existing rows.
+    var existing = (accounts ? c.accountRows : c.meteringRows).map(function (r) {
+      return accounts ? { name: r.name, email: r.username, role: r.role }
+        : { ean: r.ean, name: r.name, commodity: r.commodity, validFrom: r.validFrom };
+    });
+    var all = existing.concat([draft.row]);
+    var errs = accounts ? customerAccountErrors(all) : customerConnectionErrors(all);
+    draft.err = errs[errs.length - 1];
+    if (Object.keys(draft.err).length) { render(); return; }
+
+    if (accounts) { c.accountRows.push(accountRowFrom(draft.row)); }
+    else { c.meteringRows.push(meteringRowFrom(draft.row)); }
+    state.detailRowDraft = null;
+    render();
+  }
+
+  /**
+   * Adding a customer. The record is page-local (see state.newCustomers): the
+   * desk can open it and set its commercial terms, and nothing outside this tab
+   * knows about it. Trades still only arrive from the Customer Portal's own
+   * customer, so a created one has none.
+   */
+  function startNewCustomer() {
+    state.customerId = null;
+    state.commercialEditing = false;
+    state.customerWizard = { step: 0, draft: emptyCustomerDraft(), errors: emptyWizardErrors() };
+    state.customerView = 'new';
+    render();
+  }
+
+  function clearNewCustomerForm() {
+    state.customerView = 'list';
+    state.customerWizard = null;
+  }
+
+  function cancelNewCustomer() {
+    clearNewCustomerForm();
+    render();
+  }
+
+  /**
+   * Neither of these re-renders: a re-render rebuilds the <input> under the
+   * cursor and steals focus mid-keystroke — the same rule updateCommercialField()
+   * follows. Errors are recomputed when the step is left, which is the only
+   * place they are shown.
+   */
+  function updateCustomerField(key, value, elm) {
+    if (!state.customerWizard) { return; }
+    state.customerWizard.draft[key] = value;
+    delete state.customerWizard.errors.company[key];
+    clearControlError(elm);
+    refreshWizardBanner();
+  }
+  function updateCustomerRow(kind, i, key, value, elm) {
+    if (!state.customerWizard) { return; }
+    var row = state.customerWizard.draft[kind][i];
+    if (!row) { return; }
+    row[key] = value;
+    var err = state.customerWizard.errors[kind][i];
+    if (err) { delete err[key]; }
+    // Changing any account can be what fixes "no Admin among them", and there
+    // is no one field to hang that message on.
+    if (kind === 'accounts') { state.customerWizard.errors.form = ''; }
+    clearControlError(elm);
+    refreshWizardBanner();
+  }
+
+  /**
+   * Adding or removing a row does re-render: every handler in the table has its
+   * row index baked in, so the rows below a removed one would otherwise keep
+   * writing to the wrong record.
+   */
+  function addCustomerRow(kind) {
+    if (!state.customerWizard) { return; }
+    state.customerWizard.draft[kind].push(kind === 'accounts' ? emptyAccountRow() : emptyConnectionRow());
+    render();
+  }
+  function removeCustomerRow(kind, i) {
+    if (!state.customerWizard) { return; }
+    var w = state.customerWizard;
+    w.draft[kind].splice(i, 1);
+    w.errors[kind].splice(i, 1);
+    // errors.form is the one error not tied to a row, so splicing cannot clear
+    // it: deleting the last account after a refused Create would otherwise leave
+    // "at least one must be an Admin" standing over an empty table.
+    if (kind === 'accounts') { w.errors.form = customerAccountsFormError(w.draft.accounts); }
+    render();
+  }
+
+  /** Whatever the current step is responsible for, checked. */
+  function validateWizardStep() {
+    var w = state.customerWizard;
+    var errors = emptyWizardErrors();
+    if (w.step === 0) {
+      errors.company = customerCompanyErrors(w.draft);
+      w.errors = errors;
+      return !Object.keys(errors.company).length;
+    }
+    if (w.step === 1) {
+      errors.connections = customerConnectionErrors(w.draft.connections);
+      w.errors = errors;
+      return !hasRowErrors(errors.connections);
+    }
+    errors.accounts = customerAccountErrors(w.draft.accounts);
+    errors.form = customerAccountsFormError(w.draft.accounts);
+    w.errors = errors;
+    return !hasRowErrors(errors.accounts) && !errors.form;
+  }
+
+  /**
+   * Back never validates — going back to fix something must not be blocked by
+   * the thing you are going back to fix.
+   */
+  function wizardBack() {
+    var w = state.customerWizard;
+    if (!w) { return; }
+    if (!w.step) { cancelNewCustomer(); return; }
+    w.step -= 1;
+    w.errors = emptyWizardErrors();
+    render();
+  }
+  function wizardNext() {
+    var w = state.customerWizard;
+    if (!w) { return; }
+    if (!validateWizardStep()) { render(); return; }
+    w.step += 1;
+    w.errors = emptyWizardErrors();
+    render();
+  }
+
+  /**
+   * An unusable field refuses the whole create and keeps the wizard open with
+   * what was typed — the discipline saveCommercialEdit() uses for an unusable
+   * deposit percentage. A half-written customer is worse than no customer.
+   *
+   * Step 1 is re-checked here rather than trusted: the KvK could have been taken
+   * by another customer created since it was typed, and Back lets it be edited
+   * after it passed.
+   */
+  function createCustomer() {
+    var w = state.customerWizard;
+    if (!w) { return; }
+    if (!validateWizardStep()) { render(); return; }
+
+    var companyErrors = customerCompanyErrors(w.draft);
+    if (Object.keys(companyErrors).length) {
+      w.step = 0;
+      w.errors = emptyWizardErrors();
+      w.errors.company = companyErrors;
+      render();
+      return;
+    }
+
+    var draft = w.draft;
+    var status = draft.status === 'Active' ? 'Active' : 'Onboarding';
+    var kvk = String(draft.kvk).trim();
+    state.newCustomers.unshift({
+      name: String(draft.name).trim(),
+      kvk: kvk,
+      status: status,
+      statusTone: status === 'Active' ? 'success' : 'warning',
+      // No wallet is opened with the customer and nothing has been settled.
+      available: '—', availableTone: 'default',
+      openTrades: '0', lastSettlement: '—',
+      contact: String(draft.contactName).trim(),
+      city: '',
+      company: companyRecord(draft),
+      meteringRows: draft.connections.map(meteringRowFrom),
+      accountRows: draft.accounts.map(accountRowFrom),
+      isNew: true
+    });
+    clearNewCustomerForm();
+    selectCustomer(kvk);
+  }
+
+  /** The typed company fields, trimmed, as the detail page reads them. */
+  function companyRecord(draft) {
+    var out = {};
+    ['tradeName', 'vat', 'iban', 'bic', 'accountHolder', 'billingAddress',
+      'visitingAddress', 'contactName', 'contactEmail', 'contactPhone'].forEach(function (k) {
+      out[k] = String(draft[k]).trim();
+    });
+    return out;
+  }
+
+  /**
+   * A metering row in the shape the ported table renders. A connection nobody
+   * has named reads as the fixtures' own "— none set —" rather than blank, and
+   * one with no readings yet says so instead of borrowing the fixtures' "OK".
+   */
+  function meteringRowFrom(c) {
+    var named = String(c.name).trim();
+    var gas = c.commodity === 'Gas';
+    return {
+      ean: String(c.ean).replace(/\s+/g, ''),
+      name: named || '— none set —',
+      nameColor: named ? 'var(--pp-text-heading)' : 'var(--pp-text-faint)',
+      commodity: c.commodity,
+      commodityColor: gas ? 'var(--pp-text-body)' : 'var(--pp-text-heading)',
+      validFrom: isoToDutchDate(c.validFrom),
+      validTo: '—', validToColor: 'var(--pp-text-faint)',
+      dataTone: 'neutral', dataLabel: gas ? 'Not tradeable' : 'No data yet'
+    };
+  }
+
+  /**
+   * An account row in the same shape. The email is the login, so it fills the
+   * USERNAME column; the state is the fixtures' own invited-not-yet-signed-in
+   * row, because that is exactly what a just-created account is.
+   */
+  function accountRowFrom(a) {
+    return {
+      name: String(a.name).trim(),
+      role: a.role,
+      username: String(a.email).trim(),
+      lastSignIn: '—',
+      statusTone: 'warning', statusLabel: 'Invited', actionLabel: 'resend',
+      textColor: 'var(--pp-text-heading)'
+    };
   }
 
   /**
@@ -2114,7 +2938,7 @@
     var fields = commercialFieldsFor(state.customerId).slice();
     var f = fields[i];
     if (!f) { return; }
-    var next = { label: f.label, color: f.color, money: f.money, key: f.key, numeric: numeric };
+    var next = { label: f.label, color: f.color, money: f.money, key: f.key, numeric: numeric, choices: f.choices };
     if (f.money) {
       next.prefix = f.prefix; next.suffix = f.suffix;
       next.value = f.prefix + numeric + f.suffix;
@@ -2252,6 +3076,12 @@
     refresh: refresh, sendOffer: sendOffer, onPriceInput: onPriceInput,
     confirmTrade: confirmTrade, failTrade: failTrade, parsePrice: parsePrice, noop: noop,
     selectCustomer: selectCustomer, closeCustomerDetail: closeCustomerDetail,
+    startNewCustomer: startNewCustomer, cancelNewCustomer: cancelNewCustomer,
+    createCustomer: createCustomer, updateCustomerField: updateCustomerField,
+    updateCustomerRow: updateCustomerRow, addCustomerRow: addCustomerRow,
+    removeCustomerRow: removeCustomerRow, wizardBack: wizardBack, wizardNext: wizardNext,
+    startDetailRow: startDetailRow, cancelDetailRow: cancelDetailRow,
+    updateDetailRow: updateDetailRow, saveDetailRow: saveDetailRow,
     startCommercialEdit: startCommercialEdit, cancelCommercialEdit: cancelCommercialEdit,
     saveCommercialEdit: saveCommercialEdit, updateCommercialField: updateCommercialField,
     _state: state

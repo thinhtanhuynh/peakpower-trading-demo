@@ -866,10 +866,30 @@ drawing at an old hardcoded width.
 Zoom is `state.chartZoom`, a doubling multiplier (`ZOOM_MIN` 1 to `ZOOM_MAX`
 8) on the `−`/`+` buttons, shown only for multi-day ranges. It never goes
 below 1 — narrower than fit would reintroduce the dead-space bug.
-`setChartZoom()` redraws and resets both charts' scroll to 0. `render()`
-resets `chartZoom` to 1 on every genuine range or site change; zoom clicks and
-resizes redraw through `drawMonthCharts()` directly and never touch
+`render()` resets `chartZoom` to 1 on every genuine range or site change; zoom
+clicks and resizes redraw through `drawMonthCharts()` directly and never touch
 `render()`, which is why they don't hit that reset.
+
+**Zoom keeps the reader's place.** `setChartZoom()` reads the interval sitting
+at the middle of the viewport *before* the redraw (`rangeCentreInterval`) and
+scrolls it back to the middle *after* (`scrollRangeToInterval`). Both
+measurements must straddle the `state.chartZoom` assignment, because
+`rangeChartGeometry()` reads it. It used to set both wraps' `scrollLeft = 0`
+instead — one click and you were back at day one, which is the opposite of what
+zooming into a long range is for.
+
+Two consequences worth knowing before "fixing" this again:
+
+- **At either edge the anchor cannot stay centred** — there is no content past
+  it — so clamping shifts it. Staying pinned to that edge is the correct
+  behaviour, not a bug; a test asserts the pin rather than the centre there.
+- **"Fit" is the label for zoom 1, not a promise that it fits.** `fitPx` is
+  floored at `RANGE_PX_PER_INTERVAL_MIN`, so anything over ~276 intervals (about
+  three days) still scrolls at zoom 1.
+
+`RANGE_PAD_LEFT` (40) and `RANGE_PAD_RIGHT` (10) and `rangeStepX(width, n)` are
+shared by both range builders and by the anchor maths — the x-geometry has to
+agree in all three places or the scroll lands somewhere else than it measured.
 `scheduleMonthChartResize()` observes `#month-chart-wrap` and redraws on
 container resize, guarded on `lastDrawnMonthWidth` — without it, a window
 resize leaves the chart at the width it first fit to.
@@ -1678,7 +1698,7 @@ detail, so returning lands on the list rather than a stale record.
 |---|---|---|
 | **Home** | `back-office-screens-data.js` | Six StatCards, "Needs attention now", "Exposure", integration health. The three attention rows carrying a `tradeId` really open that trade; the other two are inert, as in the mockup |
 | **Trade desk** | live | list / detail; the only screen with a real backend |
-| **Customers** | `back-office-screens-data.js` | list / detail (`state.customerId`), with editable Commercial settings. `buildCustomerDetail()` is ported verbatim, including its synthesised branch for every customer other than Vandersteen |
+| **Customers** | `back-office-screens-data.js` + `state.newCustomers` | list / **new** (a three-step wizard, `state.customerView`) / detail (`state.customerId`), with editable Commercial settings and, on customers created here, inline Add connection / Add account. `buildCustomerDetail()` is ported verbatim, including its synthesised branch for every customer other than Vandersteen |
 | **Wallets** | `back-office-screens-data.js` | Read-only, plus the live OUTSTANDING column |
 | **Settlements** | `back-office-screens-data.js` | Read-only |
 | **Data & feeds** | `back-office-screens-data.js` | Read-only |
@@ -1750,6 +1770,166 @@ When this page was first built its `.card`/`.card-title`/`.card-subtitle`
 rules were accidentally left out of the extracted CSS and every card rendered
 unstyled. There is a test asserting **every class rendered into the DOM has a
 matching CSS rule** — worth keeping if more markup is added.
+
+### Adding a customer
+
+`Add customer` on the Customers list opens a **third view on the same screen**
+(`state.customerView`, `"list" | "new"`), alongside the detail view
+`state.customerId` already switches to. `renderCustomers()` checks the detail
+first, then the wizard, then falls through to the list; `customersChrome()`
+branches the same three ways.
+
+**The wizard is three steps** — Company, Connections, Accounts — held in
+`state.customerWizard` (`{step, draft, errors}`). The topbar carries them:
+`Cancel`/`Next` on step 1, `Back`/`Next` on step 2, `Back`/`Create customer` on
+step 3, with the step named in the crumb.
+
+**Each step validates only its own slice.** `validateWizardStep()` writes just
+that step's part of `errors`, so a problem on step 1 cannot block step 3 and the
+other way round. **Back never validates** — being blocked from going back to fix
+the thing you are going back to fix is the whole failure mode. `createCustomer()
+re-checks step 1 itself` and jumps back to it if needed, because the KvK could
+have been taken by another customer created since it was typed.
+
+**A created customer is page-local.** `state.newCustomers` holds them newest
+first, and `customersAll()` is the join with the seeded `CUSTOMER_LIST` — read
+that anywhere the screen lists or finds a customer, not `CUSTOMER_LIST`. Two
+lookups deliberately stay on the seeded list: `walletKvk()`, because a wallet
+row is a seeded fixture and a page-added company sharing a name prefix could
+only mis-match it, and `customerRecordFor()`, which serves seeded trades. A
+reload is back to the eight seeded rows.
+
+**Required is only legal name, KvK and the contact's name and email.** The other
+eight company fields are onboarding paperwork that arrives later and render `—`
+until it does. Formats checked: KvK (8 digits, unique), email, EAN (18 digits,
+unique within the customer), and IBAN *when non-blank*. Everything else is free
+text — a format rule nobody can satisfy is worse than none.
+
+**The KvK rules are the ones with teeth.** `state.commercialByCustomer` and the
+cross-portal terms link are both keyed by KvK, so a number already in use would
+hand the new customer another company's deposit percentage.
+
+#### Typing, flagging and re-rendering
+
+**Editing a field never re-renders** — a re-render rebuilds the `<input>` under
+the cursor and steals focus mid-keystroke, the rule `updateCommercialField()`
+already follows. **Adding or removing a row does**, because every handler in
+those tables has its row index baked in and the rows below a removed one would
+otherwise write to the wrong record.
+
+**A red flag is dropped the moment its field is edited**, by patching that one
+control (`clearControlError`) rather than re-rendering: otherwise a field that
+has just been corrected goes on claiming it is wrong until the step is submitted
+again. `refreshWizardBanner()` takes the refusal banner away once nothing is
+left for it to point at, so it can't sit there telling you to check fields that
+are no longer marked.
+
+**`errors.form` is the one error not tied to a field, and every path that could
+fix it has to clear it.** It carries "at least one account must be an Admin", so
+`updateCustomerRow()` clears it on any account edit and `removeCustomerRow()`
+recomputes it — deleting the last account otherwise left a critical banner
+demanding an Admin over an empty table that says accounts are optional.
+
+#### What a created customer looks like
+
+`buildNewCustomerDetail()`, chosen by `c.isNew`, deliberately **not**
+`buildCustomerDetail()` — that synthesises a VAT number, an IBAN, metering
+points and staff accounts out of the KvK, which is furniture for the mockup's
+fixtures and invention for a record made a minute ago, under a card badged BANK
+DETAILS VERIFIED.
+
+- **Connections are derived, never stored:** `connections` is
+  `meteringRows.length`, so the CONNECTIONS stat card cannot contradict the
+  table underneath it. An earlier version asked the desk to type a count and it
+  did exactly that. **The Customers list derives the same cell the same way** —
+  the created record has no `connections` key at all, so reading it there
+  rendered a blank cell above eight seeded rows that all showed a number.
+- **The bank badge follows the data:** BANK DETAILS PENDING (amber) while
+  IBAN/BIC/holder are incomplete, BANK DETAILS UNVERIFIED (neutral) once all
+  three are there. Never *verified* — nobody verified them.
+- **Trade name is a field, not a derivation.** Copying the synthesis's
+  `name.replace(' B.V.', '')` was the mistake to avoid: a trade name is a
+  separate registration, and the one row where this repo knows the answer says
+  so — Vandersteen Koeling B.V. trades as *Vandersteen Cooling*.
+- A new connection reads `No data yet` (or the fixtures' `Not tradeable` for
+  gas), a new account `Invited` with a `resend` action — the state the seeded
+  R. Smit row is already in. The **email is the login**, so it fills the
+  USERNAME column.
+- **A created customer's table shows full 18-digit EANs**, where the fixtures
+  show a truncated `…0011`. Its table is entirely rows the desk typed, so the
+  two conventions never mix in one table — but the EAN column has to widen to
+  fit them, keyed off the content rather than off `isNew`.
+
+#### Adding rows afterwards
+
+On a created customer's detail page the topbar's `Add connection` and the
+accounts card's `Add account` open an inline draft row in the relevant table
+(`state.detailRowDraft`), reusing the wizard's own field lists and control
+renderer — so a connection added here and one added during creation cannot ask
+for different things. `saveDetailRow()` validates the draft **as the last row of
+what is already there**, which is what makes the duplicate test see the existing
+rows. Seeded customers keep inert buttons, and `startDetailRow()` re-checks
+`isNew` itself rather than trusting the markup.
+
+**The draft row is laid out on the table's grid, in the table's column order,
+which is not the order the wizard asks in.** `DETAIL_ROW_EDITORS` holds that
+order per kind, because an account is *typed* name/email/role and *displayed*
+name/role/username: reusing the wizard's order put the email input under the
+ROLE heading and then moved it again on save. The blank entry covers the columns
+a new row has nothing for (valid-to, last-sign-in) and Save/Cancel span the last
+two. Its controls use `FORM_INPUT_ROW`, the same chrome at a row's metrics —
+the standard 13px/12px control leaves a select in a 1fr column reading "Ele".
+`detailRowEditorHtml()` resolves its field list **at call time**: those lists are
+declared with the wizard further down the file, so at that point in the load they
+are still var-hoisted `undefined`.
+
+**A half-typed wizard or draft row is dropped when the screen is left** —
+`closeCustomerDetail()` clears both, and `goTo()` already calls it on the way
+out of Customers.
+
+### Account roles
+
+Three roles, weakest first, in `ACCOUNT_ROLES` (`back-office-screens-data.js`),
+and **cumulative** — each grants everything the one before it does, so `extra`
+lists only what it adds:
+
+| Role | Adds | Badge |
+|---|---|---|
+| `Viewer` | view everything; change nothing | neutral |
+| `Trader` | request and accept trades, deposit funds | info (violet) |
+| `Admin` | withdraw funds, add/remove EANs, manage users, the four-eyes setting | brand (teal) |
+
+The accounts table's column is **`ROLE`**, not the mockup's "ROLE IN COMPANY",
+and the card's subtitle is "each account holds one role" — it used to read "all
+accounts have identical privileges", which stopped being true the moment roles
+existed. The mockup's four job titles were remapped onto these roles (Admin,
+Admin, Trader, Viewer), as were the two synthesised for every other customer: a
+column carries one vocabulary or it means nothing. The Customer Portal's trade
+timelines were changed the same way — `"J. de Vries · Energy Manager"` is now
+`"· Admin"` in **three** files: `portal-seed-data.js` and `customer-portal.html`
+for the seeded rows, and `portal-trade-link.js` (four hardcoded `by`/`actor`
+defaults) for every *live* trade. Missing the third left the same person reading
+as "Admin" on a seeded trade and "Energy Manager" on a live one in the same list,
+and `respondToOffer`'s default is persisted into `response.by` and read back by
+the Back Office, so the stale word would have crossed portals.
+
+**At creation, accounts are optional but must include an Admin if there are
+any** — a customer with users and no Admin has nobody who can manage its own
+users. **On the detail page that is a warning, not a refusal:** adding a Viewer
+before the Admin is a normal order to work in, and the customer already exists.
+
+### Four-eyes approval
+
+A `fourEyes` field in `COMMERCIAL_FIELDS`, edited through a select (the
+`choices` property; the commercial edit form gained a branch for it, and
+`updateCommercialField()` carries `choices` through or the select loses its
+options on the first keystroke). Per customer, page-local like every other
+commercial field except the deposit.
+
+**Deliberately not in `portal-terms-link.js`.** That module's contract is "terms
+the Customer Portal obeys", and no second-approver step exists in either portal —
+putting it there would claim a cross-portal rule that isn't real. The card says
+what it would gate and that it is recorded, not enforced.
 
 ### Derived detail must not out-claim its source
 

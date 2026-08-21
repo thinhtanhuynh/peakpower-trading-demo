@@ -130,7 +130,7 @@
       connections: [{ id: "rot", name: "Rotterdam DC", sub: "…0011", powerMw: 0.200 }], power: "0,200 MW", volume: "144,00 MWh", price: "€ 102,4000", value: "€ 14.745,60", status: "Awaiting your response", statusTone: "warning", pending: true,
       expiresLabel: "15:01", secondsRemaining: 1487, secondsTotal: 1800,
       events: [
-        { title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "12 Aug 2026, 09:10:00", body: "Base Nov-2026 · 0,200 MW indicative request.", tone: "submit" },
+        { title: "Request submitted", actor: "J. de Vries · Admin (you)", ts: "12 Aug 2026, 09:10:00", body: "Base Nov-2026 · 0,200 MW indicative request.", tone: "submit" },
         { title: "Offer published", actor: "PeakPower Trading", ts: "12 Aug 2026, 09:14:00", body: "Price € 102,4000/MWh · total € 14.745,60 · reaction window 30 minutes, expiring 15:01:00. All 3 active accounts notified.", tone: "indigo" }
       ],
       facts: [["Reference","TRD-1078"],["Requested by","J. de Vries"],["State","Awaiting your response"],["Direction","Buy"],["Shape","Base"],["Delivery period","Nov 2026"],["Total power","0,200 MW"],["Total volume","144,00 MWh"],["Offered price","€ 102,4000 / MWh"]] },
@@ -143,7 +143,7 @@
       facts: [["Reference","TRD-1072"],["Requested by","P. Aksoy"],["Accepted by","P. Aksoy"],["State","Reserved · executing"],["Direction","Buy"],["Shape","Base"],["Delivery period","Oct 2026"],["Total power","0,120 MW"],["Total volume","89,28 MWh"],["Agreed price","€ 96,8000 / MWh"]] },
     { id: "TRD-1051", shape: "Peak", period: "Q1 2027", direction: "Buy", power: "1,000 MW", volume: "768,00 MWh", price: "€ 94,7500", value: "€ 72.768,00", status: "Confirmed", statusTone: "success",
       events: [
-        { title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "30 Jul 2026, 14:25:02", body: 'Peak Q1-2027 · 1,000 MW across 4 connections. Comment: "Hedging Q1 baseload growth." Indication at submission: € 96,1500/MWh.', tone: "submit" },
+        { title: "Request submitted", actor: "J. de Vries · Admin (you)", ts: "30 Jul 2026, 14:25:02", body: 'Peak Q1-2027 · 1,000 MW across 4 connections. Comment: "Hedging Q1 baseload growth." Indication at submission: € 96,1500/MWh.', tone: "submit" },
         { title: "Offer published", actor: "PeakPower Trading", ts: "30 Jul 2026, 14:31:00", body: "Price € 94,7500/MWh · total € 72.768,00 · reaction window 30 minutes, expiring 15:01:00. All 3 active accounts notified.", tone: "indigo" },
         { title: "Offer accepted", actor: "M. Vandersteen · Finance Director", ts: "30 Jul 2026, 14:44:18", body: "€ 72.768,00 reserved on the company wallet. Reservation RES-0912. Accepted by a different colleague than the requester.", tone: "amber" },
         { title: "Trade confirmed", actor: "PeakPower Trading", ts: "30 Jul 2026, 14:52:41", body: "Executed on the market, reference ICE-88213-A. Reservation settled — wallet debited € 72.768,00. Block BLK-0431 created with 4 allocations.", tone: "green" }
@@ -158,7 +158,7 @@
       ] },
     { id: "TRD-1042", shape: "Base", period: "Aug 2026", direction: "Buy", power: "1,000 MW", volume: "744,00 MWh", price: "€ 72,4000", value: "€ 53.865,60", status: "Confirmed", statusTone: "success",
       events: [
-        { title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "28 Jul 2026, 11:02:00", body: "Base Aug-2026 · 1,000 MW across 4 connections.", tone: "submit" },
+        { title: "Request submitted", actor: "J. de Vries · Admin (you)", ts: "28 Jul 2026, 11:02:00", body: "Base Aug-2026 · 1,000 MW across 4 connections.", tone: "submit" },
         { title: "Offer published", actor: "PeakPower Trading", ts: "28 Jul 2026, 11:09:00", body: "Price € 72,4000/MWh · total € 53.865,60.", tone: "indigo" },
         { title: "Trade confirmed", actor: "PeakPower Trading", ts: "28 Jul 2026, 11:20:00", body: "Executed on the market. Block BLK-0409 created with 4 allocations.", tone: "green" }
       ],
@@ -166,15 +166,15 @@
       linked: [ { label: "Block", value: "BLK-0409", note: "now visible on your charts" } ] },
     { id: "TRD-1867", shape: "Base (sell)", period: "Aug 2026", direction: "Sell", power: "−0,090 MW", volume: "−67,00 MWh", price: "€ 78,2000", value: "€ 5.239,40", status: "Confirmed", statusTone: "success",
       events: [
-        { title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "27 Jul 2026, 08:40:00", body: "Base (sell) Aug-2026 · surplus volume above measured consumption.", tone: "submit" },
+        { title: "Request submitted", actor: "J. de Vries · Admin (you)", ts: "27 Jul 2026, 08:40:00", body: "Base (sell) Aug-2026 · surplus volume above measured consumption.", tone: "submit" },
         { title: "Trade confirmed", actor: "PeakPower Trading", ts: "27 Jul 2026, 08:55:00", body: "Executed on the market at € 78,2000/MWh. Wallet credited € 5.239,40.", tone: "green" }
       ],
       facts: [["Reference","TRD-1867"],["Requested by","J. de Vries"],["State","Confirmed"],["Direction","Sell"],["Shape","Base"],["Delivery period","Aug 2026"],["Total power","−0,090 MW"],["Total volume","−67,00 MWh"],["Agreed price","€ 78,2000 / MWh"]] },
     { id: "TRD-1048", shape: "Peak", period: "Sep 2026", direction: "Buy", power: "0,050 MW", volume: "13,20 MWh", price: null, value: null, status: "Failed", statusTone: "critical",
       events: [
-        { title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "05 Aug 2026, 15:20:00", body: "Peak Sep-2026 · 0,050 MW.", tone: "submit" },
+        { title: "Request submitted", actor: "J. de Vries · Admin (you)", ts: "05 Aug 2026, 15:20:00", body: "Peak Sep-2026 · 0,050 MW.", tone: "submit" },
         { title: "Offer published", actor: "PeakPower Trading", ts: "05 Aug 2026, 15:26:00", body: "Price € 105,0000/MWh · total € 1.386,00.", tone: "indigo" },
-        { title: "Offer accepted", actor: "J. de Vries · Energy Manager (you)", ts: "05 Aug 2026, 15:40:00", body: "€ 4.420,00 reserved on the company wallet.", tone: "amber" },
+        { title: "Offer accepted", actor: "J. de Vries · Admin (you)", ts: "05 Aug 2026, 15:40:00", body: "€ 4.420,00 reserved on the company wallet.", tone: "amber" },
         { title: "Trade failed", actor: "PeakPower Trading", ts: "05 Aug 2026, 16:03:00", body: "Counterparty withdrew before execution. Full reservation released — € 4.420,00 back to available balance.", tone: "red" }
       ],
       facts: [["Reference","TRD-1048"],["Requested by","J. de Vries"],["State","Failed"],["Direction","Buy"],["Shape","Peak"],["Delivery period","Sep 2026"],["Total power","0,050 MW"],["Total volume","13,20 MWh"]] }

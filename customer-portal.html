@@ -1677,7 +1677,7 @@
       id: id, shape: req.shape, period: req.period, direction: req.direction,
       power: power, volume: volume,
       price: null, value: null, status: "Awaiting price", statusTone: "info",
-      events: [{ title: "Request submitted", actor: "J. de Vries · Energy Manager (you)", ts: "just now", body: bodyText, tone: "submit" }],
+      events: [{ title: "Request submitted", actor: "J. de Vries · Admin (you)", ts: "just now", body: bodyText, tone: "submit" }],
       facts: [["Reference", id], ["Requested by", "J. de Vries"], ["State", "Awaiting price"], ["Direction", req.direction],
         ["Shape", req.shape], ["Delivery period", req.period], ["Connection" + (connNames.length === 1 ? "" : "s"), connName], ["Power", power], ["Volume", volume]]
     };
@@ -4810,6 +4810,19 @@
     return { width: Math.max(wrapWidth, n * px), pxPerInterval: px };
   }
 
+  /**
+   * The x-padding both range chart builders lay their plot out in. Shared
+   * rather than written twice because their x-geometry has to stay identical
+   * (see buildMonthCostChartSvg) — and because setChartZoom() needs the same
+   * numbers to work out which interval the viewport is centred on.
+   */
+  var RANGE_PAD_LEFT = 40, RANGE_PAD_RIGHT = 10;
+
+  /** Distance between two interval anchors at a given total chart width. */
+  function rangeStepX(width, n) {
+    return n > 1 ? (width - RANGE_PAD_LEFT - RANGE_PAD_RIGHT) / (n - 1) : 0;
+  }
+
   // width/pxPerInterval are drawMonthCharts()'s own rangeChartGeometry(n)
   // result, always passed — not defaulted here, so a caller that forgets
   // them fails loudly instead of silently drawing at the wrong width.
@@ -4818,8 +4831,8 @@
     var hasUsage = opts.hasUsage || null;
     var pxPerInterval = opts.pxPerInterval;
     var width = opts.width;
-    var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
-    var plotW = width - padLeft - 10;
+    var height = 260, padLeft = RANGE_PAD_LEFT, padBottom = 24, padTop = 10;
+    var plotW = width - padLeft - RANGE_PAD_RIGHT;
     var plotH = height - padTop - padBottom;
     var minVal = 0, maxVal = 0;
     var i;
@@ -4833,7 +4846,7 @@
     var range = maxVal - minVal;
     function yFor(val) { return padTop + (maxVal - val) / range * plotH; }
     var zeroY = yFor(0);
-    var stepX = n > 1 ? plotW / (n - 1) : 0;
+    var stepX = rangeStepX(width, n);
     var barW = n > 1 ? stepX : plotW;
     function barX(idx) { return padLeft + idx * stepX - barW / 2; }
 
@@ -5067,10 +5080,10 @@
     // Shorter than the usage range chart's 260 — see buildCostChartSvg's
     // comment. width/plotW/stepX/barW stay identical to buildMonthChartSvg's
     // so the two range charts keep pixel-identical x-geometry.
-    var height = 190, padLeft = 40, padBottom = 24, padTop = 10;
-    var plotW = width - padLeft - 10;
+    var height = 190, padLeft = RANGE_PAD_LEFT, padBottom = 24, padTop = 10;
+    var plotW = width - padLeft - RANGE_PAD_RIGHT;
     var plotH = height - padTop - padBottom;
-    var stepX = n > 1 ? plotW / (n - 1) : 0;
+    var stepX = rangeStepX(width, n);
     var barW = n > 1 ? stepX : plotW;
     var body = costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, 0, 1.5, opts);
 
@@ -5137,17 +5150,37 @@
    * exists to prevent, so zoming "out" bottoms out at fit rather than
    * shrinking past it.
    */
+  /** The interval anchor sitting at the middle of the range charts' viewport. */
+  function rangeCentreInterval(n) {
+    var stepX = rangeStepX(rangeChartGeometry(n).width, n);
+    if (!stepX) { return 0; }
+    return (monthChartWrap.scrollLeft + monthChartWrap.clientWidth / 2 - RANGE_PAD_LEFT) / stepX;
+  }
+
+  /** Scrolls both range charts so `interval` sits at the middle of the view. */
+  function scrollRangeToInterval(interval, n) {
+    var geom = rangeChartGeometry(n);
+    var left = RANGE_PAD_LEFT + interval * rangeStepX(geom.width, n) - monthChartWrap.clientWidth / 2;
+    left = Math.max(0, Math.min(Math.max(0, geom.width - monthChartWrap.clientWidth), left));
+    monthChartWrap.scrollLeft = left;
+    costMonthChartWrap.scrollLeft = left;
+  }
+
   function setChartZoom(next) {
     if (!lastRender) { return; }
     var z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, next));
     if (z === state.chartZoom) { return; }
+    // Zoom magnifies what is being looked at: whatever interval is in the
+    // middle of the viewport is put back in the middle afterwards. Both
+    // measurements have to straddle the state change, since rangeChartGeometry()
+    // reads state.chartZoom. Scrolling back to 0 instead threw away the
+    // reader's place on every click, which is the whole point of zooming into
+    // a long range.
+    var n = lastRender.range.times.length;
+    var anchor = rangeCentreInterval(n);
     state.chartZoom = z;
     drawMonthCharts(lastRender.range, lastRender.series);
-    // A new zoom level changes what "the same scroll position" even means;
-    // starting back at the range's own start is less surprising than
-    // landing on an arbitrary offset into it.
-    monthChartWrap.scrollLeft = 0;
-    costMonthChartWrap.scrollLeft = 0;
+    scrollRangeToInterval(anchor, n);
   }
   function zoomChartIn() { setChartZoom(state.chartZoom * 2); }
   function zoomChartOut() { setChartZoom(state.chartZoom / 2); }

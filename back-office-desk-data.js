@@ -130,7 +130,7 @@
   var TRD_1058_RICH = (function () {
     var rich = {
       requestSubtitle: "Buy · Base · Cal 2027 · submitted by K. van Dijk",
-      requestedBy: "K. van Dijk · Energy Manager · +31 77 396 2210",
+      requestedBy: "K. van Dijk · Admin · +31 77 396 2210",
       customerName: "Van Dijk Glastuinbouw",
       totalRequested: "2,000 MW · 17.520,00 MWh",
       customerNote: "Customer note: “Locking in most of next year before the winter curve moves.”",

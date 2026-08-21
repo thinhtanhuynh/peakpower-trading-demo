@@ -108,12 +108,39 @@
     {ean:'…0092', name:'Tilburg plant — gas', nameColor:'var(--pp-text-heading)', commodity:'Gas', commodityColor:'var(--pp-text-body)', validFrom:'01-04-2024', validTo:'—', validToColor:'var(--pp-text-faint)', dataTone:'neutral', dataLabel:'Not tradeable'}
   ];
 
-  var ACCOUNTS = [
-    {name:'J. de Vries', role:'Energy Manager', username:'jdevries', lastSignIn:'30 Jul 14:25', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'},
-    {name:'M. Vandersteen', role:'Finance Director', username:'mvandersteen', lastSignIn:'30 Jul 14:44', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'},
-    {name:'P. Aksoy', role:'Operations', username:'paksoy', lastSignIn:'12 Jul 09:02', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'},
-    {name:'R. Smit', role:'Controller', username:'rsmit', lastSignIn:'—', statusTone:'warning', statusLabel:'Invited 6d', actionLabel:'resend', textColor:'var(--pp-text-faint)'}
+  /**
+   * The three roles an account can hold, weakest first. Cumulative: each one
+   * grants everything the role above it does, so `extra` lists only what it
+   * adds. `ROLE_ADMIN` and friends are the stored value — a role is matched by
+   * label, so these strings are the vocabulary.
+   */
+  var ROLE_VIEWER = 'Viewer', ROLE_TRADER = 'Trader', ROLE_ADMIN = 'Admin';
+  var ACCOUNT_ROLES = [
+    {label: ROLE_VIEWER, tone:'neutral', summary:'can see everything, change nothing',
+      extra:['View connections, consumption, prices, trades, the wallet and settlements']},
+    {label: ROLE_TRADER, tone:'info', summary:'a Viewer who can also trade and deposit',
+      extra:['Request and accept trades', 'Deposit funds into the wallet']},
+    {label: ROLE_ADMIN, tone:'brand', summary:'a Trader who can also move money and manage the account',
+      extra:['Withdraw funds', 'Add and remove EANs', 'Manage users and their roles',
+        'Turn four-eyes approval on and off']}
   ];
+
+  // The mockup's four accounts, with its job titles mapped onto the roles
+  // above: the column carries one vocabulary or it means nothing.
+  var ACCOUNTS = [
+    {name:'J. de Vries', role: ROLE_ADMIN, username:'jdevries', lastSignIn:'30 Jul 14:25', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'},
+    {name:'M. Vandersteen', role: ROLE_ADMIN, username:'mvandersteen', lastSignIn:'30 Jul 14:44', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'},
+    {name:'P. Aksoy', role: ROLE_TRADER, username:'paksoy', lastSignIn:'12 Jul 09:02', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'},
+    {name:'R. Smit', role: ROLE_VIEWER, username:'rsmit', lastSignIn:'—', statusTone:'warning', statusLabel:'Invited 6d', actionLabel:'resend', textColor:'var(--pp-text-faint)'}
+  ];
+
+  /** A role's tone for the accounts table's badge; unknown roles stay neutral. */
+  function roleTone(label) {
+    for (var i = 0; i < ACCOUNT_ROLES.length; i++) {
+      if (ACCOUNT_ROLES[i].label === label) { return ACCOUNT_ROLES[i].tone; }
+    }
+    return 'neutral';
+  }
 
   var COMPANY_FIELDS = [
     {label:'Legal name', value:'Vandersteen Koeling B.V.'},
@@ -190,8 +217,8 @@
       });
     }
     var accounts = [
-      {name: c.contact, role:'Energy Manager', username: c.contact.split(' ').pop().toLowerCase(), lastSignIn:'30 Jul 14:25', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'},
-      {name: c.contact.charAt(0) + '. Finance', role:'Finance Director', username: c.contact.split(' ').pop().toLowerCase() + 'f', lastSignIn:'28 Jul 10:12', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'}
+      {name: c.contact, role: ROLE_ADMIN, username: c.contact.split(' ').pop().toLowerCase(), lastSignIn:'30 Jul 14:25', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'},
+      {name: c.contact.charAt(0) + '. Finance', role: ROLE_TRADER, username: c.contact.split(' ').pop().toLowerCase() + 'f', lastSignIn:'28 Jul 10:12', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'}
     ];
     return {
       status: c.status, statusTone: c.statusTone, connections: c.connections, available: c.available, availableTone: c.availableTone,
@@ -217,7 +244,12 @@
     {label:'Wallet minimum — warning', value:'€ 25.000,00', color:'var(--pp-text-heading)', money:true, prefix:'€ ', numeric:'25.000,00', suffix:''},
     {label:'Wallet minimum — critical', value:'€ 10.000,00', color:'var(--pp-text-heading)', money:true, prefix:'€ ', numeric:'10.000,00', suffix:''},
     {label:'Surplus settlement policy', value:'Day-ahead', color:'var(--pp-text-heading)', money:false},
-    {label:'Short selling', value:'Not permitted', color:'var(--pp-red)', money:false}
+    {label:'Short selling', value:'Not permitted', color:'var(--pp-red)', money:false},
+    // Editable, per customer, and an Admin on the customer's own side can turn
+    // it on and off too. Nothing enforces it yet — no second-approver step
+    // exists in either portal — so the card says what it would gate.
+    {label:'Four-eyes approval', value:'Off', color:'var(--pp-text-heading)', money:false,
+      key:'fourEyes', choices:['Off', 'On']}
   ];
 
   // ---- wallets -----------------------------------------------------------
@@ -345,6 +377,11 @@ var WALLET_STATS = [
     EXPOSURE_BOTTOM: EXPOSURE_BOTTOM,
     METERING: METERING,
     ACCOUNTS: ACCOUNTS,
+    ACCOUNT_ROLES: ACCOUNT_ROLES,
+    ROLE_VIEWER: ROLE_VIEWER,
+    ROLE_TRADER: ROLE_TRADER,
+    ROLE_ADMIN: ROLE_ADMIN,
+    roleTone: roleTone,
     COMPANY_FIELDS: COMPANY_FIELDS,
     CUSTOMER_LIST: CUSTOMER_LIST,
     COMMERCIAL_FIELDS: COMMERCIAL_FIELDS,

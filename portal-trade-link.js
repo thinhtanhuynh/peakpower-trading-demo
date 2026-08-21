@@ -297,7 +297,7 @@
     out.status = action === "accept" ? STATUS_ACCEPTED : STATUS_REJECTED;
     out.response = {
       action: action,
-      by: opts.by || "J. de Vries · Energy Manager",
+      by: opts.by || "J. de Vries · Admin",
       at: new Date(nowMs(opts.now)).toISOString()
     };
     // The deposit schedule is attached at acceptance and frozen there — see
@@ -396,7 +396,7 @@
     var s = {};
     for (var f in req.settlement) { if (req.settlement.hasOwnProperty(f)) { s[f] = req.settlement[f]; } }
     s.paidAt = new Date(nowMs(opts.now)).toISOString();
-    s.paidBy = opts.by || "J. de Vries · Energy Manager";
+    s.paidBy = opts.by || "J. de Vries · Admin";
     out.settlement = s;
     return out;
   }
@@ -560,7 +560,7 @@
 
     var events = [{
       title: "Request submitted",
-      actor: "J. de Vries · Energy Manager (you)",
+      actor: "J. de Vries · Admin (you)",
       ts: req.submittedAt ? formatStamp(req.submittedAt) : "just now",
       body: req.note ? 'Comment: "' + req.note + '"'
         : req.direction + " " + req.shape + " " + req.period + " · " + power +
@@ -645,7 +645,7 @@
     if (req.settlement && req.settlement.paidAt) {
       events.push({
         title: "Balance paid",
-        actor: req.settlement.paidBy || "J. de Vries · Energy Manager",
+        actor: req.settlement.paidBy || "J. de Vries · Admin",
         ts: formatStamp(req.settlement.paidAt),
         body: "€ " + formatNL(req.settlement.balanceEur, 2) + " paid from the company wallet. Nothing further is due on this trade.",
         tone: "green"
