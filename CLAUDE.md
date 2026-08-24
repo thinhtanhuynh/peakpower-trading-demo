@@ -211,49 +211,64 @@ use one shape:
 | `periodStart` / `periodEnd` | ISO dates | inclusive first/last day |
 | `periodLabel` | string | e.g. `"Aug 2026"`, `"Q3 2026"`, `"2026"` |
 
-**The blocks are sized to each connection's real load, and the portfolio is
-deliberately swung between short and long.** Every EAN used to hold the same
-1 MW base + 1 MW peak, which pinned the whole portfolio to one uninformative
-state. It is now 19 rows in two layers:
+**The blocks are sized from the measured data so a day carries both legs.**
+Every EAN used to hold the same 1 MW base + 1 MW peak, which pinned the whole
+portfolio to one state. What matters for the chart is not the monthly average
+but **where the hedge line sits inside the day's own load range**: put it near
+the daily mean and the overnight trough goes long while the evening peak goes
+short, so one day shows short *and* long several times over. That is what the
+40 rows are sized to do.
 
-| Layer | What it is | What it produces |
+Each block is a multiple of its connection's own mean net load over the
+period, and the multiple is what decides the day's character:
+
+| Multiple | Where the line sits | The day reads |
 |---|---|---|
-| **2026** (YEAR) | about two thirds of each connection's own measured load — Rotterdam 1,58 MW, Venlo 0,35, Tilburg 0,25, Almere 0,05 base + 0,08 peak, greenhouse **−0,19** (sold), Breda 0,33 base + 0,84 peak | any period with no top-up reads clearly **short** |
-| **Q1 2026** and **Q3 2026** (QUARTER) | top-ups bought ahead of the winter and the summer, on top of the year block | those quarters read clearly **long** |
+| ≈ 1.00 | through the middle of the daily profile | **both** — long overnight, short at the ramps and the evening peak |
+| ≳ 1.35 | above the day's own maximum | **long all day** |
+| ≲ 0.65 | below the day's own minimum | **short all day** |
+| no row at all | — | **unhedged** — every interval uncovered |
 
-The result, measured with `ConsumptionCalc.computeDayStats` over the real
-data, is that the position panel lands in a 30–40 % band **in both
-directions** depending on the period in view:
+Laid out over the measured range as two layers, quarter blocks with monthly
+top-ups stacked on them:
 
-| Period | Panel reads |
-|---|---|
-| Jan / Feb / Mar (Q1) | Covered 64–65 % · **Long 35–36 %** |
-| Apr / May / Jun (Q2) | Covered 64–66 % · **Short 34–36 %** |
-| Jul / Aug (Q3) | Covered 61–62 % · **Long 38–39 %** |
-| 5 Aug 2026 (the default single day) | Covered 68 % · Long 32 % |
+| Period | Rows | Multiple | Result |
+|---|---|---|---|
+| `Q1 2026` | 8 | 1.00 | Jan and Mar read mixed |
+| `Feb 2026` | 8 | +0.60 on top of Q1 | February is long all month |
+| *April* | **none** | — | April is genuinely unhedged |
+| `May 2026` | 8 | 1.00 | mixed |
+| `Jun 2026` | 8 | 0.62 | June is short all month |
+| `Q3 2026` | 8 | 1.00 | Jul and Aug read mixed |
 
-That is the number to re-check after touching this file: the panel's
-Short/Long share is `short` (or `long`) over `covered + short + long`, not
-over usage, so a block sized against usage alone lands lower than intended.
+Across the 217 measured days that gives **131 mixed, 26 long-only, 30
+short-only and 30 unhedged** — the distribution to re-check after touching
+this file, because it is the whole point of the sizing.
 
-**The greenhouse's Q3 has no top-up on purpose.** Its export collapses in
-summer, so the standing sold block already over-covers it and a top-up would
-be buying cover it does not need.
+**Breda and Almere take 30 % of their cover as a `peak` block**, split by
+*energy* rather than power (a peak block only runs weekday 08:00–20:00, so the
+same energy needs a larger power). That keeps both shapes represented and the
+step it puts in at 08:00 and 20:00 adds crossings of its own.
+
+**There is no YEAR row any more.** A year block would cover April, and April
+existing as a genuinely unhedged month is deliberate — it is the only way the
+screen can show what no position looks like.
 
 **A negative `powerKw` is a sold block, not a data error.** The greenhouse
-runs CHP day and night and exports more than it draws, so it sells forward;
-`computeIntervalHedgeVolumes` sums a negative block with no special case, the
-same convention a confirmed SELL trade already uses.
+runs CHP day and night and exports more than it draws, so every one of its
+rows is negative; `computeIntervalHedgeVolumes` sums it with no special case,
+the same convention a confirmed SELL trade already uses.
 
-Prices vary per period and are not round, so several simultaneously-active
-periods per site exercise the per-block pricing in Hedge Cost. `tilburg-gas`
-is excluded — not tradeable.
+Prices vary per period and are not round, so the stacked Q1+February rows
+exercise per-block pricing in Hedge Cost. `tilburg-gas` is excluded — not
+tradeable.
 
 **Regenerating it:** there is no checked-in generator (same rule as the usage
-data). The file is hand-maintained; a one-off ephemeral script that reads
-`PortalTradeLink.hoursInPeriod(start, end, shape)` for the volume is the way
-to rebuild it, and the check is that the short/long band above still comes out
-of `ConsumptionCalc.computeDayStats`.
+data). Rebuild with a one-off ephemeral script that reads each site's mean net
+load per window straight out of `consumption_compact_2026.json`, multiplies by
+the table above, and takes volume from `PortalTradeLink.hoursInPeriod(start,
+end, shape)`. The check is the day-kind distribution above, counted with
+`ConsumptionCalc.computeIntervalSeries`.
 
 ## Regenerating `consumption_compact_2026.json`
 
