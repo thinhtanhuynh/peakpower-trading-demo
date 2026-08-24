@@ -105,8 +105,9 @@
    * `wizard` is the Customer Portal's state.wizard:
    *   { direction, shape, periodType, monthIdx, quarterIdx, yearIdx, note }
    * `opts` supplies what the wizard doesn't own:
-   *   { id, customer, powerMw, connections:[{id,name,sub}],
-   *     periods:{month:[],quarter:[],year:[]}, submittedAt }
+   *   { id, customer, customerId, requestedBy, powerMw,
+   *     connections:[{id,name,sub}], periods:{month:[],quarter:[],year:[]},
+   *     submittedAt }
    *
    * `connections` is an UNWEIGHTED roster: a block is bought for the whole
    * account, so no line carries a power. The desk still needs the metering
@@ -128,6 +129,10 @@
       // The customer's Back Office id, so the desk can join a live trade to a
       // customer record without matching on a display name.
       customerId: opts.customerId || null,
+      // Who submitted it. On the record rather than a module constant,
+      // because the portal can be signed in as a different company's user —
+      // and this string is read back by the desk.
+      requestedBy: opts.requestedBy || "",
       direction: wizard.direction,
       shape: wizard.shape,
       period: period.period,
@@ -307,7 +312,9 @@
     out.status = action === "accept" ? STATUS_ACCEPTED : STATUS_REJECTED;
     out.response = {
       action: action,
-      by: opts.by || "J. de Vries · Admin",
+      // Persisted into response.by and read back by the Back Office, so the
+      // caller must pass the signed-in user — this fallback is a last resort.
+      by: opts.by || "The customer",
       at: new Date(nowMs(opts.now)).toISOString()
     };
     // The deposit schedule is attached at acceptance and frozen there — see
@@ -406,7 +413,7 @@
     var s = {};
     for (var f in req.settlement) { if (req.settlement.hasOwnProperty(f)) { s[f] = req.settlement[f]; } }
     s.paidAt = new Date(nowMs(opts.now)).toISOString();
-    s.paidBy = opts.by || "J. de Vries · Admin";
+    s.paidBy = opts.by || "The customer";
     out.settlement = s;
     return out;
   }
@@ -568,16 +575,20 @@
       else { balanceSuffix = "balance due"; balanceTone = "success"; }
     }
 
+    // The requester comes off the record: this module has no idea which user
+    // or company the portal is signed in as, and hardcoding one was how the
+    // role vocabulary went stale here once before.
+    var requester = req.requestedBy || "The requester";
     var events = [{
       title: "Request submitted",
-      actor: "J. de Vries · Admin (you)",
+      actor: requester + " (you)",
       ts: req.submittedAt ? formatStamp(req.submittedAt) : "just now",
       body: req.note ? 'Comment: "' + req.note + '"'
         : req.direction + " " + req.shape + " " + req.period + " · " + power +
           " for the whole account.",
       tone: "submit"
     }];
-    var facts = [["Reference", req.id], ["Requested by", "J. de Vries"], ["State", status],
+    var facts = [["Reference", req.id], ["Requested by", requester], ["State", status],
       ["Direction", req.direction], ["Shape", req.shape], ["Delivery period", req.period],
       ["Total power", power], ["Total volume", volume]];
 
@@ -655,7 +666,7 @@
     if (req.settlement && req.settlement.paidAt) {
       events.push({
         title: "Balance paid",
-        actor: req.settlement.paidBy || "J. de Vries · Admin",
+        actor: req.settlement.paidBy || requester,
         ts: formatStamp(req.settlement.paidAt),
         body: "€ " + formatNL(req.settlement.balanceEur, 2) + " paid from the company wallet. Nothing further is due on this trade.",
         tone: "green"

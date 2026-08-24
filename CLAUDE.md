@@ -548,7 +548,7 @@ claiming a split that no longer exists:
 | Where | Was | Now |
 |---|---|---|
 | Trading list | a separate "Contracted blocks" table below the trades | the blocks **are** trades — `blockAsTrade()` folds them into `state.trades`, with the full request→offer→confirm→paid history |
-| Wizard step 2 | a per-connection picker with checkboxes, Select all / Clear all, and a CURRENT COVER pill per card | a read-only roster plus one `accountCoverMw()` line above the grid — nothing is selectable |
+| Wizard step 2 | a per-connection picker with checkboxes, Select all / Clear all, and a CURRENT COVER pill per card | a read-only table of every EAN, plus one `accountCoverMw()` line above it — nothing is selectable |
 | Connection detail | a "Block positions on this connection" table from seeded `CONNECTIONS[].blocks` | a line saying blocks are held at account level, linking to Trading |
 | Dashboard mini chart | Rotterdam DC's own day under a hedge line | the whole portfolio, like Consumption |
 
@@ -659,7 +659,44 @@ not a header control. Connections flagged `notTradeable` (the gas connection) or
 `startWizardFromConnection()` re-checks eligibility itself through
 `tradableConnection()`.
 
+#### Every step is two columns
+
+`wizardTwoColumn(left, rail)` and `.wizard-cols` are the shell all three steps
+share: the work on the left at 1.6fr, a rail on the right at 1fr. It used to be
+the same inline grid string written out twice; a third copy was the moment to
+make it a class.
+
+**The rail is sticky, and three things must all hold or it silently does
+nothing.** `.main` is the scroll container (`.app` is `height:100vh;
+overflow:hidden`, so the body never scrolls); the right column needs
+`align-self:stretch`, because the grid's own `align-items:start` shrink-wraps
+it and leaves a sticky child no room to travel; and the offset is
+`calc(var(--topbar-height) + 16px)`, not `0`, or the rail slides under the
+opaque sticky topbar.
+
+**Nothing in a rail may be focusable.** `selectWizardBar()` and `setDirIdx()`
+both end in `renderApp()`, which replaces all of `#trading-body` on every row
+click — a field in the rail would lose the caret mid-keystroke. Anything that
+needs typing into belongs in the left column with the
+`refreshWizardVolumeUi()` patch-in-place treatment.
+
 #### Step 1 — product & period
+
+**Step 1's rail carries the selection and the Continue button**
+(`buildStep1Rail`). The two product tables are 24 rows long, so a Continue
+button underneath them is a scroll to the bottom of the page away; with the
+rail, the choice and the way forward stay in view while the tables are read.
+
+**It stops at the 1 MW basis on purpose.** `defaultWizard()` seeds `volumeMw`
+at 0,200 at every entry point, so showing Volume, Estimated value and a deposit
+here would quote figures for a number nobody has chosen yet — the customer's
+own volume is step 2's question, and the rail says so in as many words.
+
+**Step 1's Continue button carries no id.** `#wizard-continue` belongs to step
+2 and is patched by `refreshWizardVolumeUi()` through a bare `getElementById`
+with no step guard; a second element with that id would leave the wrong button
+being enabled and disabled.
+
 
 Direction (Buy/Sell) is the only standalone field. Below it sit **two stacked
 tables**, BASE (24/7) and PEAK (Mon–Fri 08:00–20:00), built by
@@ -773,12 +810,13 @@ flat quoted price on purpose.
 #### Step 2 — volume
 
 **Nothing is selected here.** A block is bought for the whole account, so the
-card grid (`.conn-grid` / `.conn-card`) is a **read-only roster**: it names the
-connections the block will cover and says why the one ineligible connection is
-not among them. No checkbox, no `Select all` / `Clear all`, no click handler,
-no hover or selected state — and no `cursor:pointer`, because there is nothing
-to click. It lists `tradableConnections()` — every connection except the gas
-one, which a power block cannot cover.
+roster is a read-only **table** — `.grid-table.dense`, CONNECTION / EAN /
+STATUS at `2.2fr 1.4fr 1fr` — naming every metering point the block covers. It
+is a list of EANs, and the Connections screen already lists them as a table, so
+it borrows that vocabulary rather than inventing a second one. No row handler,
+no hover, no `clickable` class: there is nothing to pick. It lists
+`tradableConnections()` — every connection except the gas one, which a power
+block cannot cover.
 
 `state.wizard` carries `volumeMw` and nothing about connections.
 
@@ -1554,6 +1592,100 @@ classes:
 2. `.stat-row` keeps a 16px gap. The mockup is internally inconsistent here
    (16/14/12px across screens), so there's no single correct value to match.
 
+### Switching accounts
+
+The portal shows **one account at a time**, and the avatar menu at the foot of
+the rail switches between the accounts this browser has signed in to.
+`ACCOUNTS` is the registry; `acct()` is the only way to reach the active one.
+
+**Only Vandersteen Koeling has fixtures.** It is marked `seeded: true` and
+`acctList(key)` hands it the matching `PortalSeedData` export; every other
+account gets `[]` from the same call. So "this account has none of that" is one
+branch in one place instead of a check on every screen, and no second account's
+data is invented to make it look busy.
+
+| | |
+|---|---|
+| Store | `peakpower.accounts.v1` — `{activeId, signedIn}`, same swallow-every-failure discipline as the other links: an unreadable value lands on the seeded account, never on an error |
+| Products | `peakpower.products.v2`, a **map keyed by account id**. v1 was a bare array for the single account this portal used to have; read one as the other and both directions yield garbage, so the key is bumped rather than migrated |
+| Adding one | "Add another account" opens an email + password form. `PORTAL_LOGINS` is the list of sign-ins the demo knows, and a wrong email and a wrong password are told apart — a form that says only "sign-in failed" cannot be acted on |
+
+**This is not authentication.** `PORTAL_LOGINS` and `DEMO_PASSWORD` are a list
+shipped to the browser, in a portal whose every figure is synthetic. Nothing
+here is a credential and nothing is verified anywhere else; the form exists so
+the switch has a real shape, not so it protects anything.
+
+**`switchAccount()` has to do everything at once, in order.** Persist, reset,
+re-derive, then render:
+
+- the wallet trio, the ledger extras, the counters, `depositReserved` /
+  `depositResolved`, `products` and `trades` all belong to the account being
+  left — a figure carried over is one account's money read under another's name
+- every open sub-view goes too (`connId`, `tradeId`, `settlementId`, the
+  wizard, the wallet view, the ledger filter)
+- `usageProfiles` and `lastRender` are caches keyed by **site id, not account**
+  — left alone, one account renders the other's projections
+- `applyAccountData()` re-derives the dataset, `MIN_DATE` / `MAX_DATE` /
+  `MAX_SELECTABLE_DATE` and the Consumption controls. A switch that only called
+  `renderApp()` would leave the new account on the old one's date range
+- `renderAccountMenu()` **and** `state.page` + `activatePageDom()`. Skip the
+  first and `.account-scrim` stays over the viewport swallowing every click;
+  skip the other two and the render lands in a hidden container
+
+**The demo clock stays global.** It is a wall-clock offset shared with the Back
+Office under `peakpower.demoClock.v1`; scoping it per account would break the
+agreement between the two portals.
+
+**`state.nextSeq` stays global, and its id scan reads the whole link.**
+`syncLinkedTrades()` filters records to the active account but counts ids
+across all of them — scope the scan too and two accounts in one browser mint
+the same `TRD-` id, which `publish()` then updates in place, one overwriting
+the other.
+
+**Three separate reads had to be filtered, not one.** `customerId` was already
+on every published record (`buildRequest` stores it, `submitWizard` supplies
+it), so this is only the read side: `forThisAccount()` is applied in
+`syncLinkedTrades()` and in `liveTradeRecords()`. Filtering only the first
+leaves the Consumption hedge line, the hedge cost, the coverage figures and
+`MAX_SELECTABLE_DATE` still summing another account's confirmed trades.
+
+**`portal-trade-link.js` no longer hardcodes the user.** `requestedBy` rides on
+the record, and `respondToOffer()` / `payBalance()` take `by` from the caller —
+both are persisted and read back by the Back Office, so a module constant there
+would file one account's decision under another account's name.
+
+### An account with no data
+
+A second account is genuinely empty, and every screen says so in its own words
+rather than rendering furniture:
+
+| Screen | Shows |
+|---|---|
+| Dashboard | a welcome card naming what is missing, plus the price tiles — the forward curve is market data, not account data |
+| Connections, Trading, Settlements | one `emptyCardHtml()` each |
+| Consumption | `statusCardHtml("No connections", …)`, and `setConsumptionChromeVisible(false)` hides the two chart cards and the interval table |
+| Wallet | € 0,00 across the three cards, and a first-deposit prompt instead of the low-balance alert — a wallet that was never funded is not "below its alert", nothing has gone wrong yet |
+
+**Never render a `.grid-table` with no rows.** `.gt-head` is a tinted strip
+with a bottom border that exists whether or not rows follow, so an empty list
+is a two-tone box with a hanging border and nothing in it. Branch on the row
+count and use `emptyCardHtml()`.
+
+**Two things would have thrown, and both are prevented in
+`applyAccountData()`, not in `render()`.** With no dataset,
+`MAX_SELECTABLE_DATE` is `undefined`: `applyPeriodPreset()` passes it to
+`periodRange()`, which calls `.slice()` on it — one click on Day/Month/Quarter.
+And empty date inputs make `allCalendarDatesInRange("", "")` return `[""]`,
+which renders 96 synthetic intervals dated `"undefined undefined 0"` with
+Export CSV enabled over them. `applyAccountData()` disables the date inputs,
+the presets, the zoom buttons and Export when the account has no data, so
+neither path is reachable.
+
+**The wizard needs a connection to cover.** `canRequestTrade()` gates all four
+"Request a trade" entry points on there being one — `requireFutureTrading()`
+checks the product only, and without this the wizard is fully operable on an
+empty account and files a request at the desk with an empty roster.
+
 ### Account products
 
 An account holds **products**, and the products decide what the rail shows.
@@ -1592,9 +1724,10 @@ Three rules worth keeping:
   its full-viewport `.account-scrim` stay in the DOM and swallow every later
   click. That was a real bug, caught only by a click test.
 
-Products **persist in this browser** under `peakpower.products.v1`
-(`readProducts()` / `writeProducts()`), so a demo does not begin by switching
-Future Trading on again. It is not a cross-portal link — this is the customer
+Products **persist in this browser, per account**, under
+`peakpower.products.v2` (`readProducts(id)` / `writeProducts(id, ids)`), so a
+demo does not begin by switching Future Trading on again — and switching
+account switches which products are active with it. It is not a cross-portal link — this is the customer
 switching a product on themselves, not a term the desk sets — and it keeps the
 links' failure discipline: any read problem lands on `DEFAULT_PRODUCTS`
 (`["day-ahead"]`), and a write that cannot happen is not an error the customer

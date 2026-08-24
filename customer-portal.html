@@ -114,6 +114,18 @@
   .account-pop .ap-item-label { font-size:12.5px; font-weight:600; color:var(--pp-text-heading); }
   .account-pop .ap-item-sub { font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
   .account-pop .ap-chevron { font-size:12px; color:var(--pp-text-faint); }
+  .account-pop .ap-section { border-bottom:1px solid var(--pp-border); padding:6px 0; }
+  .account-pop .ap-account { display:flex; align-items:center; gap:10px; padding:9px 14px; cursor:pointer; }
+  .account-pop .ap-account:hover { background:var(--pp-surface-alt); }
+  /* The account already showing is not a thing to click. */
+  .account-pop .ap-account.active { cursor:default; background:transparent; }
+  .account-pop .ap-account .avatar.sm { width:24px; height:24px; border-radius:50%; background:var(--pp-mint); color:#08302a; font-size:9.5px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .account-pop .ap-active-mark { color:var(--pp-green-text); font-size:12px; font-weight:700; }
+  .account-pop .ap-form { padding:12px 14px 14px; display:flex; flex-direction:column; gap:10px; }
+  .account-pop .ap-form input { width:100%; }
+  .account-pop .ap-form .field-group { margin-bottom:0; }
+  .account-pop .ap-form-actions { display:flex; gap:8px; }
+  .account-pop .ap-form-actions button { flex:1; }
   /* Products screen rows. */
   .product-row { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:13px 0; border-top:1px solid var(--pp-border); }
   .product-row .pr-name { font-size:12.5px; font-weight:700; color:var(--pp-text-heading); }
@@ -832,26 +844,30 @@
   .volume-input-wrap input::-webkit-outer-spin-button, .volume-input-wrap input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
   .volume-input-wrap .viw-unit { font-size:12px; font-weight:700; color:var(--pp-blue-700); padding-left:8px; user-select:none; }
   .field-group .fg-hint { font-size:10.5px; color:var(--pp-text-faint); margin-top:5px; }
-  /* The roster of connections a block covers. Read-only since a block is
-     bought for the whole account — no checkbox, no hover, no selected state,
-     and no pointer cursor, because there is nothing to click. */
-  .conn-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .conn-card { position:relative; display:flex; align-items:flex-start; gap:10px; background:#fff; border:1.5px solid var(--pp-border); border-radius:var(--radius-md); padding:12px 14px; }
-  .conn-card.not-eligible { opacity:.55; }
-  .conn-card .cc-body { flex:1; min-width:0; }
-  .conn-card .cc-name { font-size:13px; font-weight:700; color:var(--pp-text-heading); }
-  .conn-card .cc-ean { font-family:var(--font-mono); font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
-  .conn-card .cc-foot { margin-top:10px; }
   /* A pill, not plain coloured text. Three tones, all already meaningful
      elsewhere in this app rather than invented here: blue for "has real
      cover" (the brand hue), grey for none, amber for ineligible. */
   .cc-pill { display:inline-flex; align-items:center; padding:3px 9px; border-radius:var(--radius-pill); font-size:11px; font-weight:700; border:1px solid; }
   .cc-pill.covered { background:var(--pp-blue-050); color:var(--pp-blue-700); border-color:var(--pp-blue-300); }
   .cc-pill.none { background:var(--pp-surface-alt); color:var(--pp-text-faint); border-color:var(--pp-border); }
-  .cc-pill.ineligible { background:var(--pp-amber-bg); color:var(--pp-amber-text); border-color:var(--pp-amber-border); }
   /* Cover is one account-level fact, so it is stated once above the grid. */
   .cc-account-cover { display:flex; align-items:center; gap:10px; font-size:12px; color:var(--pp-text-body); margin-bottom:12px; }
   .wizard-actions { display:flex; gap:10px; margin-top:16px; }
+  /* Every wizard step is the same two-column shell: the work on the left, a
+     rail on the right. `align-self:stretch` on the right column is what gives
+     its sticky child room to travel — with the grid's own `align-items:start`
+     the column shrink-wraps and sticky has nothing to move within. */
+  .wizard-cols { display:grid; grid-template-columns:1.6fr 1fr; gap:16px; align-items:start; }
+  .wizard-cols > .wizard-rail { align-self:stretch; }
+  /* Clears the sticky topbar rather than sliding under it — .main is the
+     scroll container, .topbar sits at top:0 inside it and is opaque. */
+  .wizard-rail .card { position:sticky; top:calc(var(--topbar-height) + 16px); }
+  /* Inside the rail the readout is already framed by the card around it. */
+  .wizard-rail .price-readout { background:transparent; border:none; border-radius:0; padding:0; margin-top:0; }
+  /* One button per line: two 20px-padded buttons will not sit side by side in
+     a 1fr rail without crowding, and Continue is the one being reached for. */
+  .wizard-rail .wizard-actions { flex-direction:column; }
+  .wizard-rail .wizard-actions button { width:100%; }
 
   /* Wallet — top-up screen, fidelity-matched to Customer Portal - Preview.html's
      own isWalletTopup markup (decoded verbatim; see CLAUDE.md and the team's
@@ -1044,7 +1060,7 @@
         <div class="stat-stack" id="stat-row">
           <div class="stat-row"><div class="stat-card"><div class="label">Loading</div><div class="value">…</div><div class="sublabel">Fetching source data and calculating in the browser</div></div></div>
         </div>
-        <div class="card">
+        <div class="card" data-consumption-chrome>
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div>
               <div class="card-title">Consumption &amp; production — 15-minute intervals</div>
@@ -1088,7 +1104,7 @@
             <div><span class="swatch" style="background:var(--pp-chart-long)"></span>Long — sold at day-ahead</div>
           </div>
         </div>
-        <div class="card">
+        <div class="card" data-consumption-chrome>
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div>
               <div class="card-title">Cost — 15-minute intervals</div>
@@ -1114,7 +1130,7 @@
             <div><span class="swatch" style="background:var(--pp-chart-long)"></span>Sell — surplus hedge at day-ahead</div>
           </div>
         </div>
-        <div class="card">
+        <div class="card" data-consumption-chrome>
           <!-- CSS-only disclosure: rows stay in the DOM at all times (only
                visibility toggles), so highlightTableRow()'s querySelector +
                scrollIntoView keep working while collapsed. open persists
@@ -1256,6 +1272,19 @@
   // not deriving them from the real hedge/consumption datasets.
   // ---------------------------------------------------------------------
 
+  /**
+   * The one empty state, for an account that has no data of a given kind yet.
+   *
+   * Never render a `.grid-table` with no rows: `.gt-head` is a tinted strip
+   * with a bottom border that exists whether or not rows follow, so an empty
+   * list is a two-tone box with a hanging border and nothing in it. Branch on
+   * the row count and use this instead.
+   */
+  function emptyCardHtml(title, subtitle, message, actionHtml) {
+    return cardHtml(title, subtitle,
+      '<div class="empty-state">' + esc(message) + (actionHtml ? '<div style="margin-top:14px">' + actionHtml + '</div>' : "") + '</div>');
+  }
+
   function cardHtml(title, subtitle, bodyHtml, actionHtml) {
     var head = actionHtml
       ? '<div class="card-head"><div><div class="card-title">' + title + '</div>' +
@@ -1320,34 +1349,171 @@
   var MIN_TOPUP_EUR = 10;
   var MIN_WITHDRAWAL_EUR = 10;
 
-  // Which products the account holds, kept in this browser. Same failure
+  // --- accounts ------------------------------------------------------------
+  //
+  // The portal shows ONE account at a time, and the avatar menu switches
+  // between the accounts this browser has signed in to. Vandersteen Koeling is
+  // the seeded account and carries all of portal-seed-data.js; any account
+  // signed in afterwards is genuinely empty — no connections, no trades, no
+  // blocks, a wallet at zero — which is what a new account actually looks
+  // like. Nothing is fabricated to make a second account look busy.
+
+  /**
+   * The sign-ins this demo knows. Email is the login (the Back Office's own
+   * new-customer flow says so), and the password is checked so the form does
+   * something real rather than accepting anything typed into it.
+   *
+   * This is NOT authentication: it is a lookup in a list shipped to the
+   * browser, in a portal whose every figure is synthetic. Nothing here is a
+   * credential and nothing is verified anywhere else.
+   */
+  var DEMO_PASSWORD = "peakpower";
+  var PORTAL_LOGINS = [
+    { email: "j.devries@vandersteen.nl", accountId: "vandersteen" },
+    { email: "s.kramer@kramerlogistics.nl", accountId: "kramer" },
+    { email: "m.vandijk@vandijkglas.nl", accountId: "vandijk" }
+  ];
+
+  /**
+   * Every account this portal can show. `seeded` marks the one the shipped
+   * fixtures belong to; the others carry empty slices of the same shape, so
+   * every screen reads the same fields whichever account is active.
+   */
+  var ACCOUNTS = {
+    vandersteen: {
+      id: "vandersteen", seeded: true,
+      legalName: "Vandersteen Koeling B.V.", customerName: "Vandersteen Koeling",
+      kvk: PortalSeedData.CUSTOMER_ID,
+      userName: "J. de Vries", userRole: "Admin", initials: "JV",
+      walletAvailable: PortalSeedData.WALLET_AVAILABLE_BALANCE, walletSettled: 29122.00, walletReserved: 9400.00,
+      seededDepositsOnHold: 1
+    },
+    kramer: {
+      id: "kramer", seeded: false,
+      legalName: "Kramer Logistics B.V.", customerName: "Kramer Logistics",
+      kvk: "68812340",
+      userName: "S. Kramer", userRole: "Admin", initials: "SK",
+      walletAvailable: 0, walletSettled: 0, walletReserved: 0,
+      seededDepositsOnHold: 0
+    },
+    vandijk: {
+      id: "vandijk", seeded: false,
+      legalName: "Van Dijk Glastuinbouw B.V.", customerName: "Van Dijk Glastuinbouw",
+      kvk: "70012399",
+      userName: "M. van Dijk", userRole: "Admin", initials: "MD",
+      walletAvailable: 0, walletSettled: 0, walletReserved: 0,
+      seededDepositsOnHold: 0
+    }
+  };
+
+  var DEFAULT_ACCOUNT_ID = "vandersteen";
+
+  /** The active account's record. Never returns undefined. */
+  function acct() { return ACCOUNTS[state.accountId] || ACCOUNTS[DEFAULT_ACCOUNT_ID]; }
+
+  /**
+   * A seeded list, or an empty one for an account that has no fixtures.
+   *
+   * Every screen reads its data through here rather than off PortalSeedData
+   * directly, so "this account has none of that" is one branch in one place
+   * instead of a check on every screen.
+   */
+  function acctList(key) {
+    return acct().seeded ? (PortalSeedData[key] || []) : [];
+  }
+
+  /** "J. de Vries · Admin" — the signed-in user, as the link records them. */
+  function acctSignature() { return acct().userName + " \u00b7 " + acct().userRole; }
+
+  /** The same, marked as the reader's own action on their own timeline. */
+  function acctActor() { return acctSignature() + " (you)"; }
+
+  /** The payout account for a withdrawal — only the seeded account has one. */
+  function acctPayout() {
+    return acct().seeded ? PortalSeedData.PAYOUT_ACCOUNT : null;
+  }
+
+  // Which products each account holds, kept in this browser. Same failure
   // discipline as the cross-portal links: any read problem lands on the
   // default rather than throwing, and a write that cannot happen is not an
   // error the customer needs to see.
-  var PRODUCTS_KEY = "peakpower.products.v1";
+  //
+  // v2, keyed by account id. v1 was a bare array for the single account this
+  // portal used to have; reading one as the other yields garbage in both
+  // directions, so the key is bumped rather than migrated.
+  var PRODUCTS_KEY = "peakpower.products.v2";
   var DEFAULT_PRODUCTS = ["day-ahead"];
 
-  function readProducts() {
+  function readProductMap() {
     try {
       var raw = window.localStorage.getItem(PRODUCTS_KEY);
-      if (!raw) { return DEFAULT_PRODUCTS.slice(); }
+      if (!raw) { return {}; }
       var parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) { return DEFAULT_PRODUCTS.slice(); }
-      return parsed.filter(function (id) { return typeof id === "string"; });
+      return (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : {};
     } catch (e) {
-      return DEFAULT_PRODUCTS.slice();
+      return {};
     }
   }
 
-  function writeProducts(ids) {
-    try { window.localStorage.setItem(PRODUCTS_KEY, JSON.stringify(ids)); } catch (e) { /* private mode / quota */ }
+  function readProducts(accountId) {
+    var forAccount = readProductMap()[accountId];
+    if (!Array.isArray(forAccount)) { return DEFAULT_PRODUCTS.slice(); }
+    return forAccount.filter(function (id) { return typeof id === "string"; });
   }
 
+  function writeProducts(accountId, ids) {
+    var map = readProductMap();
+    map[accountId] = ids;
+    try { window.localStorage.setItem(PRODUCTS_KEY, JSON.stringify(map)); } catch (e) { /* private mode / quota */ }
+  }
+
+  /**
+   * Which accounts are signed in, and which one is showing. Same one-versioned
+   * key, swallow-every-failure discipline as the products store — a browser
+   * that cannot remember this must still open on the seeded account rather
+   * than on an error.
+   */
+  var ACCOUNTS_KEY = "peakpower.accounts.v1";
+
+  function readAccountSession() {
+    var fallback = { activeId: DEFAULT_ACCOUNT_ID, signedIn: [DEFAULT_ACCOUNT_ID] };
+    try {
+      var raw = window.localStorage.getItem(ACCOUNTS_KEY);
+      if (!raw) { return fallback; }
+      var parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.signedIn)) { return fallback; }
+      var known = parsed.signedIn.filter(function (id) { return !!ACCOUNTS[id]; });
+      if (known.indexOf(DEFAULT_ACCOUNT_ID) === -1) { known.unshift(DEFAULT_ACCOUNT_ID); }
+      return {
+        activeId: ACCOUNTS[parsed.activeId] ? parsed.activeId : DEFAULT_ACCOUNT_ID,
+        signedIn: known
+      };
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  function writeAccountSession() {
+    try {
+      window.localStorage.setItem(ACCOUNTS_KEY,
+        JSON.stringify({ activeId: state.accountId, signedIn: state.signedInIds }));
+    } catch (e) { /* private mode / quota */ }
+  }
+
+  var ACCOUNT_SESSION = readAccountSession();
+
   var state = {
+    accountId: ACCOUNT_SESSION.activeId,
+    signedInIds: ACCOUNT_SESSION.signedIn,
+    // null when the avatar menu is showing its account list; an object while
+    // the "Add another account" form is open.
+    loginForm: null,
     page: "Dashboard", connId: null,
     tradingView: "list", tradeId: null, wizardStep: 0,
     walletView: "ledger",
-    walletAvailable: PortalSeedData.WALLET_AVAILABLE_BALANCE, walletSettled: 29122.00, walletReserved: 9400.00,
+    walletAvailable: ACCOUNTS[ACCOUNT_SESSION.activeId].walletAvailable,
+    walletSettled: ACCOUNTS[ACCOUNT_SESSION.activeId].walletSettled,
+    walletReserved: ACCOUNTS[ACCOUNT_SESSION.activeId].walletReserved,
     // topupAmount is reset to a real, computed value every time topUpWallet()
     // opens the screen (see that function) — 0 here is just "not open yet".
     walletLedgerExtra: [], topupCount: 0, topupAmount: 0, lastTopup: null,
@@ -1357,7 +1523,7 @@
     wizard: { direction: "Buy", shape: "Peak", periodType: "quarter", monthIdx: 0, quarterIdx: 1,
               volumeMw: 0.200, note: "" },
     settlementId: null,
-    trades: PortalSeedData.TRADES_SEED.slice(),
+    trades: ACCOUNTS[ACCOUNT_SESSION.activeId].seeded ? PortalSeedData.TRADES_SEED.slice() : [],
     nextSeq: 1079,
     hoverBar: null,
     // Multiplies the range chart's own fit-to-container px/interval — 1 is
@@ -1379,7 +1545,7 @@
     // the customer switching a product on themselves, not a term the desk
     // sets — but it does survive a reload, so a demo does not start by
     // switching Future Trading back on every time.
-    products: readProducts(),
+    products: readProducts(ACCOUNT_SESSION.activeId),
     accountMenuOpen: false
   };
 
@@ -1409,6 +1575,18 @@
    * land on Products rather than on a page the account has no product for.
    * Returns true when it took over the navigation.
    */
+  /**
+   * A block covers the account's connections — with none, there is nothing to
+   * cover and the request would reach the desk with an empty roster.
+   *
+   * Guarded in the handler, not only by hiding the button: all four "Request a
+   * trade" entry points funnel through here, and requireFutureTrading() checks
+   * the product only.
+   */
+  function canRequestTrade() {
+    return hasFutureTrading() && tradableConnections().length > 0;
+  }
+
   function requireFutureTrading() {
     if (hasFutureTrading()) { return false; }
     goProducts();
@@ -1424,26 +1602,82 @@
   }
 
   function accountMenuHtml() {
+    var a = acct();
     var activeCount = PRODUCTS.filter(function (p) { return hasProduct(p.id); }).length;
-    var pop = "";
-    if (state.accountMenuOpen) {
-      pop = '<div class="account-scrim" onclick="PP.toggleAccountMenu()"></div>' +
-        '<div class="account-pop">' +
-          '<div class="ap-head"><div class="ap-name">J. de Vries</div>' +
-          '<div class="ap-sub">Admin · Vandersteen Koeling B.V.</div></div>' +
-          '<div class="ap-item" onclick="PP.goProducts()">' +
-            '<div><div class="ap-item-label">Products</div>' +
-            '<div class="ap-item-sub">' + activeCount + ' of ' + PRODUCTS.length + ' active</div></div>' +
-            '<span class="ap-chevron">&#8250;</span>' +
-          '</div>' +
+    if (!state.accountMenuOpen) {
+      return '<div class="account-row" onclick="PP.toggleAccountMenu()">' +
+        '<div class="avatar">' + esc(a.initials) + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="who">' + esc(a.userName) + '</div>' +
+        '<div class="org">' + esc(a.legalName) + '</div></div>' +
+        '<span class="account-caret">&#9656;</span></div>';
+    }
+
+    var body;
+    if (state.loginForm) {
+      body = loginFormHtml();
+    } else {
+      // Every account this browser has signed in to, the active one marked.
+      var rows = state.signedInIds.map(function (id) {
+        var other = ACCOUNTS[id];
+        if (!other) { return ""; }
+        var isActive = id === state.accountId;
+        return '<div class="ap-account' + (isActive ? " active" : "") + '"' +
+          (isActive ? "" : ' onclick="PP.switchAccount(\'' + id + '\')"') + '>' +
+          '<div class="avatar sm">' + esc(other.initials) + '</div>' +
+          '<div style="flex:1;min-width:0"><div class="ap-item-label">' + esc(other.legalName) + '</div>' +
+          '<div class="ap-item-sub">' + esc(other.userName) + ' &middot; ' + esc(other.userRole) + '</div></div>' +
+          (isActive ? '<span class="ap-active-mark">&#10003;</span>' : '') + '</div>';
+      }).join("");
+
+      body =
+        '<div class="ap-section">' + rows + '</div>' +
+        '<div class="ap-item" onclick="PP.openLoginForm()">' +
+          '<div><div class="ap-item-label">Add another account</div>' +
+          '<div class="ap-item-sub">Sign in to another company</div></div>' +
+          '<span class="ap-chevron">&#43;</span>' +
+        '</div>' +
+        '<div class="ap-item" onclick="PP.goProducts()">' +
+          '<div><div class="ap-item-label">Products</div>' +
+          '<div class="ap-item-sub">' + activeCount + ' of ' + PRODUCTS.length + ' active</div></div>' +
+          '<span class="ap-chevron">&#8250;</span>' +
         '</div>';
     }
-    return pop +
+
+    return '<div class="account-scrim" onclick="PP.closeAccountMenu()"></div>' +
+      '<div class="account-pop">' + body + '</div>' +
       '<div class="account-row" onclick="PP.toggleAccountMenu()">' +
-        '<div class="avatar">JV</div>' +
-        '<div style="flex:1;min-width:0"><div class="who">J. de Vries</div>' +
-        '<div class="org">Vandersteen Koeling B.V.</div></div>' +
-        '<span class="account-caret">&#9656;</span>' +
+        '<div class="avatar">' + esc(a.initials) + '</div>' +
+        '<div style="flex:1;min-width:0"><div class="who">' + esc(a.userName) + '</div>' +
+        '<div class="org">' + esc(a.legalName) + '</div></div>' +
+        '<span class="account-caret">&#9656;</span></div>';
+  }
+
+  /**
+   * Sign in to another company.
+   *
+   * The fields are patched in place, never re-rendered: an input rebuilt
+   * mid-keystroke loses the caret, the same rule the wallet's amount fields
+   * and the wizard's volume field already follow.
+   */
+  function loginFormHtml() {
+    var f = state.loginForm;
+    return '<div class="ap-head"><div class="ap-name">Add another account</div>' +
+      '<div class="ap-sub">Sign in with the email that account uses</div></div>' +
+      '<div class="ap-form">' +
+        '<div class="field-group"><div class="fg-label">Email</div>' +
+          '<input id="login-email" type="email" autocomplete="off" value="' + esc(f.email) + '"' +
+          ' oninput="PP.onLoginInput(\'email\', this.value)" placeholder="name@company.nl"></div>' +
+        '<div class="field-group"><div class="fg-label">Password</div>' +
+          '<input id="login-password" type="password" autocomplete="off" value="' + esc(f.password) + '"' +
+          ' oninput="PP.onLoginInput(\'password\', this.value)"></div>' +
+        '<div id="login-error" class="fg-hint" style="color:var(--pp-red-text)' +
+          (f.error ? "" : ";display:none") + '">' + esc(f.error || "") + '</div>' +
+        '<div class="ap-form-actions">' +
+          '<button type="button" class="btn-primary btn-sm" onclick="PP.submitLogin()">Sign in</button>' +
+          '<button type="button" class="btn-secondary btn-sm" onclick="PP.cancelLoginForm()">Cancel</button>' +
+        '</div>' +
+        '<div class="caption" style="line-height:1.5">Demo only — these sign-ins are a list shipped with the page, not real authentication. ' +
+          'Try <b>' + esc(PORTAL_LOGINS[1].email) + '</b> with password <b>' + esc(DEMO_PASSWORD) + '</b>.</div>' +
       '</div>';
   }
 
@@ -1454,7 +1688,117 @@
 
   function toggleAccountMenu() {
     state.accountMenuOpen = !state.accountMenuOpen;
+    if (!state.accountMenuOpen) { state.loginForm = null; }
     renderAccountMenu();
+  }
+
+  /**
+   * Closing the menu is its own function, not a toggle.
+   *
+   * `.account-scrim` covers the whole viewport, so a menu left open swallows
+   * every later click with no error on screen — which is exactly the bug
+   * `goProducts()` shipped with once. Every path out of this menu ends here or
+   * in something that re-renders it.
+   */
+  function closeAccountMenu() {
+    state.accountMenuOpen = false;
+    state.loginForm = null;
+    renderAccountMenu();
+  }
+
+  function openLoginForm() {
+    state.loginForm = { email: "", password: "", error: "" };
+    renderAccountMenu();
+  }
+
+  function cancelLoginForm() {
+    state.loginForm = null;
+    renderAccountMenu();
+  }
+
+  /** Patched in place — a re-render would rebuild the field being typed into. */
+  function onLoginInput(field, value) {
+    if (!state.loginForm) { return; }
+    state.loginForm[field] = value;
+    if (state.loginForm.error) {
+      state.loginForm.error = "";
+      var err = document.getElementById("login-error");
+      if (err) { err.textContent = ""; err.style.display = "none"; }
+    }
+  }
+
+  /**
+   * "Sign in" to another company: look the email up, check the password, add
+   * the account and switch to it.
+   *
+   * A wrong email and a wrong password are told apart, because a form that
+   * says only "sign-in failed" cannot be acted on. Signing in to an account
+   * already in the list just switches to it rather than adding a duplicate.
+   */
+  function submitLogin() {
+    var f = state.loginForm;
+    if (!f) { return; }
+    var email = String(f.email || "").trim().toLowerCase();
+    var match = PORTAL_LOGINS.filter(function (l) { return l.email === email; })[0];
+    var fail = function (msg) {
+      state.loginForm.error = msg;
+      var err = document.getElementById("login-error");
+      if (err) { err.textContent = msg; err.style.display = ""; }
+    };
+    if (!email) { return fail("Enter the email that account signs in with."); }
+    if (!match || !ACCOUNTS[match.accountId]) { return fail("No account found for that email."); }
+    if (String(f.password || "") !== DEMO_PASSWORD) { return fail("That password is not right for this account."); }
+
+    if (state.signedInIds.indexOf(match.accountId) === -1) { state.signedInIds.push(match.accountId); }
+    state.loginForm = null;
+    switchAccount(match.accountId);
+  }
+
+  /**
+   * Show a different account.
+   *
+   * Everything the previous account owned has to go at once — its wallet, its
+   * trades, its products, its metering data and every open sub-view — or a
+   * figure from one account is read under the other's name. The order matters:
+   * persist first, reset second, re-derive the data-dependent chrome third,
+   * and only then render.
+   */
+  function switchAccount(id) {
+    if (!ACCOUNTS[id]) { return; }
+    var a = ACCOUNTS[id];
+    state.accountId = id;
+    writeAccountSession();
+
+    state.walletAvailable = a.walletAvailable;
+    state.walletSettled = a.walletSettled;
+    state.walletReserved = a.walletReserved;
+    state.walletLedgerExtra = [];
+    state.topupCount = 0; state.topupAmount = 0; state.lastTopup = null;
+    state.withdrawalCount = 0; state.withdrawAmount = 0; state.lastWithdrawal = null;
+    state.depositReserved = {}; state.depositResolved = {};
+    state.products = readProducts(id);
+    state.trades = [];
+
+    // Every open sub-view belonged to the account being left.
+    state.connId = null; state.tradeId = null; state.settlementId = null;
+    state.tradingView = "list"; state.wizardStep = 0; state.wizard = null;
+    state.walletView = "ledger"; state.ledgerFilter = 0;
+    state.chartZoom = 1; state.hoverBar = null;
+    state.accountMenuOpen = false; state.loginForm = null;
+
+    // Two caches keyed by site id, not by account — left alone, one account
+    // would render the other's projections.
+    usageProfiles = {};
+    lastRender = null;
+
+    applyAccountData();
+    applyProductNav();
+    renderAccountMenu();
+    // A screen change owes both of these, or the render lands in a hidden
+    // container: the handler runs, nothing on screen moves, nothing errors.
+    state.page = "Dashboard";
+    activatePageDom("dashboard");
+    renderApp();
   }
 
   function goProducts() {
@@ -1477,7 +1821,7 @@
     state.products = had
       ? state.products.filter(function (x) { return x !== id; })
       : state.products.concat([id]);
-    writeProducts(state.products);
+    writeProducts(state.accountId, state.products);
     if (id === "future-trading" && had && FUTURE_TRADING_PAGES[state.page]) { goTo("Products"); return; }
     applyProductNav();
     renderAccountMenu();
@@ -1584,6 +1928,7 @@
   // shape+period the customer already clicked on the Prices screen.
   function startWizard() {
     if (requireFutureTrading()) { return; }
+    if (!tradableConnections().length) { return; }
     state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "wizard"; state.wizardStep = 0;
     state.wizard = defaultWizard("Base", "month", 0, 0);
@@ -1591,6 +1936,7 @@
   }
   function startWizardFromPrice(shape, periodType) {
     if (requireFutureTrading()) { return; }
+    if (!tradableConnections().length) { return; }
     state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "wizard"; state.wizardStep = 0;
     state.wizard = defaultWizard(shape, periodType, 0, 0);
@@ -1609,7 +1955,27 @@
    * four connections when it covered six.
    */
   function tradableConnections() {
-    return PortalSeedData.CONNECTIONS.filter(function (c) { return !c.notTradeable; });
+    return acctList("CONNECTIONS").filter(function (c) { return !c.notTradeable; });
+  }
+
+  /**
+   * "6 connections", or "6 electricity connections · 1 gas (not tradeable)".
+   *
+   * Counted, never written down: these two crumbs carry no company name, so a
+   * grep for the customer misses them and they would sit there claiming six
+   * connections on an account that has none.
+   */
+  function connectionCountLabel(detailed) {
+    var all = acctList("CONNECTIONS");
+    if (!all.length) { return "No connections yet"; }
+    var power = all.filter(function (c) { return !c.notTradeable; }).length;
+    var gas = all.length - power;
+    // The short form counts the connections a block can cover, which is what
+    // the Dashboard's own "6 connections" always meant — the gas one is not
+    // one of them.
+    if (!detailed) { return power + " connection" + (power === 1 ? "" : "s"); }
+    return power + " electricity connection" + (power === 1 ? "" : "s") +
+      (gas ? " · " + gas + " gas (not tradeable)" : "");
   }
 
   /**
@@ -1625,6 +1991,7 @@
   }
   function startWizardFromConnection(id) {
     if (requireFutureTrading()) { return; }
+    if (!tradableConnections().length) { return; }
     if (!tradableConnection(id)) { return; }
     state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "wizard"; state.wizardStep = 0;
@@ -1773,8 +2140,9 @@
     var id = "TRD-" + state.nextSeq;
     var req = PortalTradeLink.buildRequest(state.wizard, {
       id: id,
-      customer: PortalSeedData.CUSTOMER_NAME,
-      customerId: PortalSeedData.CUSTOMER_ID,
+      customer: acct().customerName,
+      customerId: acct().kvk,
+      requestedBy: acctSignature(),
       // The trade's own size, one number — not a sum of per-connection lines,
       // because nobody chooses a per-connection allocation any more.
       powerMw: wizardTotalMW(),
@@ -1801,8 +2169,8 @@
       id: id, shape: req.shape, period: req.period, direction: req.direction,
       power: power, volume: volume,
       price: null, value: null, status: "Awaiting price", statusTone: "info",
-      events: [{ title: "Request submitted", actor: "J. de Vries · Admin (you)", ts: "just now", body: bodyText, tone: "submit" }],
-      facts: [["Reference", id], ["Requested by", "J. de Vries"], ["State", "Awaiting price"], ["Direction", req.direction],
+      events: [{ title: "Request submitted", actor: acctActor(), ts: "just now", body: bodyText, tone: "submit" }],
+      facts: [["Reference", id], ["Requested by", acct().userName], ["State", "Awaiting price"], ["Direction", req.direction],
         ["Shape", req.shape], ["Delivery period", req.period], ["Applies to", "All connections on the account"],
         ["Power", power], ["Volume", volume]]
     };
@@ -1931,7 +2299,7 @@
     var ledgerEntry = {
       date: dateStr, type: "Deposit", tone: "success",
       amount: "+ " + PortalSeedData.formatEUR(amt), positive: true,
-      by: "J. de Vries", ref: ref, refKind: "none", after: PortalSeedData.formatEUR(newAvailable)
+      by: acct().userName, ref: ref, refKind: "none", after: PortalSeedData.formatEUR(newAvailable)
     };
     state.walletAvailable += amt;
     state.walletSettled += amt;
@@ -2065,7 +2433,7 @@
     state.walletLedgerExtra.unshift({
       date: ledgerStamp(), type: "Withdrawal", tone: "neutral",
       amount: "\u2212 " + PortalSeedData.formatEUR(amt), positive: false,
-      by: "J. de Vries", ref: ref, refKind: "none", after: PortalSeedData.formatEUR(newAvailable)
+      by: acct().userName, ref: ref, refKind: "none", after: PortalSeedData.formatEUR(newAvailable)
     });
     state.lastWithdrawal = { amount: amt, ref: ref, newAvailable: newAvailable, dateStr: stamp };
     state.walletView = "withdraw-success";
@@ -2103,7 +2471,10 @@
     withdrawFunds: withdrawFunds, setWithdrawAmount: setWithdrawAmount,
     onWithdrawAmountInput: onWithdrawAmountInput, setWithdrawAmountValue: setWithdrawAmountValue,
     performWithdrawal: performWithdrawal, closeWithdrawSuccess: closeWithdrawSuccess,
-    toggleAccountMenu: toggleAccountMenu, goProducts: goProducts, toggleProduct: toggleProduct,
+    toggleAccountMenu: toggleAccountMenu, closeAccountMenu: closeAccountMenu,
+    switchAccount: switchAccount, openLoginForm: openLoginForm, cancelLoginForm: cancelLoginForm,
+    onLoginInput: onLoginInput, submitLogin: submitLogin,
+    goProducts: goProducts, toggleProduct: toggleProduct,
     noop: function () {}
   };
 
@@ -2139,7 +2510,7 @@
   /** The live setting: this customer's deposit %, defaulting to 20. */
   function depositPct() {
     try {
-      return PortalTermsLink.depositPctFor(PortalTermsLink.read(window.localStorage), PortalSeedData.CUSTOMER_ID);
+      return PortalTermsLink.depositPctFor(PortalTermsLink.read(window.localStorage), acct().kvk);
     } catch (e) {
       return PortalTermsLink.DEFAULT_DEPOSIT_PCT;
     }
@@ -2157,7 +2528,7 @@
    * place so the wizard's cards and the request it publishes can't drift.
    */
   function connectionEan(id) {
-    var c = PortalSeedData.CONNECTIONS.filter(function (x) { return x.id === id; })[0];
+    var c = acctList("CONNECTIONS").filter(function (x) { return x.id === id; })[0];
     return c ? c.ean : "";
   }
 
@@ -2193,11 +2564,11 @@
    * alongside the live ones rather than leaving the card reading "nothing on
    * hold" over a € 9.400,00 figure.
    */
-  var SEEDED_DEPOSITS_ON_HOLD = 1;
+
   function depositsOnHoldLabel() {
     var live = [];
     try { live = PortalTradeLink.read(window.localStorage) || []; } catch (e) { /* seed count only */ }
-    var n = SEEDED_DEPOSITS_ON_HOLD + live.filter(function (r) {
+    var n = acct().seededDepositsOnHold + live.filter(function (r) {
       return PortalTradeLink.depositState(r) === "on-hold";
     }).length;
     return n + " accepted trade" + (n === 1 ? "" : "s") + " awaiting confirmation";
@@ -2221,7 +2592,7 @@
     if (!req || !req.settlement || req.settlement.paidAt) { return; }
     var amount = req.settlement.balanceEur || 0;
     if (amount > state.walletAvailable) { return; }   // the button is disabled too
-    var next = PortalTradeLink.payBalance(req, { now: nowForLink() });
+    var next = PortalTradeLink.payBalance(req, { now: nowForLink(), by: acctSignature() });
     if (!next) { return; }
     try { PortalTradeLink.publish(window.localStorage, next); } catch (e) { /* keep going */ }
     state.walletAvailable -= amount;
@@ -2229,7 +2600,7 @@
     state.walletLedgerExtra.unshift({
       date: ledgerStamp(), type: "Trade", tone: "info",
       amount: "\u2212 " + eur(amount), positive: false,
-      by: "J. de Vries", ref: id, refKind: "trade", after: eur(state.walletAvailable)
+      by: acct().userName, ref: id, refKind: "trade", after: eur(state.walletAvailable)
     });
     syncLinkedTrades();
     renderApp();
@@ -2267,7 +2638,7 @@
       renderApp();   // re-draws the banner, which already names the shortfall
       return;
     }
-    var next = PortalTradeLink.respondToOffer(req, action, { settlement: settlement, now: nowForLink() });
+    var next = PortalTradeLink.respondToOffer(req, action, { by: acctSignature(), settlement: settlement, now: nowForLink() });
     if (next) {
       try { PortalTradeLink.publish(window.localStorage, next); } catch (e) { /* keep going */ }
       // Accepting reserves the deposit, not the whole value — that is the
@@ -2282,7 +2653,7 @@
         state.walletLedgerExtra.unshift({
           date: ledgerStamp(), type: "Trade", tone: "info",
           amount: "\u2212 " + eur(settlement.depositEur), positive: false,
-          by: "J. de Vries", ref: req.id, refKind: "trade", after: eur(state.walletAvailable)
+          by: acct().userName, ref: req.id, refKind: "trade", after: eur(state.walletAvailable)
         });
       }
     }
@@ -2334,17 +2705,23 @@
   }
 
   function syncLinkedTrades() {
-    var linked = [];
+    var all = [];
     try {
-      linked = PortalTradeLink.read(window.localStorage);
+      all = PortalTradeLink.read(window.localStorage) || [];
     } catch (e) {
       return; // an unavailable link must never break the Trading screen
     }
+    // This account's records only — but the id scan below reads ALL of them,
+    // or two accounts in the same browser mint the same TRD- id and publish()
+    // updates in place by id, one overwriting the other.
+    var linked = forThisAccount(all);
     reconcileDeposits(linked);
     var linkedIds = {};
     linked.forEach(function (r) { linkedIds[r.id] = true; });
 
-    var seeded = PortalSeedData.TRADES_SEED.filter(function (t) { return !linkedIds[t.id]; });
+    // Re-read on every sync, so the seeded half follows the account too — not
+    // just at page load.
+    var seeded = acctList("TRADES_SEED").filter(function (t) { return !linkedIds[t.id]; });
     // Newest request first, above the seeded history, with the contracted
     // blocks last — they are the oldest, settled part of the book, and a block
     // is a trade like any other (see blockAsTrade).
@@ -2353,8 +2730,8 @@
     });
     state.trades = fromLink.concat(seeded).concat(contractedBlockTrades());
 
-    // Keep issuing ids after anything already on the link.
-    linked.forEach(function (r) {
+    // Keep issuing ids after anything already on the link — every account's.
+    all.forEach(function (r) {
       var n = parseInt(String(r.id).replace(/^TRD-/, ""), 10);
       if (isFinite(n) && n >= state.nextSeq) { state.nextSeq = n + 1; }
     });
@@ -2535,18 +2912,18 @@
 
     if (page === "Products") {
       var activeCount = PRODUCTS.filter(function (p) { return hasProduct(p.id); }).length;
-      setCrumb("Vandersteen Koeling B.V. · " + activeCount + " of " + PRODUCTS.length + " products active");
+      setCrumb(acct().legalName + " · " + activeCount + " of " + PRODUCTS.length + " products active");
     } else if (page === "Dashboard") {
-      setCrumb("Vandersteen Koeling B.V. · 6 connections");
+      setCrumb(acct().legalName + " · " + connectionCountLabel());
     } else if (page === "Connections" && state.connId) {
-      var conn = PortalSeedData.CONNECTIONS.filter(function (c) { return c.id === state.connId; })[0];
+      var conn = acctList("CONNECTIONS").filter(function (c) { return c.id === state.connId; })[0];
       title = conn ? conn.name : "Connections";
       setCrumb("EAN " + (conn ? conn.ean : ""), "Connections", "closeConnection");
       // No topbar "Request a trade" here: the mockup's version started a blank
       // wizard, which would silently discard the connection you are looking at.
       // The one below the block-positions table carries this connection through.
     } else if (page === "Connections") {
-      setCrumb("6 electricity connections · 1 gas (not tradeable)");
+      setCrumb(connectionCountLabel(true));
       actionsHtml = '<button type="button" class="btn-secondary" onclick="PP.noop()">Export CSV</button>';
     } else if (page === "Prices") {
       setCrumb("Dutch power · indicative only");
@@ -2562,9 +2939,11 @@
       // Counted, not hardcoded: the list now carries the contracted blocks too,
       // so a fixed "6" would be wrong the moment a block is added.
       var blockCount = state.trades.filter(function (t) { return t.isBlock; }).length;
-      setCrumb("Vandersteen Koeling B.V. · " + (state.trades.length - blockCount) +
+      setCrumb(acct().legalName + " · " + (state.trades.length - blockCount) +
         " open or recent trades · " + blockCount + " contracted blocks");
-      actionsHtml = '<button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button>';
+      actionsHtml = canRequestTrade()
+        ? '<button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button>'
+        : "";
     } else if (page === "Wallet" && state.walletView === "topup") {
       title = "Deposit funds";
       setCrumb("Add funds to your wallet", "Wallet", "backToWallet");
@@ -2572,17 +2951,17 @@
       title = "Withdraw funds";
       setCrumb("Pay out to your own account", "Wallet", "backToWallet");
     } else if (page === "Wallet") {
-      setCrumb("Vandersteen Koeling B.V. · EUR");
+      setCrumb(acct().legalName + " · EUR");
       actionsHtml = '<button type="button" class="btn-primary" onclick="PP.topUpWallet()">Deposit funds</button>' +
         '<button type="button" class="btn-secondary" onclick="PP.withdrawFunds()">Withdraw funds</button>';
     } else if (page === "Settlements" && state.settlementId) {
-      var inv = PortalSeedData.SETTLEMENTS.filter(function (x) { return x.id === state.settlementId; })[0];
+      var inv = acctList("SETTLEMENTS").filter(function (x) { return x.id === state.settlementId; })[0];
       title = inv ? "Settlement " + inv.id : "Settlements";
       setCrumb(inv ? (inv.period + " · settled " + inv.settledDate) : "", "Settlements", "closeSettlement");
       actionsHtml = '<button type="button" class="btn-primary" onclick="PP.noop()">Download PDF</button>' +
         '<button type="button" class="btn-secondary" onclick="PP.noop()">Export CSV</button>';
     } else if (page === "Settlements") {
-      setCrumb("Vandersteen Koeling B.V. · monthly settlements");
+      setCrumb(acct().legalName + " · monthly settlements");
     }
 
     pageTitle.textContent = title;
@@ -2798,7 +3177,29 @@
     document.getElementById("products-body").innerHTML = body;
   }
 
+  /** The forward curve is market data, not account data — every account sees it. */
+  function acctPriceTilesHtml() {
+    return PortalSeedData.DASHBOARD_PRICE_TILES.map(function (t) {
+      return '<div class="price-card" style="padding:10px 12px"><div class="pc-label" style="margin-top:0">' + t[0] + '</div>' +
+        '<div class="pc-price" style="font-size:17px">' + t[1] + '</div>' +
+        '<div class="pc-delta ' + (t[3] ? "up" : "down") + '">' + (t[3] ? "▲" : "▼") + " " + t[2] + '</div></div>';
+    }).join("");
+  }
+
   function renderDashboardPage() {
+    // An account with no connections has no position to summarise, and the
+    // hero's figures are seeded ones belonging to the seeded account — see
+    // dashboardHeroHtml. Say what is missing and what to do about it instead.
+    if (!acctList("CONNECTIONS").length) {
+      document.getElementById("dashboard-body").innerHTML =
+        emptyCardHtml("Welcome to " + acct().legalName,
+          "Nothing is trading on this account yet",
+          "This account has no connections yet, so there is no position to show. PeakPower adds your " +
+          "metering points once they are registered — consumption, trades and settlements start from there.") +
+        cardHtml("Price indications", "Indicative only — not an offer",
+          '<div class="price-tiles">' + acctPriceTilesHtml() + '</div>');
+      return;
+    }
     var pending = state.trades.filter(function (t) { return t.pending; })[0];
 
     // Without Future Trading there is no wallet and there are no trades, so
@@ -2848,13 +3249,12 @@
         '</div></div>';
     }
 
-    var tilesHtml = PortalSeedData.DASHBOARD_PRICE_TILES.map(function (t) {
-      return '<div class="price-card" style="padding:10px 12px"><div class="pc-label" style="margin-top:0">' + t[0] + '</div>' +
-        '<div class="pc-price" style="font-size:17px">' + t[1] + '</div>' +
-        '<div class="pc-delta ' + (t[3] ? "up" : "down") + '">' + (t[3] ? "▲" : "▼") + " " + t[2] + '</div></div>';
-    }).join("");
+    var tilesHtml = acctPriceTilesHtml();
 
-    var activityHtml = PortalSeedData.DASHBOARD_RECENT_ACTIVITY.map(function (a, idx) {
+    var activity = acctList("DASHBOARD_RECENT_ACTIVITY");
+    var activityHtml = !activity.length
+      ? '<div class="empty-state">No activity on this account yet.</div>'
+      : activity.map(function (a, idx) {
       var toneColor = PortalSeedData.TONE_COLOR[a[3]] || "#8b98aa";
       return '<div style="display:flex;gap:10px;align-items:flex-start;padding:9px 0;' + (idx > 0 ? "border-top:1px solid var(--pp-border)" : "") + '">' +
         '<span style="width:8px;height:8px;border-radius:999px;margin-top:5px;flex-shrink:0;background:' + toneColor + '"></span>' +
@@ -2912,7 +3312,14 @@
     var cols = "2.2fr 1fr 1fr 1.3fr 1fr 1.4fr";
     var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>CONNECTION</div><div>COMMODITY</div><div>STATUS</div>' +
       '<div>LATEST DATA</div><div class="gt-cell-num">AUGUST VOLUME</div><div class="gt-cell-num">BLOCK COVERAGE</div></div>';
-    var rows = PortalSeedData.CONNECTIONS.map(function (c) {
+    var connections = acctList("CONNECTIONS");
+    if (!connections.length) {
+      document.getElementById("connections-body").innerHTML = emptyCardHtml("Connections",
+        "Metering points on this account",
+        "No connections on this account yet. PeakPower adds them once your metering points are registered.");
+      return;
+    }
+    var rows = connections.map(function (c) {
       var clickable = !c.notTradeable;
       var covHtml = c.coverage != null
         ? '<div class="cov-bar-wrap"><div class="cov-bar-track"><div class="cov-bar-fill" style="width:' + c.coverage + '%"></div></div><span class="cov-bar-label">' + c.coverage + ' %</span></div>'
@@ -3114,7 +3521,7 @@
     var balanceEur = Math.abs(valueEur) - depositEur;
 
     var events = [
-      { title: "Request submitted", actor: "J. de Vries · Admin (you)",
+      { title: "Request submitted", actor: acctActor(),
         ts: formatDateShort(requested) + ", 10:12:00",
         body: shapeLabel + " " + b.periodLabel + " · " + num(Math.abs(b.powerKw) / 1000, 2) +
           " MW " + (sold ? "offered for sale" : "requested") + " across every connection on the account.",
@@ -3124,7 +3531,7 @@
         body: "Price € " + ConsumptionCalc.formatNL(priceMwh, 4) + "/MWh · total " + money(Math.abs(valueEur)) +
           " · reaction window 30 minutes.",
         tone: "indigo" },
-      { title: "Offer accepted", actor: "J. de Vries · Admin (you)",
+      { title: "Offer accepted", actor: acctActor(),
         ts: formatDateShort(requested) + ", 10:39:00",
         body: sold
           ? "A sale reserves nothing — PeakPower pays on execution."
@@ -3134,7 +3541,7 @@
         ts: formatDateShort(confirmed) + ", 09:05:00",
         body: "Executed on the market. Held across every connection on the account and drawn as part of the hedge line for this period.",
         tone: "green" },
-      { title: sold ? "Proceeds paid" : "Balance paid", actor: sold ? "PeakPower Trading" : "J. de Vries · Admin (you)",
+      { title: sold ? "Proceeds paid" : "Balance paid", actor: sold ? "PeakPower Trading" : acctActor(),
         ts: formatDateShort(dueDate) + ", 09:00:00",
         body: sold
           ? "Wallet credited " + eur(Math.abs(valueEur)) + " for the sold volume."
@@ -3209,8 +3616,12 @@
         '<div class="gt-cell-num">' + esc(t.value || "—") + '</div>' +
         '<div>' + badge(t.status, t.statusTone) + '</div></div>';
     }).join("");
-    document.getElementById("trading-body").innerHTML =
-      '<div class="grid-table">' + head + '<div class="gt-scroll">' + rows + '</div></div>';
+    document.getElementById("trading-body").innerHTML = state.trades.length
+      ? '<div class="grid-table">' + head + '<div class="gt-scroll">' + rows + '</div></div>'
+      : emptyCardHtml("Trades", "Requests, offers and contracted blocks",
+          tradableConnections().length
+            ? "No trades on this account yet. Request one to open a position."
+            : "No trades on this account yet — and no connections to trade for.");
   }
 
   function renderTradeDetail() {
@@ -3679,16 +4090,21 @@
    */
   function buildWizardVolumeTable() {
     var period = getSelectedWizardPeriod();
-    var cards = tradableConnections().map(function (c) {
-      var fullEan = c.ean || c.id;
-      // A contract that ends is worth saying — it is not a reason the block
-      // skips this connection, only a date the reader should know.
-      var foot = c.status && c.status !== "Active"
-        ? '<span class="cc-pill ineligible">' + esc(c.status) + '</span>'
-        : "";
-      return '<div class="conn-card">' +
-        '<div class="cc-body"><div class="cc-name">' + c.name + '</div><div class="cc-ean">' + fullEan + '</div>' +
-        '<div class="cc-foot">' + foot + '</div></div></div>';
+    // A table, not cards: this is a list of metering points, and the
+    // Connections screen already lists them as one. Same columns in the same
+    // order, minus the ones a wizard has no use for — and no row handler,
+    // because there is nothing to pick. `.dense` because it sits inside a
+    // card, matching the wallet ledger and the settlement line items.
+    var connCols = "2.2fr 1.4fr 1fr";
+    var connHead = '<div class="gt-head" style="grid-template-columns:' + connCols + '">' +
+      '<div>CONNECTION</div><div>EAN</div><div>STATUS</div></div>';
+    var connRows = tradableConnections().map(function (c) {
+      return '<div class="gt-row" style="grid-template-columns:' + connCols + '">' +
+        '<div style="font-weight:700">' + c.name + '</div>' +
+        '<div class="gt-mono">' + (c.ean || c.id) + '</div>' +
+        // A contract that ends is worth saying — it is not a reason the block
+        // skips this connection, only a date the reader should know.
+        '<div>' + badge(c.status, c.statusTone) + '</div></div>';
     }).join("");
 
     // One account-level cover line, from the real blocks, for the period the
@@ -3701,7 +4117,7 @@
     var coverLine = '<div class="cc-account-cover"><span class="cc-pill ' + (coverMw === 0 ? "none" : "covered") + '">Current cover</span>' +
       '<span>' + esc(coverText) + '</span></div>';
 
-    var grid = coverLine + '<div class="conn-grid">' + cards + '</div>';
+    var grid = coverLine + '<div class="grid-table dense">' + connHead + connRows + '</div>';
 
     var invalid = !wizardVolumeValid();
     var atMin = (state.wizard.volumeMw || 0) <= MIN_VOLUME_MW;
@@ -3807,6 +4223,49 @@
       '<button type="button" class="btn-secondary" onclick="PP.wizardGoStep1()">Back</button></div>';
   }
 
+  /** The shell every step shares: work on the left, rail on the right. */
+  function wizardTwoColumn(leftHtml, railHtml) {
+    return '<div class="wizard-cols"><div>' + leftHtml + '</div>' +
+      '<div class="wizard-rail">' + railHtml + '</div></div>';
+  }
+
+  /**
+   * Step 1's rail: what has been chosen so far, and the way forward.
+   *
+   * Step 1's two product tables are 24 rows long, so a Continue button under
+   * them is a scroll to the bottom of the page away — the rail keeps both the
+   * selection and the button in view while the customer reads the tables.
+   *
+   * It stops at the 1 MW basis on purpose. `defaultWizard()` seeds volumeMw at
+   * 0,200, so showing Volume, Estimated value and a deposit here would quote
+   * figures for a number nobody has chosen yet — the customer's real volume is
+   * step 2's question.
+   *
+   * Nothing in the rail is focusable: `selectWizardBar()` and `setDirIdx()`
+   * both end in renderApp(), which rebuilds all of #trading-body on every row
+   * click, and a field in here would lose focus mid-keystroke.
+   */
+  function buildStep1Rail(period, priceVal) {
+    var w = state.wizard;
+    var hours = wizardHours(period);
+    var rows = [
+      ["Direction", w.direction],
+      ["Shape", w.shape],
+      ["Delivery period", period.period],
+      [w.shape === "Peak" ? "Peak hours" : "Base hours", ConsumptionCalc.formatNL(hours, 0) + " h"],
+      ["Value at 1 MW", "€ " + ConsumptionCalc.formatNL(priceVal * hours, 2)]
+    ];
+    return buildPriceReadout(period, priceVal) +
+      '<div style="margin-top:14px">' +
+      rows.map(function (r) {
+        return '<div class="kv-row"><span class="k">' + r[0] + '</span><span class="v">' + r[1] + '</span></div>';
+      }).join("") +
+      '</div>' +
+      '<div class="caption" style="margin-top:10px;line-height:1.5">Your own volume is the next step — these figures are the product, quoted at 1 MW.</div>' +
+      '<div class="wizard-actions"><button type="button" class="btn-primary" onclick="PP.wizardGoStep1()">Continue</button>' +
+      '<button type="button" class="btn-secondary" onclick="PP.cancelWizard()">Cancel</button></div>';
+  }
+
   function renderWizard() {
     var w = state.wizard;
     var period = getSelectedWizardPeriod();
@@ -3816,31 +4275,27 @@
     var estimatedValue = priceVal * totalMW * hours;
 
     var stepIndicator = buildStepIndicator(state.wizardStep);
+    var summaryCard = cardHtml("Summary", "", '<div id="wizard-summary-body">' +
+      buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue) + '</div>');
     var bodyHtml = "";
 
     if (state.wizardStep === 0) {
-      bodyHtml = cardHtml("Product & period", "Choose a direction and a delivery period — Base and Peak price the same periods, so pick straight from whichever table suits.",
-        '<div class="field-group"><div class="fg-label">Direction</div>' + segTabs(["Buy", "Sell"], w.direction === "Buy" ? 0 : 1, "setDirIdx") + '</div>' +
-        '<div class="period-panel-label">Delivery period</div>' +
-        '<div class="shape-tables">' + buildShapeTable("Base") + buildShapeTable("Peak") + '</div>' +
-        buildPriceReadout(period, priceVal) +
-        '<div class="wizard-actions"><button type="button" class="btn-primary" onclick="PP.wizardGoStep1()">Continue</button>' +
-        '<button type="button" class="btn-secondary" onclick="PP.cancelWizard()">Cancel</button></div>');
+      bodyHtml = wizardTwoColumn(
+        cardHtml("Product & period", "Choose a direction and a delivery period — Base and Peak price the same periods, so pick straight from whichever table suits.",
+          '<div class="field-group"><div class="fg-label">Direction</div>' + segTabs(["Buy", "Sell"], w.direction === "Buy" ? 0 : 1, "setDirIdx") + '</div>' +
+          '<div class="period-panel-label">Delivery period</div>' +
+          '<div class="shape-tables">' + buildShapeTable("Base") + buildShapeTable("Peak") + '</div>'),
+        cardHtml("Your selection", "", buildStep1Rail(period, priceVal)));
     } else if (state.wizardStep === 1) {
-      bodyHtml = '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">' +
-        '<div>' + cardHtml("Volume",
-          "A block is bought for the whole account — it covers every connection below",
-          buildWizardVolumeTable()) + '</div>' +
-        '<div>' + cardHtml("Summary", "", '<div id="wizard-summary-body">' +
-          buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue) + '</div>') + '</div>' +
-        '</div>';
+      bodyHtml = wizardTwoColumn(
+        cardHtml("Volume", "A block is bought for the whole account — it covers every connection below",
+          buildWizardVolumeTable()),
+        summaryCard);
     } else {
-      bodyHtml = '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">' +
-        '<div>' + cardHtml("Review & submit", "This submits a request only. PeakPower will respond with a firm, time-limited price; you then accept or reject it.",
-          buildWizardReviewBody(period, totalMW, hours, priceVal, estimatedValue)) + '</div>' +
-        '<div>' + cardHtml("Summary", "", '<div id="wizard-summary-body">' +
-          buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue) + '</div>') + '</div>' +
-        '</div>';
+      bodyHtml = wizardTwoColumn(
+        cardHtml("Review & submit", "This submits a request only. PeakPower will respond with a firm, time-limited price; you then accept or reject it.",
+          buildWizardReviewBody(period, totalMW, hours, priceVal, estimatedValue)),
+        summaryCard);
     }
 
     document.getElementById("trading-body").innerHTML = stepIndicator + bodyHtml;
@@ -3904,7 +4359,7 @@
   }
 
   function ledgerCardHtml() {
-    var all = state.walletLedgerExtra.concat(PortalSeedData.WALLET_LEDGER);
+    var all = state.walletLedgerExtra.concat(acctList("WALLET_LEDGER"));
     var filter = LEDGER_TABS[state.ledgerFilter] === "All" ? null : LEDGER_TABS[state.ledgerFilter];
     var shown = filter ? all.filter(function (l) { return l.type === filter; }) : all;
 
@@ -3965,7 +4420,13 @@
             "not yet reserved — due before delivery")
         : "");
 
-    var lowBalanceBanner = state.walletAvailable < MIN_BALANCE_ALERT
+    // A wallet that has never been funded is not "below its alert" — nothing
+    // has gone wrong yet. Say what the first step is instead.
+    var neverFunded = state.walletSettled === 0 && state.walletAvailable === 0 && !state.walletLedgerExtra.length;
+    var lowBalanceBanner = neverFunded
+      ? '<div class="banner banner-teal"><div class="banner-icon" style="background:var(--pp-teal-600)">i</div>' +
+        '<div class="banner-body">This wallet has not been funded yet. Deposit funds to reserve them against a trade.</div></div>'
+      : state.walletAvailable < MIN_BALANCE_ALERT
       ? '<div class="banner banner-amber"><div class="banner-icon">!</div><div class="banner-body">Your minimum balance alert is set at € ' +
         ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) + ' — you are currently below it. Make a deposit to keep trading.</div></div>'
       : "";
@@ -4124,7 +4585,7 @@
     }).join("");
 
     var fgLabelStyle = ' style="letter-spacing:.03em"';
-    var acct = PortalSeedData.PAYOUT_ACCOUNT;
+    var payout = acctPayout();
     var warning = withdrawCommitmentWarning();
 
     var formCard = '<div class="ideal-card">' +
@@ -4151,10 +4612,10 @@
     var accountCard = '<div class="bank-card">' +
       '<div class="topup-card-head"><div><div class="topup-card-title">Destination account</div>' +
       '<div class="topup-card-subtitle">The account PeakPower has verified for this customer</div></div>' + badge("VERIFIED", "success") + '</div>' +
-      '<div class="copy-row"><div><div class="cr-label">Account holder</div><div class="cr-value" style="font-family:var(--font-sans);font-weight:600">' + acct.accountHolder + '</div></div></div>' +
-      '<div class="copy-row"><div><div class="cr-label">IBAN</div><div class="cr-value">' + acct.iban + '</div></div></div>' +
-      '<div class="copy-row"><div><div class="cr-label">BIC</div><div class="cr-value">' + acct.bic + '</div></div></div>' +
-      '<div style="font-size:12px;color:var(--pp-text-body);font-weight:500">Verified ' + acct.verifiedOn +
+      '<div class="copy-row"><div><div class="cr-label">Account holder</div><div class="cr-value" style="font-family:var(--font-sans);font-weight:600">' + payout.accountHolder + '</div></div></div>' +
+      '<div class="copy-row"><div><div class="cr-label">IBAN</div><div class="cr-value">' + payout.iban + '</div></div></div>' +
+      '<div class="copy-row"><div><div class="cr-label">BIC</div><div class="cr-value">' + payout.bic + '</div></div></div>' +
+      '<div style="font-size:12px;color:var(--pp-text-body);font-weight:500">Verified ' + payout.verifiedOn +
         '. To pay out to a different account, ask PeakPower to verify it first.</div>' +
       '</div>';
 
@@ -4178,10 +4639,10 @@
   function renderWalletWithdrawSuccess() {
     var w = state.lastWithdrawal;
     if (!w) { backToWallet(); return; }
-    var acct = PortalSeedData.PAYOUT_ACCOUNT;
+    var payout = acctPayout();
     var successBanner = '<div class="banner banner-green"><div class="banner-icon success">✓</div><div class="banner-body">' +
       '<div class="banner-title">Withdrawal requested</div>' +
-      '<div class="banner-sub">€ ' + ConsumptionCalc.formatNL(w.amount, 2) + ' to ' + acct.iban +
+      '<div class="banner-sub">€ ' + ConsumptionCalc.formatNL(w.amount, 2) + ' to ' + payout.iban +
       ' · reference ' + w.ref + ' · ' + w.dateStr + '</div></div></div>';
 
     var summaryCard = cardHtml("New balance", "", '<div class="balance-box">' +
@@ -4201,7 +4662,14 @@
     var cols = "1.4fr 1fr 1fr 1fr 1fr 1fr";
     var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>SETTLEMENT</div><div>PERIOD</div><div>CONNECTIONS</div>' +
       '<div class="gt-cell-num">VOLUME</div><div class="gt-cell-num">TOTAL</div><div>STATUS</div></div>';
-    var rows = PortalSeedData.SETTLEMENTS.map(function (inv) {
+    var settlements = acctList("SETTLEMENTS");
+    if (!settlements.length) {
+      document.getElementById("settlements-body").innerHTML = emptyCardHtml("Settlements",
+        "Monthly reconciled energy",
+        "No settlements yet. The first one is produced after this account's first full delivery month.");
+      return;
+    }
+    var rows = settlements.map(function (inv) {
       return '<div class="gt-row clickable" style="grid-template-columns:' + cols + '" onclick="PP.openSettlement(\'' + inv.id + '\')">' +
         '<div class="gt-mono" style="color:var(--pp-teal-700)">' + inv.id + '</div>' +
         '<div>' + inv.period + '</div><div>' + inv.connectionsCount + '</div>' +
@@ -4213,7 +4681,7 @@
   }
 
   function renderSettlementDetail() {
-    var inv = PortalSeedData.SETTLEMENTS.filter(function (x) { return x.id === state.settlementId; })[0];
+    var inv = acctList("SETTLEMENTS").filter(function (x) { return x.id === state.settlementId; })[0];
     if (!inv) { closeSettlement(); return; }
 
     var kpiHtml = statCardHtml("Settlement total", inv.total, "", "") +
@@ -5085,9 +5553,23 @@
    * PortalTradeLink, no localStorage, unparseable storage — lands on the same
    * empty result rather than throwing.
    */
+  /**
+   * The link's records for the ACTIVE account only.
+   *
+   * A published request already carries `customerId` (buildRequest stores it,
+   * submitWizard supplies it), so this is the read side of an identity that
+   * was always there. Filtering here rather than at each call site is what
+   * keeps another account's confirmed trades out of the Consumption hedge
+   * line, the hedge cost, the coverage figures and MAX_SELECTABLE_DATE.
+   */
+  function forThisAccount(records) {
+    var kvk = acct().kvk;
+    return (records || []).filter(function (r) { return String(r.customerId) === String(kvk); });
+  }
+
   function liveTradeRecords() {
     if (typeof PortalTradeLink === "undefined" || typeof window === "undefined" || !window.localStorage) { return []; }
-    try { return PortalTradeLink.read(window.localStorage) || []; } catch (e) { return []; }
+    try { return forThisAccount(PortalTradeLink.read(window.localStorage)); } catch (e) { return []; }
   }
 
   /**
@@ -5798,18 +6280,45 @@
   // Holds everything the CSV export needs for whatever range is on screen.
   var lastRender = null;
 
+  /**
+   * The Consumption page's three data cards, shown or hidden as a unit.
+   *
+   * The Loading and No-data states used to leave them standing — two chart
+   * legends and a 17-column table header with nothing behind them, which reads
+   * as data that failed to draw rather than data that does not exist.
+   */
+  function setConsumptionChromeVisible(visible) {
+    var cards = document.querySelectorAll("[data-consumption-chrome]");
+    for (var i = 0; i < cards.length; i++) { cards[i].style.display = visible ? "" : "none"; }
+  }
+
   function render() {
-    if (!DATA) {
+    // No dataset at all, or a dataset with no connections in it: the first is
+    // "still loading", the second is "this account has nothing to measure".
+    // They must not share a message — one resolves on its own, the other
+    // never does.
+    if (!DATA || !hasAccountData()) {
       crumb.textContent = "";
       chartSubtitle.textContent = "";
-      statRow.innerHTML = statusCardHtml("Loading", "…", "Fetching source data and calculating in the browser");
+      statRow.innerHTML = !DATA
+        ? statusCardHtml("Loading", "…", "Fetching source data and calculating in the browser")
+        : statusCardHtml("No connections", "—",
+            "This account has no metering points yet, so there is nothing to measure. PeakPower adds them once they are registered.");
+      // The two chart cards and the interval table are furniture with no
+      // content behind them here — their legends and 17 headers would sit
+      // there implying data that does not exist.
+      setConsumptionChromeVisible(false);
       chart.innerHTML = "";
+      monthChart.innerHTML = "";
       costChart.innerHTML = "";
+      costMonthChart.innerHTML = "";
       costChartSubtitle.textContent = "";
       tableSummarySub.textContent = "";
       tableBody.innerHTML = "";
+      exportBtn.disabled = true;
       return;
     }
+    setConsumptionChromeVisible(true);
     clearHighlightedRow();
     // Drop any hover state from the previous view: the hidden chart variant
     // keeps its old markup, so a stale crosshair would otherwise linger.
@@ -6032,38 +6541,77 @@
     return "All " + n + " connection" + (n === 1 ? "" : "s");
   }
 
-  function init(loadedData) {
-    DATA = loadedData;
+  /**
+   * The metering dataset the ACTIVE account owns.
+   *
+   * Only the seeded account has one. Any other account gets a literal empty
+   * dataset rather than a rebuilt one: ConsumptionDataLoader.buildCompactDataset()
+   * always returns the full SITE_META list whatever rows it is handed, so an
+   * "empty" dataset built the obvious way would still report six connections
+   * to allSiteIds() and portfolioLabel().
+   */
+  var EMPTY_DATASET = { sites: [], byDate: {}, bySite: {}, hedge: [] };
+  var LOADED_DATASET = null;
+
+  function datasetForAccount() {
+    return (acct().seeded && LOADED_DATASET) ? LOADED_DATASET : EMPTY_DATASET;
+  }
+
+  /** Whether this account has any metering data to chart at all. */
+  function hasAccountData() { return !!(DATA && DATA.sites && DATA.sites.length); }
+
+  /**
+   * Everything about the page that depends on WHICH account is showing.
+   *
+   * Split out of init() so an account switch runs it too — a switch that only
+   * called renderApp() would leave the new account on the old one's date
+   * range, and the Consumption presets pointed at dates it has no data for.
+   */
+  function applyAccountData() {
+    DATA = datasetForAccount();
 
     allDates = Object.keys(DATA.byDate).sort();
     MIN_DATE = allDates[0];
     MAX_DATE = allDates[allDates.length - 1];
 
-    // The furthest date any hedge block (any site) still covers — the range
-    // inputs allow selecting all the way out there, even though there's no
-    // usage data past MAX_DATE, so a known future position can be seen ahead
-    // of the metering data existing for it. Falls back to MAX_DATE if there's
-    // somehow no hedge data at all.
+    var controls = [fromDate, toDate, dayDate];
+    var tabButtons = document.querySelectorAll(".chart-tab[data-period]");
+    var t;
+
+    if (!hasAccountData()) {
+      // No dataset means no range to pick, and the controls must be shut off
+      // rather than left live over undefined dates. Leaving the presets
+      // enabled is not cosmetic: applyPeriodPreset() reads MAX_SELECTABLE_DATE,
+      // which is undefined here, and periodRange() then calls .slice() on it.
+      MAX_SELECTABLE_DATE = undefined;
+      controls.forEach(function (el) { el.value = ""; el.disabled = true; el.removeAttribute("min"); el.removeAttribute("max"); });
+      for (t = 0; t < tabButtons.length; t++) { tabButtons[t].disabled = true; }
+      zoomOutBtn.disabled = true;
+      zoomInBtn.disabled = true;
+      exportBtn.disabled = true;
+      lastRender = null;
+      syncLinkedTrades();
+      return;
+    }
+
+    // The furthest date any hedge block still covers — the range inputs allow
+    // selecting all the way out there, even though there's no usage data past
+    // MAX_DATE, so a known future position can be seen ahead of the metering
+    // data existing for it.
     MAX_SELECTABLE_DATE = MAX_DATE;
     (DATA.hedge || []).forEach(function (block) {
       if (block.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = block.periodEnd; }
     });
-    // The wizard's own furthest quoted year (WIZARD_PERIODS.year, now out to
-    // Cal 2028 — see "Three period rows, one selection" in CLAUDE.md) widens
-    // the range too. indicativeEpexFor() and usage-projection.js can price
-    // and project a date that far out on their own, with no hedge block or
-    // confirmed trade needed to reach it, so the range inputs should not stop
-    // short of what the page can actually compute — see "Looking past the
-    // end of the data".
+    // The wizard's own furthest quoted year widens the range too:
+    // indicativeEpexFor() and usage-projection.js can price and project a date
+    // that far out on their own, with no hedge block or confirmed trade needed
+    // to reach it — see "Looking past the end of the data".
     (PortalSeedData.WIZARD_PERIODS.year || []).forEach(function (row) {
       if (row.end > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = row.end; }
     });
     // Confirmed trades extend that horizon too — a position for a period
-    // beyond every contracted block is exactly what the customer wants to
-    // look at, and would otherwise be unreachable because the To input's max
-    // stopped short of it. Only confirmed ones: nothing else reaches this
-    // chart any more (see isPendingOffer's removal), so nothing else has a
-    // reason to widen the range.
+    // beyond every contracted block is exactly what the customer wants to look
+    // at, and would otherwise sit beyond the To input's max.
     liveTradeRecords().forEach(function (r) {
       var now = nowForLink();
       if (!r.periodEnd) { return; }
@@ -6071,41 +6619,45 @@
       if (r.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = r.periodEnd; }
     });
 
-    [fromDate, toDate, dayDate].forEach(function (el) {
+    controls.forEach(function (el) {
       el.min = MIN_DATE;
       el.max = MAX_SELECTABLE_DATE;
       el.disabled = false;
     });
+    for (t = 0; t < tabButtons.length; t++) { tabButtons[t].disabled = false; }
+    zoomOutBtn.disabled = false;
+    zoomInBtn.disabled = false;
 
     // Default to the latest single day, matching the page's previous default.
     fromDate.value = MAX_DATE;
     toDate.value = MAX_DATE;
+    markActivePreset();
 
+    // The contracted blocks only exist once DATA has arrived, and they are
+    // part of the trade list — so rebuild it here rather than leaving Trading
+    // showing the link/seed half only.
+    syncLinkedTrades();
+  }
+
+  function init(loadedData) {
+    LOADED_DATASET = loadedData;
+
+    // Wired once, whatever account is showing — applyAccountData() only ever
+    // changes whether these controls are enabled, never who listens to them.
     var tabButtons = document.querySelectorAll(".chart-tab[data-period]");
     for (var t = 0; t < tabButtons.length; t++) {
-      tabButtons[t].disabled = false;
       tabButtons[t].addEventListener("click", function (evt) {
         applyPeriodPreset(evt.currentTarget.getAttribute("data-period"));
       });
     }
-    // Start enabled (updateZoomUi immediately disables whichever end is at
-    // its limit) rather than disabled-until-first-draw — there's no reason
-    // to wait, unlike the tabs above, which do nothing until a range exists.
-    zoomOutBtn.disabled = false;
-    zoomInBtn.disabled = false;
     zoomOutBtn.addEventListener("click", zoomChartOut);
     zoomInBtn.addEventListener("click", zoomChartIn);
-
     exportBtn.addEventListener("click", exportCsv);
     fromDate.addEventListener("change", function () { markActivePreset(); render(); });
     toDate.addEventListener("change", function () { markActivePreset(); render(); });
     dayDate.addEventListener("change", function () { setDayDate(this.value); });
 
-    markActivePreset();
-    // The contracted blocks only exist once DATA has arrived, and they are
-    // part of the trade list — so rebuild it here, before the first render,
-    // rather than leaving Trading showing the link/seed half only.
-    syncLinkedTrades();
+    applyAccountData();
     renderCurrentPage();
   }
 
