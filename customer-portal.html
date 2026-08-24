@@ -1074,9 +1074,6 @@
       </div>
 
       <div class="page" id="page-consumption">
-        <div class="controls">
-          <span class="ctl">Connection <select id="site-select" disabled></select></span>
-        </div>
         <div class="stat-stack" id="stat-row">
           <div class="stat-row"><div class="stat-card"><div class="label">Loading</div><div class="value">…</div><div class="sublabel">Fetching source data and calculating in the browser</div></div></div>
         </div>
@@ -1231,7 +1228,25 @@
     }
     return usageProfiles[siteId];
   }
-  var siteSelect = document.getElementById("site-select");
+
+  /**
+   * A projected interval for the whole portfolio: each site projected from its
+   * own history, then summed. Not one profile built from summed history —
+   * every site keeps its own weekday/weekend and time-of-day shape, and
+   * summing the projections is the same arithmetic the measured path does.
+   */
+  function projectPortfolioInterval(dateStr, timeStr) {
+    var c = 0, g = 0;
+    allSiteIds().forEach(function (id) {
+      var one = UsageProjection.projectInterval(getUsageProfile(id), dateStr, timeStr);
+      c += one.consumption; g += one.production;
+    });
+    return { consumption: c, production: g };
+  }
+  // All six electricity connections at once — see "Consumption is the whole
+  // portfolio" in CLAUDE.md. `tilburg-gas` has no usage rows, so DATA.sites
+  // already excludes it.
+  function allSiteIds() { return (DATA && DATA.sites ? DATA.sites : []).map(function (s) { return s.id; }); }
   var fromDate = document.getElementById("from-date");
   var toDate = document.getElementById("to-date");
   var exportBtn = document.getElementById("export-csv");
@@ -1526,9 +1541,9 @@
     }
   }
 
-  // Deep-link from another screen: focus one site on one day.
-  function goToConsumption(siteId, dateStr, toDateStr) {
-    if (siteId && DATA) { siteSelect.value = siteId; }
+  // Deep-link from another screen: frame the chart on a date range. There is
+  // no connection to pass any more — Consumption is the whole portfolio.
+  function goToConsumption(dateStr, toDateStr) {
     if (dateStr && DATA) {
       fromDate.value = clampDate(dateStr);
       toDate.value = clampDate(toDateStr || dateStr);
@@ -1539,9 +1554,8 @@
 
   /**
    * "View on consumption chart" — from a trade's detail straight to
-   * Consumption, framed on that trade's own delivery period and connection,
-   * so the customer doesn't have to reconstruct the range with three
-   * controls. A confirmed trade shows up there as part of the hedge line;
+   * Consumption, framed on that trade's own delivery period, so the customer
+   * doesn't have to reconstruct the range by hand. A confirmed trade shows up there as part of the hedge line;
    * one that is not confirmed yet shows up as nothing, by design.
    *
    * Falls back gracefully: a trade with no structured period (the older
@@ -1551,14 +1565,12 @@
   function viewTradeOnChart(tradeId) {
     var t = state.trades.filter(function (x) { return x.id === tradeId; })[0];
     if (!t) { goTo("Consumption"); return; }
-    var conn = (t.connections && t.connections.length && t.connections[0].id) || null;
-    goToConsumption(conn, t.periodStart || null, t.periodEnd || null);
+    goToConsumption(t.periodStart || null, t.periodEnd || null);
   }
 
   /** Whether a trade carries enough structure to be framed on the chart. */
   function tradeIsChartable(t) {
-    return !!(t && t.periodStart && t.periodEnd &&
-      t.connections && t.connections.length && t.connections[0].id);
+    return !!(t && t.periodStart && t.periodEnd);
   }
 
   function openConnection(id) { state.connId = id; renderApp(); }
@@ -2931,7 +2943,7 @@
       var siteId = "rot", date = MAX_DATE;
       var dateSeries = DATA.byDate[date];
       var siteSeries = DATA.bySite[siteId] && DATA.bySite[siteId][date];
-      var hedgeBlocks = hedgeBlocksFor(siteId, date, date);
+      var hedgeBlocks = hedgeBlocksForSite(siteId, date, date);
       if (dateSeries && siteSeries) {
         var dSeries = ConsumptionCalc.computeIntervalSeries(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
         chartHtml = '<svg viewBox="0 0 960 220" style="width:100%;height:220px;display:block">' +
@@ -3208,8 +3220,8 @@
     }).join("") + (t.value ? '<div class="kv-row"><span class="k">Total value</span><span class="v">' + esc(t.value) + '</span></div>' : "");
     // Only a confirmed trade actually appears on that chart (it joins the
     // hedge line); a pending one is no longer drawn there at all. The button
-    // still frames the period and connection, which is worth having for any
-    // trade with a real period — but it is not a route to "see your offer".
+    // still frames the delivery period, which is worth having for any trade
+    // with a real one — but it is not a route to "see your offer".
     var chartFoot = tradeIsChartable(t)
       ? '<div class="card-foot-action"><button type="button" class="btn-secondary" onclick="PP.viewTradeOnChart(\'' +
         esc(t.id) + '\')">View on consumption chart</button></div>'
@@ -3620,16 +3632,16 @@
   /**
    * A connection's total contracted power (MW) overlapping a delivery period —
    * its static hedge_blocks_2026.json blocks PLUS every CONFIRMED live trade,
-   * via the same hedgeBlocksFor() the Consumption chart's own hedge line and
-   * cost figures read (never DATA.hedge directly, or a confirmed trade would
-   * silently drop out here same as it would there). hedgeBlocksFor() itself
+   * via hedgeBlocksForSite() — the per-connection half of the same join the
+   * Consumption chart reads portfolio-wide (never DATA.hedge directly, or a
+   * confirmed trade would silently drop out here). hedgeBlocksForSite() itself
    * doesn't filter its static half by date, so the overlap check is this
    * function's own job — matching coversRange()'s inclusive-overlap test.
    * Returns raw MW (can be negative — a sold block reduces cover, and that's
    * a real, not a clamped, position); callers decide how to display zero.
    */
   function connectionCoverMw(connId, periodStart, periodEnd) {
-    var blocks = hedgeBlocksFor(connId, periodStart, periodEnd).filter(function (b) {
+    var blocks = hedgeBlocksForSite(connId, periodStart, periodEnd).filter(function (b) {
       return b.periodStart && b.periodEnd && !(b.periodEnd < periodStart || b.periodStart > periodEnd);
     });
     var totalKw = blocks.reduce(function (sum, b) { return sum + (b.powerKw || 0); }, 0);
@@ -5106,9 +5118,8 @@
    */
   function nowForLink() { return PortalDemoClock.now(state.demoOffsetDays); }
 
-  function coversRange(req, siteId, from, to) {
-    if (!req.periodStart || !req.periodEnd || req.periodEnd < from || req.periodStart > to) { return false; }
-    return (req.connections || []).some(function (c) { return c.id === siteId; });
+  function coversRange(req, from, to) {
+    return !(!req.periodStart || !req.periodEnd || req.periodEnd < from || req.periodStart > to);
   }
 
   /**
@@ -5117,26 +5128,41 @@
    * rule as an offer — a sold block is negative — so `computeIntervalHedgeVolumes`
    * sums them alongside the contracted blocks with no special case.
    */
-  function confirmedBlocksForRange(siteId, from, to) {
+  function confirmedBlocksForRange(from, to) {
     var now = nowForLink();
-    return liveTradeRecords().filter(function (r) {
-      return PortalTradeLink.effectiveStatus(r, now) === PortalTradeLink.STATUS_CONFIRMED &&
-        coversRange(r, siteId, from, to);
-    }).map(function (r) {
-      return blockForOffer(r, (r.connections || []).filter(function (c) { return c.id === siteId; })[0]);
+    var blocks = [];
+    liveTradeRecords().forEach(function (r) {
+      if (PortalTradeLink.effectiveStatus(r, now) !== PortalTradeLink.STATUS_CONFIRMED) { return; }
+      if (!coversRange(r, from, to)) { return; }
+      // One block per connection the trade was allocated across — a trade
+      // spread over three connections is three lines of the same position,
+      // and the portfolio holds all of them.
+      (r.connections || []).forEach(function (c) { blocks.push(blockForOffer(r, c)); });
     });
+    return blocks;
   }
 
   /**
-   * The site's hedge for a range: its contracted blocks from
-   * hedge_blocks_2026.json plus every confirmed trade over that range. This is
-   * the single place the two are joined — read the hedge through here, never
-   * DATA.hedge directly, or confirmed trades silently drop out of the line,
-   * the Hedge Cost and the coverage figures.
+   * The portfolio's hedge for a range: every connection's contracted blocks
+   * from hedge_blocks_2026.json plus every confirmed trade over that range.
+   * This is the single place the two are joined — read the hedge through here,
+   * never DATA.hedge directly, or confirmed trades silently drop out of the
+   * line, the Hedge Cost and the coverage figures.
    */
-  function hedgeBlocksFor(siteId, from, to) {
+  function hedgeBlocksFor(from, to) {
+    var blocks = [];
+    allSiteIds().forEach(function (id) { blocks = blocks.concat(hedgeBlocksForSite(id, from, to)); });
+    return blocks;
+  }
+
+  /**
+   * The same join for ONE connection. Still needed where a figure really is
+   * per-connection — the wizard's CURRENT COVER pill and the Dashboard's
+   * single-site mini chart — even though Consumption itself no longer is.
+   */
+  function hedgeBlocksForSite(siteId, from, to) {
     var contracted = (DATA && DATA.hedge && DATA.hedge[siteId]) || [];
-    var confirmed = confirmedBlocksForRange(siteId, from, to);
+    var confirmed = confirmedBlocksForRange(from, to).filter(function (b) { return b.siteId === siteId; });
     return confirmed.length ? contracted.concat(confirmed) : contracted;
   }
 
@@ -5161,6 +5187,9 @@
     var sign = String(req.direction).toLowerCase() === "sell" ? -1 : 1;
     return {
         shape: String(req.shape || "").toLowerCase(),
+        // Which connection this line belongs to, so the per-connection reader
+        // can pick its own lines back out of a trade spread across several.
+        siteId: line && line.id,
         periodStart: req.periodStart,
         periodEnd: req.periodEnd,
         powerKw: sign * ((line && line.powerMw || 0) * 1000),
@@ -5248,12 +5277,14 @@
   function concatRangeData(from, to) {
     var dates = allCalendarDatesInRange(from, to);
     var allTimes = [], allDatesPerIndex = [], allPrices = [], allC = [], allG = [], hasUsage = [];
-    var siteId = siteSelect.value;
-    var profile = null; // built lazily, only if this range actually needs a projection
+    var siteIds = allSiteIds();
     dates.forEach(function (d) {
       var ds = DATA.byDate[d];
-      var ss = DATA.bySite[siteId] && DATA.bySite[siteId][d];
-      var real = !!(ds && ss);
+      // Every site is metered over the same window, so a date is measured for
+      // the portfolio or for none of it — but this checks rather than assumes,
+      // since a half-measured sum would silently understate the total.
+      var series = siteIds.map(function (id) { return DATA.bySite[id] && DATA.bySite[id][d]; });
+      var real = !!ds && series.length > 0 && series.every(function (x) { return !!x; });
       var times = real ? ds.t : syntheticDayTimes();
       for (var i = 0; i < times.length; i++) {
         var t = times[i];
@@ -5261,12 +5292,13 @@
         allDatesPerIndex.push(d);
         hasUsage.push(real);
         if (real) {
+          var sumC = 0, sumG = 0;
+          for (var k = 0; k < series.length; k++) { sumC += series[k].c[i]; sumG += series[k].g[i]; }
           allPrices.push(ds.p[i]);
-          allC.push(ss.c[i]);
-          allG.push(ss.g[i]);
+          allC.push(sumC);
+          allG.push(sumG);
         } else {
-          if (!profile) { profile = getUsageProfile(siteId); }
-          var projected = UsageProjection.projectInterval(profile, d, t);
+          var projected = projectPortfolioInterval(d, t);
           // Forward spot is unknown, so this is the quoted forward curve for
           // the delivery period, not a guess and not a measurement — see
           // indicativeEpexFor(). Null where no period covers the date.
@@ -5792,8 +5824,6 @@
     // resizes redraw through drawMonthCharts() directly, never render(),
     // which is exactly why they don't hit this reset.
     state.chartZoom = 1;
-    var siteId = siteSelect.value;
-    var site = DATA.sites.filter(function (s) { return s.id === siteId; })[0];
 
     // From/To drive everything. A reversed range is treated as empty rather
     // than silently swapped, so the inputs always reflect what's rendered.
@@ -5803,15 +5833,15 @@
     // trade is a position, so it belongs in the hedge line and its cost, not
     // in the provisional offer overlay. Declared after from/to since it needs
     // the range.
-    var hedgeBlocks = hedgeBlocksFor(siteId, from, to);
+    var hedgeBlocks = hedgeBlocksFor(from, to);
     var range = concatRangeData(from, to);
 
     if (range.times.length === 0) {
       lastRender = null;
       exportBtn.disabled = true;
-      // Site is already visible page-level (site-select) — a crumb repeating
-      // it here is the same redundancy design flagged on the populated path,
-      // just in the no-data state nobody screenshots. Clear, don't restate.
+      // Clear, don't restate: crumb is shared across screens and Consumption
+      // is the one that doesn't route through renderTopbarChrome(), so this
+      // assignment has to stay even when there is nothing to say.
       crumb.textContent = "";
       chartSubtitle.textContent = "";
       statRow.innerHTML = statusCardHtml("No data", "—",
@@ -5857,9 +5887,8 @@
     var projectedStats = realDayCount === totalDayCount ? null : filterRangeByUsage(false);
 
     var dayCount = totalDayCount;
-    // Site/From/To are now visible page-level and in the chart-card toolbar,
-    // so a crumb restating "site · range" here would duplicate controls
-    // sitting right next to it — design's call, confirmed by team-lead. The
+    // From/To sit in the chart-card toolbar, so a crumb restating the range
+    // here would duplicate controls sitting right next to it. The
     // assignment itself must stay (not just deleted): crumb is one shared
     // element across all seven screens (see renderTopbarChrome), and
     // Consumption is the one screen that doesn't route through it — skipping
@@ -5868,14 +5897,14 @@
     crumb.textContent = "";
     // Honest about what part of the range is real: usage data currently ends
     // at MAX_DATE, so a range reaching past it is labelled as projected
-    // (from this site's own historical profile) rather than silently implying
+    // (each connection from its own historical profile) rather than implying
     // measured coverage. Cost stays withheld there regardless (see above).
     var futureNote = to > MAX_DATE
       ? (from > MAX_DATE
         ? " · projected — no measured usage yet"
         : " · measured usage ends " + formatDateShort(MAX_DATE) + ", projected after that")
       : "";
-    chartSubtitle.textContent = range.times.length + " intervals · " +
+    chartSubtitle.textContent = portfolioLabel() + " · " + range.times.length + " intervals · " +
       dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam" + futureNote;
 
     renderPositionPanel(stats, { realDayCount: realDayCount, totalDayCount: totalDayCount, measuredStats: measuredStats, projectedStats: projectedStats });
@@ -5921,7 +5950,7 @@
     renderTable(range.dates, range.times, range.prices, series, range.hasUsage);
 
     lastRender = {
-      site: site, from: from, to: to, range: range, series: series, stats: stats,
+      from: from, to: to, range: range, series: series, stats: stats,
       measuredStats: measuredStats, projectedStats: projectedStats,
       // "N of M days have data" — for cards/any other screen that wants to
       // say a range is partly or wholly forward-looking without redoing this
@@ -5984,9 +6013,9 @@
   function exportCsv() {
     if (!lastRender) { return; }
     var r = lastRender;
-    // BOM so Excel detects UTF-8 (the site names carry accented characters).
+    // BOM so Excel detects UTF-8.
     var blob = new Blob(["﻿" + buildCsv(r)], { type: "text/csv;charset=utf-8;" });
-    var name = "consumption_" + r.site.id + "_" + r.from + (r.from === r.to ? "" : "_to_" + r.to) + ".csv";
+    var name = "consumption_all-connections_" + r.from + (r.from === r.to ? "" : "_to_" + r.to) + ".csv";
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
@@ -6001,41 +6030,14 @@
   // and grouped/calculated client-side (see consumption-data-loader.js).
   // Nothing here is pre-computed ahead of time — editing hedge_blocks_2026.json
   // or the combined dataset takes effect on the next page load, no build step.
-  /**
-   * "871687100000000011" -> "8716 8710 0000 0000 11" — matches the spaced
-   * EAN format PortalSeedData.CONNECTIONS already uses elsewhere in this
-   * portal (Connections list/detail), so the same metering point reads the
-   * same way in both places. Groups of 4 with a trailing 2 (18 digits).
-   */
-  function formatEan(ean) {
-    return String(ean).replace(/(\d{4})(?=\d)/g, "$1 ");
-  }
-
-  /**
-   * "Rotterdam DC · 8716 8710 0000 0000 11" — a middot, not an em dash:
-   * this portal already uses " — " for the "no name set" placeholder
-   * itself (SITE_META), so joining name+EAN with the same character would
-   * print three dashes in a row for that one connection. The middot is
-   * also the separator the chart subtitle already uses for this kind of
-   * joining, so it's not a new convention. For a connection with no real
-   * name, the placeholder text adds nothing next to its own EAN — the EAN
-   * *is* the identifier in that case — so the name is dropped entirely
-   * rather than printed alongside a middot too.
-   */
-  function connectionOptionLabel(site) {
-    var hasRealName = !/^—.*—$/.test(String(site.name).trim());
-    return (hasRealName ? site.name + " · " : "") + formatEan(site.ean);
+  /** "All 6 connections" — what the page is showing, now that it is not one. */
+  function portfolioLabel() {
+    var n = allSiteIds().length;
+    return "All " + n + " connection" + (n === 1 ? "" : "s");
   }
 
   function init(loadedData) {
     DATA = loadedData;
-
-    DATA.sites.forEach(function (site) {
-      var opt = document.createElement("option");
-      opt.value = site.id;
-      opt.textContent = connectionOptionLabel(site);
-      siteSelect.appendChild(opt);
-    });
 
     allDates = Object.keys(DATA.byDate).sort();
     MIN_DATE = allDates[0];
@@ -6081,7 +6083,6 @@
       el.disabled = false;
     });
 
-    siteSelect.value = "rot";
     // Default to the latest single day, matching the page's previous default.
     fromDate.value = MAX_DATE;
     toDate.value = MAX_DATE;
@@ -6101,9 +6102,7 @@
     zoomOutBtn.addEventListener("click", zoomChartOut);
     zoomInBtn.addEventListener("click", zoomChartIn);
 
-    siteSelect.disabled = false;
     exportBtn.addEventListener("click", exportCsv);
-    siteSelect.addEventListener("change", render);
     fromDate.addEventListener("change", function () { markActivePreset(); render(); });
     toDate.addEventListener("change", function () { markActivePreset(); render(); });
 

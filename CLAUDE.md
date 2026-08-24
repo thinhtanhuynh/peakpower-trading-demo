@@ -664,10 +664,10 @@ state unambiguously, so there is no extra badge on top of it.
   `WIZARD_CONNECTIONS`, which would be a second copy free to drift. Only
   Breda carries an extra `note` ("ends 31 Dec 2026").
 - **CURRENT COVER is real**, not a seed string: `connectionCoverMw(connId,
-  periodStart, periodEnd)` sums every block from `hedgeBlocksFor(connId, …)`
+  periodStart, periodEnd)` sums every block from `hedgeBlocksForSite(connId, …)`
   whose period overlaps the **currently selected** delivery period, and
   renders it as a `.cc-pill` — blue when covered, grey when not, amber
-  carrying the reason when the connection is ineligible. `hedgeBlocksFor()`
+  carrying the reason when the connection is ineligible. `hedgeBlocksForSite()`
   does not date-filter its static half, so the overlap test is this
   function's job. A negative figure (a sold block reducing net cover) is
   shown as negative, not clamped.
@@ -766,13 +766,36 @@ The only screen backed by real calculated data. It filters by an arbitrary
 From/To date range — the old fixed Day/Month mode toggle is gone.
 `tilburg-gas` is excluded everywhere real usage data is used.
 
+**Consumption is the whole portfolio — there is no connection filter.** A
+block is requested across connections and its cover applies to the portfolio,
+so a per-connection view of it would be answering a question nobody is asking.
+Every figure on the screen is the sum over all six electricity connections:
+`concatRangeData()` sums each interval's consumption and production across
+`DATA.sites`, and `hedgeBlocksFor(from, to)` concatenates every connection's
+contracted blocks with every confirmed trade's per-connection lines. Nothing
+else in the maths changes — `consumption-calc.js` sees one bigger site.
+
+Two things fall out of that and are worth keeping straight:
+
+- **A date is measured for the portfolio or for none of it.** All six sites
+  share one metering window, so `concatRangeData()` could assume it — it
+  checks anyway, because a half-measured sum would silently understate the
+  total rather than announce itself.
+- **Projection is per connection, then summed** (`projectPortfolioInterval`),
+  not one profile built from summed history. Each site keeps its own
+  weekday/weekend and time-of-day shape, which is the same arithmetic the
+  measured path does.
+
+`hedgeBlocksForSite(siteId, from, to)` is the per-connection half of the same
+join, still read by the two figures that genuinely are per-connection: the
+wizard's CURRENT COVER pill and the Dashboard's single-site mini chart.
+
 #### Where the controls live
 
 There is no single controls row. Each control sits with what it filters:
 
 | Control | Lives | Because |
 |---|---|---|
-| Site `#site-select` | page level, by the title | it changes everything on the page |
 | From/To + Day/Month/Quarter `#from-date` `#to-date` | the usage-chart card's toolbar | they filter the charts and table |
 | Zoom `#chart-zoom` (`#zoom-out`/`#zoom-in`) | same toolbar, right of the presets | it changes how closely the already-filtered range is viewed |
 | Export CSV `#export-csv` | the interval table's summary row | export belongs with what it exports |
@@ -1053,7 +1076,7 @@ The table is a collapsed `<details>` disclosure. Two rules around it:
 
 **CSV export** writes exactly the table's 17 columns in the table's order, and
 every row of the current range — the full filtered dataset, not just what's on
-screen — named `consumption_<siteId>_<from>[_to_<to>].csv`. Values are
+screen — named `consumption_all-connections_<from>[_to_<to>].csv`. Values are
 **unformatted** (dot decimal, no thousands separators, 6 decimals) so the file
 parses regardless of locale; a UTF-8 BOM is prepended for Excel. The button is
 disabled whenever the range is empty and uses `.btn-primary`.
@@ -1156,8 +1179,8 @@ Restoring an overlay means restoring all of it — the band, the boundary
 markers, the legend and the tooltip wording are one vocabulary, and shipping
 the line alone leaves an unexplained dotted stroke.
 
-**Read the hedge through `hedgeBlocksFor(siteId, from, to)`, never
-`DATA.hedge[siteId]` directly.** That helper is the one place the contracted
+**Read the hedge through `hedgeBlocksFor(from, to)` — or
+`hedgeBlocksForSite()` for one connection — never `DATA.hedge` directly.** That helper is the one place the contracted
 blocks and the confirmed live trades are joined; going around it silently
 drops confirmed trades out of the line, the cost and the coverage. A confirmed
 trade is signed by direction (a sold block is negative) and priced at its firm
