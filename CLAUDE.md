@@ -547,7 +547,7 @@ claiming a split that no longer exists:
 
 | Where | Was | Now |
 |---|---|---|
-| Trading list | a separate "Contracted blocks" table below the trades | the blocks **are** trades — `blockAsTrade()` folds them into `state.trades` |
+| Trading list | a separate "Contracted blocks" table below the trades | the blocks **are** trades — `blockAsTrade()` folds them into `state.trades`, with the full request→offer→confirm→paid history |
 | Wizard step 2 | a CURRENT COVER pill per connection card | one `accountCoverMw()` line above the grid |
 | Connection detail | a "Block positions on this connection" table from seeded `CONNECTIONS[].blocks` | a line saying blocks are held at account level, linking to Trading |
 | Dashboard mini chart | Rotterdam DC's own day under a hedge line | the whole portfolio, like Consumption |
@@ -555,6 +555,49 @@ claiming a split that no longer exists:
 `PortalSeedData.CONNECTIONS[].blocks` is **gone**, not merely unread — it was
 a mockup fiction that would have contradicted the account-level hedge line on
 the screen next to it.
+
+### Shape is Base or Peak, never "Base (sell)"
+
+A sale is legible from **Direction**, which is its own column on the list and
+its own row on the detail. The shape column carried a `(sell)` suffix for a
+while — on the seeded `TRD-1867` and in `blockAsTrade()` — which made one
+product look like two and meant a Sell could never be grouped with a Buy of
+the same shape. `shape` is now only ever `Base` or `Peak`; the sign lives on
+the power (`−0,090 MW`) and the direction on its own field.
+
+### A finished trade says it was paid
+
+`STATUS_CONFIRMED_PAID` (`"Confirmed · paid"`, success tone) is the
+settled-history status, used by every contracted block and by the seeded
+trades that already completed (`TRD-1051`, `TRD-1042`, `TRD-1867`).
+
+It is deliberately **not** `portal-trade-link.js`'s balance vocabulary
+(`Confirmed · balance due` / `overdue` / `paid`). Those describe a live trade
+that still carries a payment schedule someone can act on; a block and a seeded
+historical trade carry none — they are finished — so they say so once and
+offer nothing to click.
+
+**Every one of them carries the whole flow in its history**, not just the
+ending: request submitted → offer published → offer accepted → trade confirmed
+→ payment settled. A trade that showed only "confirmed" read as though the
+money had never moved.
+
+Two rules the story follows so it cannot contradict the rest of the app:
+
+- **A block's dates are derived from its own delivery period**, never
+  invented: requested 45 days before `periodStart`, confirmed the next day,
+  balance paid the day before delivery opens — the same due date
+  `PortalTermsLink` uses. The deposit is `PortalTermsLink.DEFAULT_DEPOSIT_PCT`
+  of the value, so the figures match what the Payment card would show.
+- **A Sell reserves nothing.** `PortalTermsLink.appliesTo()` is false for a
+  sale, so the accepted step says so and the last step is *Proceeds paid* —
+  the wallet is credited, not debited. Claiming a deposit on a sale would
+  invent an obligation.
+
+The seeded trades keep their existing money story (a full reservation settled
+at confirmation, which is what `WALLET_LEDGER` records), so the added payment
+step names that settlement rather than a 20 % deposit that never happened
+there.
 
 ### Blocks in the trade list
 
@@ -564,8 +607,8 @@ appends them to `state.trades` (newest delivery period first, after the linked
 and seeded rows). A block **is** a trade — bought or sold at an agreed price
 for a delivery period, already executed — so it gets one list, one detail view
 and one vocabulary rather than a table of its own that read as a second kind
-of object. It shows `Contracted` in a success tone, and its facts say *Applies
-to: All connections on the account*.
+of object. It shows `Confirmed · paid` in a success tone, and its facts say *Applies to:
+All connections on the account*.
 
 Two things this depends on:
 

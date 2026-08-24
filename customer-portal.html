@@ -1321,6 +1321,16 @@
   // ------------------------- State machine (ported from the mockup) -----
 
   // A trade block's volume is requested in whole 0,01 MW steps, minimum 0,01 MW.
+  /**
+   * The settled-history status: a trade that was executed AND paid for.
+   *
+   * A live trade keeps portal-trade-link.js's balance-specific vocabulary
+   * ("Confirmed · balance due/overdue/paid"), because it still carries a
+   * payment schedule someone can act on. A contracted block and a seeded
+   * historical trade carry none — they are finished — so they say so once.
+   */
+  var STATUS_CONFIRMED_PAID = "Confirmed · paid";
+
   var MIN_VOLUME_MW = 0.01;
   var VOLUME_STEP_MW = 0.01;
   var VOLUME_HINT = "Volume must be at least 0,01 MW and a multiple of 0,01 MW.";
@@ -3181,11 +3191,55 @@
     var priceMwh = b.priceKwh * 1000;
     var valueEur = volumeMwh * priceMwh;
     var sold = b.powerKw < 0;
-    var shapeLabel = b.shape.charAt(0).toUpperCase() + b.shape.slice(1) + (sold ? " (sell)" : "");
+    // Shape is Base or Peak, full stop. A sale is legible from Direction — the
+    // shape column carried a "(sell)" suffix for a while, which made the same
+    // product look like two.
+    var shapeLabel = b.shape.charAt(0).toUpperCase() + b.shape.slice(1);
     // formatNL emits an ASCII hyphen; this page writes a real minus sign and
     // puts it before the € — the ledger and the seeded block rows both do.
     var num = function (v, dp) { return ConsumptionCalc.formatNL(v, dp).replace("-", "\u2212"); };
     var money = function (v) { return (v < 0 ? "\u2212 € " : "€ ") + ConsumptionCalc.formatNL(Math.abs(v), 2); };
+
+    // A block is history: it went through the same request -> offer -> accept
+    // -> confirm -> pay flow every live trade does, and it finished. The dates
+    // are derived from its own delivery period rather than invented, and the
+    // deposit follows the app's own terms (see PortalTermsLink) so the story
+    // cannot contradict the Payment card on a live trade.
+    var requested = shiftIsoDate(b.periodStart, -45);
+    var confirmed = shiftIsoDate(b.periodStart, -44);
+    var dueDate = shiftIsoDate(b.periodStart, -1);
+    var pct = PortalTermsLink.DEFAULT_DEPOSIT_PCT;
+    var depositEur = Math.abs(valueEur) * pct / 100;
+    var balanceEur = Math.abs(valueEur) - depositEur;
+
+    var events = [
+      { title: "Request submitted", actor: "J. de Vries · Admin (you)",
+        ts: formatDateShort(requested) + ", 10:12:00",
+        body: shapeLabel + " " + b.periodLabel + " · " + num(Math.abs(b.powerKw) / 1000, 3) +
+          " MW " + (sold ? "offered for sale" : "requested") + " across every connection on the account.",
+        tone: "submit" },
+      { title: "Offer published", actor: "PeakPower Trading",
+        ts: formatDateShort(requested) + ", 10:26:00",
+        body: "Price € " + ConsumptionCalc.formatNL(priceMwh, 4) + "/MWh · total " + money(Math.abs(valueEur)) +
+          " · reaction window 30 minutes.",
+        tone: "indigo" },
+      { title: "Offer accepted", actor: "J. de Vries · Admin (you)",
+        ts: formatDateShort(requested) + ", 10:39:00",
+        body: sold
+          ? "A sale reserves nothing — PeakPower pays on execution."
+          : eur(depositEur) + " reserved on the company wallet (" + pctLabel(pct) + " deposit).",
+        tone: "amber" },
+      { title: "Trade confirmed", actor: "PeakPower Trading",
+        ts: formatDateShort(confirmed) + ", 09:05:00",
+        body: "Executed on the market. Held across every connection on the account and drawn as part of the hedge line for this period.",
+        tone: "green" },
+      { title: sold ? "Proceeds paid" : "Balance paid", actor: sold ? "PeakPower Trading" : "J. de Vries · Admin (you)",
+        ts: formatDateShort(dueDate) + ", 09:00:00",
+        body: sold
+          ? "Wallet credited " + eur(Math.abs(valueEur)) + " for the sold volume."
+          : eur(balanceEur) + " paid, settling the block in full before delivery opened.",
+        tone: "green" }
+    ];
 
     return {
       id: b.id,
@@ -3197,31 +3251,35 @@
       volume: num(volumeMwh, 2) + " MWh",
       price: "€ " + ConsumptionCalc.formatNL(priceMwh, 4),
       value: money(valueEur),
-      status: "Contracted",
+      status: STATUS_CONFIRMED_PAID,
       statusTone: "success",
       periodStart: b.periodStart,
       periodEnd: b.periodEnd,
       facts: [
         ["Reference", b.id],
-        ["State", "Contracted · delivering"],
+        ["State", STATUS_CONFIRMED_PAID],
         ["Direction", sold ? "Sell" : "Buy"],
         ["Shape", shapeLabel],
         ["Delivery period", b.periodLabel + " · " + formatDateShort(b.periodStart) + " – " + formatDateShort(b.periodEnd)],
         ["Applies to", "All connections on the account"],
         ["Power", num(b.powerKw / 1000, 3) + " MW"],
         ["Volume", num(volumeMwh, 2) + " MWh"],
+        // No "Total value" row here: renderTradeDetail appends one from
+        // `value` itself, and listing it twice was exactly that.
         ["Agreed price", "€ " + ConsumptionCalc.formatNL(priceMwh, 4) + " / MWh"]
       ],
-      events: [{
-        title: "Block contracted",
-        actor: "PeakPower Trading",
-        ts: "delivery " + formatDateShort(b.periodStart) + " – " + formatDateShort(b.periodEnd),
-        body: "Held across every connection on the account. " +
-          (sold ? "A sold block reduces cover" : "Drawn as part of the hedge line") +
-          " on the consumption chart for this period.",
-        tone: "success"
-      }]
+      events: events
     };
+  }
+
+  /** "2026-07-01" + n days, as an ISO date. Calendar arithmetic, never ms. */
+  function shiftIsoDate(dateStr, days) {
+    var parts = String(dateStr).split("-");
+    var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    d.setDate(d.getDate() + days);
+    return d.getFullYear() + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
   }
 
   /** Every contracted block, newest delivery period first. */
@@ -5258,11 +5316,9 @@
   /**
    * One offer record + its line for this site, as a hedge-shaped block.
    *
-   * Signed by direction, matching the convention `portal-seed-data.js`'s
-   * CONNECTIONS block positions already use for a sold block (`shape: "Base
-   * (sell)"`, `allocated: "−0,020 MW"`, `volume: "−14,88 MWh"`) — negative,
-   * not a second flag or a separate "sold" field. A sale reduces the hedged
-   * position, so its powerKw goes negative here; nothing downstream needs to
+   * Signed by direction: a sale reduces the hedged position, so its powerKw
+   * goes negative here — negative, not a second flag or a separate "sold"
+   * field, and never a different `shape`. Nothing downstream needs to
    * know why a number is negative, because computeIntervalHedgeVolumes()
    * already just accumulates `powerKw * 0.25` and prices that at priceKwh —
    * a negative powerKw falls straight through to a negative volume AND a
