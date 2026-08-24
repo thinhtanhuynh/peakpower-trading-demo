@@ -94,6 +94,31 @@
   .sidebar-footer .avatar { width:28px; height:28px; border-radius:50%; background:var(--pp-mint); color:#08302a; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   .sidebar-footer .who { font-size:12px; font-weight:600; color:#fff; }
   .sidebar-footer span { display:block; margin-top:1px; font-size:10px; color:#93a2b5; }
+  /* Account menu: the products a customer holds decide what the rail shows,
+     so the switch sits with the account, at the foot of the rail. */
+  .account-menu { margin-top:auto; position:relative; margin-left:10px; margin-right:10px; border-top:1px solid rgba(255,255,255,.09); }
+  .account-menu .account-row { display:flex; align-items:center; gap:10px; padding:14px 12px 12px; border-radius:8px; cursor:pointer; }
+  .account-menu .account-row:hover { background:rgba(255,255,255,.06); }
+  .account-menu .account-row .avatar { width:28px; height:28px; border-radius:50%; background:var(--pp-mint); color:#08302a; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .account-menu .account-row .who { color:#fff; font-size:12px; font-weight:600; }
+  .account-menu .account-row .org { color:#93a2b5; font-size:10px; margin-top:1px; }
+  .account-menu .account-caret { color:#7b8ba0; font-size:9px; flex-shrink:0; }
+  /* Full-viewport catcher, so a click anywhere else closes the popover. */
+  .account-scrim { position:fixed; inset:0; z-index:45; }
+  .account-pop { position:absolute; bottom:calc(100% + 8px); left:-4px; right:-4px; background:#fff; border:1px solid var(--pp-border); border-radius:var(--radius-lg); box-shadow:var(--pp-shadow-pop); z-index:46; overflow:hidden; }
+  .account-pop .ap-head { padding:12px 14px 10px; border-bottom:1px solid var(--pp-border); }
+  .account-pop .ap-name { font-size:12px; font-weight:700; color:var(--pp-text-heading); }
+  .account-pop .ap-sub { font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
+  .account-pop .ap-item { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 14px; cursor:pointer; }
+  .account-pop .ap-item:hover { background:var(--pp-blue-050, #eff5fc); }
+  .account-pop .ap-item-label { font-size:12.5px; font-weight:600; color:var(--pp-text-heading); }
+  .account-pop .ap-item-sub { font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
+  .account-pop .ap-chevron { font-size:12px; color:var(--pp-text-faint); }
+  /* Products screen rows. */
+  .product-row { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:13px 0; border-top:1px solid var(--pp-border); }
+  .product-row .pr-name { font-size:12.5px; font-weight:700; color:var(--pp-text-heading); }
+  .product-row.soon .pr-name { color:var(--pp-text-body); }
+  .product-row .pr-desc { font-size:11px; color:var(--pp-text-faint); margin-top:3px; line-height:1.5; }
   .main { flex:1; display:flex; flex-direction:column; overflow:auto; }
   .topbar { height:var(--topbar-height); min-height:var(--topbar-height); background:#fff; border-bottom:1px solid var(--pp-border); display:flex; align-items:center; justify-content:space-between; padding:0 28px; position:sticky; top:0; z-index:5; gap:16px; }
   .topbar .crumb { font-size:11px; color:var(--pp-text-body); }
@@ -130,7 +155,8 @@
      would otherwise collapse .page's gap to nothing (one child) and stack its
      own sections with no spacing — so the wrapper carries the gap itself. */
   #dashboard-body, #connections-body, #prices-body,
-  #trading-body, #wallet-body, #settlements-body { display:flex; flex-direction:column; gap:16px; }
+  #trading-body, #wallet-body, #settlements-body,
+  #products-body { display:flex; flex-direction:column; gap:16px; }
   /* The mockup's Dashboard wrapper is the one screen using a 20px gap. */
   #dashboard-body { gap:20px; }
   .page.active { display:flex; animation:pp-fade-in .18s ease; }
@@ -476,6 +502,12 @@
   .chart-tab:hover:not(.active):not(:disabled) { color:var(--pp-teal-700); }
   .chart-tab.active { background:#fff; color:var(--pp-teal-700); box-shadow:0 1px 2px rgba(0,0,0,0.08); }
   .chart-tab:disabled { opacity:.5; cursor:not-allowed; }
+  /* The design system's Tabs: separate outlined pills, NOT a segmented control
+     on a shared track like .chart-tabs. Used for the Wallet ledger's filter. */
+  .ds-tabs { display:inline-flex; gap:6px; }
+  .ds-tab { padding:5px 14px; border-radius:var(--radius-pill); font-size:11px; font-weight:600; cursor:pointer; background:var(--pp-surface-alt); border:1px solid var(--pp-border-strong); color:var(--pp-text-body); font-family:inherit; }
+  .ds-tab:hover:not(.active) { color:var(--pp-teal-700); }
+  .ds-tab.active { background:var(--pp-teal-100); border-color:var(--pp-teal-300); color:var(--pp-teal-700); }
   /* Same pill/segment language as .chart-tabs (matching surface, radius,
      padding) so the two read as one control cluster, not two unrelated
      widgets glued together. */
@@ -878,6 +910,10 @@
   .amount-chip { flex:1; text-align:center; padding:6px 0; border:1px solid var(--pp-border-strong); border-radius:13px; font-size:12px; font-weight:600; cursor:pointer; font-family:var(--font-sans); color:var(--pp-text-body); background:var(--pp-surface-alt); transition:border-color .15s ease, color .15s ease, background-color .15s ease; }
   .amount-chip:hover { border-color:var(--pp-teal-600); color:var(--pp-teal-700); background:var(--pp-teal-100); }
   .amount-chip.selected { border-color:var(--pp-teal-600); background:var(--pp-teal-600); color:#fff; }
+  /* A withdrawal chip above the available balance: shown, so the customer can
+     see what the round amounts are, but not offerable. */
+  .amount-chip:disabled { opacity:.45; cursor:not-allowed; }
+  .amount-chip:disabled:hover { border-color:var(--pp-border-strong); color:var(--pp-text-body); background:var(--pp-surface-alt); }
 
   .copy-row { display:flex; justify-content:space-between; align-items:center; gap:10px; background:var(--pp-surface-alt); border:1px solid var(--pp-border); border-radius:var(--radius-md); padding:10px 14px; font-size:12.5px; transition:border-color .15s ease, background-color .15s ease; }
   .copy-row:hover { border-color:var(--pp-border-strong); }
@@ -1002,14 +1038,14 @@
       <div class="sidebar-group-label">Position</div>
       <a href="#" data-page="connections"><span class="nav-dot" style="background:#1DBD8E"></span>Connections</a>
       <a href="#" data-page="consumption"><span class="nav-dot" style="background:#006ECF"></span>Consumption</a>
-      <div class="sidebar-group-label">Market</div>
-      <a href="#" data-page="prices"><span class="nav-dot" style="background:#EEB72B"></span>Prices</a>
-      <a href="#" data-page="trading"><span class="nav-dot" style="background:#3C93FA"></span>Trading</a>
+      <div class="sidebar-group-label" data-nav-product="future-trading">Market</div>
+      <a href="#" data-page="prices" data-nav-product="future-trading"><span class="nav-dot" style="background:#EEB72B"></span>Prices</a>
+      <a href="#" data-page="trading" data-nav-product="future-trading"><span class="nav-dot" style="background:#3C93FA"></span>Trading</a>
       <div class="sidebar-group-label">Finance</div>
-      <a href="#" data-page="wallet"><span class="nav-dot" style="background:#0FA69D"></span>Wallet</a>
+      <a href="#" data-page="wallet" data-nav-product="future-trading"><span class="nav-dot" style="background:#0FA69D"></span>Wallet</a>
       <a href="#" data-page="settlements"><span class="nav-dot" style="background:#9151B8"></span>Settlements</a>
     </nav>
-    <div class="sidebar-footer"><div class="avatar">JV</div><div><div class="who">J. de Vries</div><span>Vandersteen Koeling B.V.</span></div></div>
+    <div class="account-menu" id="account-menu"></div>
   </div>
   <div class="main">
     <div class="topbar">
@@ -1154,6 +1190,10 @@
         <div id="wallet-body"></div>
       </div>
 
+      <div class="page" id="page-products">
+        <div id="products-body"></div>
+      </div>
+
       <div class="page" id="page-settlements">
         <div id="settlements-body"></div>
       </div>
@@ -1284,6 +1324,30 @@
   // what the money does — "add € X to your wallet to cover the 20 % deposit"
   // — rather than "deposit … deposit", which reads as a typo.
   var MIN_TOPUP_EUR = 10;
+  var MIN_WITHDRAWAL_EUR = 10;
+
+  // Which products the account holds, kept in this browser. Same failure
+  // discipline as the cross-portal links: any read problem lands on the
+  // default rather than throwing, and a write that cannot happen is not an
+  // error the customer needs to see.
+  var PRODUCTS_KEY = "peakpower.products.v1";
+  var DEFAULT_PRODUCTS = ["day-ahead"];
+
+  function readProducts() {
+    try {
+      var raw = window.localStorage.getItem(PRODUCTS_KEY);
+      if (!raw) { return DEFAULT_PRODUCTS.slice(); }
+      var parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) { return DEFAULT_PRODUCTS.slice(); }
+      return parsed.filter(function (id) { return typeof id === "string"; });
+    } catch (e) {
+      return DEFAULT_PRODUCTS.slice();
+    }
+  }
+
+  function writeProducts(ids) {
+    try { window.localStorage.setItem(PRODUCTS_KEY, JSON.stringify(ids)); } catch (e) { /* private mode / quota */ }
+  }
 
   var state = {
     page: "Dashboard", connId: null,
@@ -1292,7 +1356,10 @@
     walletAvailable: PortalSeedData.WALLET_AVAILABLE_BALANCE, walletSettled: 29122.00, walletReserved: 9400.00,
     // topupAmount is reset to a real, computed value every time topUpWallet()
     // opens the screen (see that function) — 0 here is just "not open yet".
-    walletLedgerExtra: [], topupsExtra: [], topupAmount: 0, lastTopup: null,
+    walletLedgerExtra: [], topupCount: 0, topupAmount: 0, lastTopup: null,
+    withdrawalCount: 0, withdrawAmount: 0, lastWithdrawal: null,
+    // Which bucket the Ledger's filter is on — an index into LEDGER_TABS.
+    ledgerFilter: 0,
     wizard: { direction: "Buy", shape: "Peak", periodType: "quarter", monthIdx: 0, quarterIdx: 1,
               connIds: ["rot"], volumeMw: 0.200, note: "" },
     settlementId: null,
@@ -1313,8 +1380,115 @@
     // Whole days the demo clock is shifted by; 0 is the real clock. Read from
     // the link at load and on every storage event, so moving it in the Back
     // Office moves it here too.
-    demoOffsetDays: 0
+    demoOffsetDays: 0,
+    // Products decide what the rail shows. Not a cross-portal link — this is
+    // the customer switching a product on themselves, not a term the desk
+    // sets — but it does survive a reload, so a demo does not start by
+    // switching Future Trading back on every time.
+    products: readProducts(),
+    accountMenuOpen: false
   };
+
+  /**
+   * The product catalogue. Only Future Trading and Day Ahead Trading are
+   * modelled — the other four are named so the shelf reads as a shelf, and
+   * carry `comingSoon` so they cannot be switched on.
+   */
+  var PRODUCTS = [
+    { id: "future-trading", name: "PeakPower Future Trading", desc: "Base and peak blocks for future delivery periods, traded per connection." },
+    { id: "certificates", name: "PeakPower Certificates", desc: "Guarantees of origin, allocated per connection.", comingSoon: true },
+    { id: "forecasting", name: "PeakPower Forecasting", desc: "Day-ahead consumption forecast per connection.", comingSoon: true },
+    { id: "imbalance", name: "PeakPower Imbalance Trading", desc: "Intraday and imbalance positions on your portfolio.", comingSoon: true },
+    { id: "day-ahead", name: "PeakPower Day Ahead Trading", desc: "Uncovered and surplus volume settled per 15-minute interval at the day-ahead price." },
+    { id: "congestion", name: "PeakPower Congestion Management", desc: "Capacity-limiting contracts with your grid operator.", comingSoon: true }
+  ];
+
+  /** Which pages Future Trading gates, both in the rail and in the handlers. */
+  var FUTURE_TRADING_PAGES = { Prices: 1, Trading: 1, Wallet: 1 };
+
+  function hasProduct(id) { return state.products.indexOf(id) >= 0; }
+  function hasFutureTrading() { return hasProduct("future-trading"); }
+
+  /**
+   * Every entry point into a gated screen calls this, not just the ones whose
+   * button is hidden — a stale screen, a deep link or a leftover onclick must
+   * land on Products rather than on a page the account has no product for.
+   * Returns true when it took over the navigation.
+   */
+  function requireFutureTrading() {
+    if (hasFutureTrading()) { return false; }
+    goProducts();
+    return true;
+  }
+
+  /** Show or hide the rail entries a product pays for. */
+  function applyProductNav() {
+    var gated = document.querySelectorAll("[data-nav-product]");
+    for (var i = 0; i < gated.length; i++) {
+      gated[i].style.display = hasProduct(gated[i].getAttribute("data-nav-product")) ? "" : "none";
+    }
+  }
+
+  function accountMenuHtml() {
+    var activeCount = PRODUCTS.filter(function (p) { return hasProduct(p.id); }).length;
+    var pop = "";
+    if (state.accountMenuOpen) {
+      pop = '<div class="account-scrim" onclick="PP.toggleAccountMenu()"></div>' +
+        '<div class="account-pop">' +
+          '<div class="ap-head"><div class="ap-name">J. de Vries</div>' +
+          '<div class="ap-sub">Admin · Vandersteen Koeling B.V.</div></div>' +
+          '<div class="ap-item" onclick="PP.goProducts()">' +
+            '<div><div class="ap-item-label">Products</div>' +
+            '<div class="ap-item-sub">' + activeCount + ' of ' + PRODUCTS.length + ' active</div></div>' +
+            '<span class="ap-chevron">&#8250;</span>' +
+          '</div>' +
+        '</div>';
+    }
+    return pop +
+      '<div class="account-row" onclick="PP.toggleAccountMenu()">' +
+        '<div class="avatar">JV</div>' +
+        '<div style="flex:1;min-width:0"><div class="who">J. de Vries</div>' +
+        '<div class="org">Vandersteen Koeling B.V.</div></div>' +
+        '<span class="account-caret">&#9656;</span>' +
+      '</div>';
+  }
+
+  function renderAccountMenu() {
+    var el = document.getElementById("account-menu");
+    if (el) { el.innerHTML = accountMenuHtml(); }
+  }
+
+  function toggleAccountMenu() {
+    state.accountMenuOpen = !state.accountMenuOpen;
+    renderAccountMenu();
+  }
+
+  function goProducts() {
+    state.accountMenuOpen = false;
+    goTo("Products");
+    // goTo() re-renders the page, not the rail — without this the popover and
+    // its full-viewport scrim stay in the DOM and swallow every later click.
+    renderAccountMenu();
+  }
+
+  /**
+   * Adding or removing a product changes the rail under the customer's feet.
+   * Removing the one that pays for the page they are standing on moves them to
+   * Products — the alternative is a visible page with no way back to it.
+   */
+  function toggleProduct(id) {
+    var product = PRODUCTS.filter(function (p) { return p.id === id; })[0];
+    if (!product || product.comingSoon) { return; }
+    var had = hasProduct(id);
+    state.products = had
+      ? state.products.filter(function (x) { return x !== id; })
+      : state.products.concat([id]);
+    writeProducts(state.products);
+    if (id === "future-trading" && had && FUTURE_TRADING_PAGES[state.page]) { goTo("Products"); return; }
+    applyProductNav();
+    renderAccountMenu();
+    renderCurrentPage();
+  }
 
   function activatePageDom(pageLower) {
     var pages = document.querySelectorAll(".page");
@@ -1329,6 +1503,9 @@
   }
 
   function goTo(pageCap) {
+    // The rail hides these when the product is off, but a deep link, a stale
+    // screen or a leftover onclick can still ask for them.
+    if (FUTURE_TRADING_PAGES[pageCap] && !hasFutureTrading()) { pageCap = "Products"; }
     activatePageDom(pageCap.toLowerCase());
     resetSubViewsFor(pageCap);
     // The crumb and the topbar action slot are SHARED by all seven screens,
@@ -1388,6 +1565,7 @@
   function closeConnection() { state.connId = null; renderApp(); }
 
   function openTrade(id) {
+    if (requireFutureTrading()) { return; }
     state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "detail"; state.tradeId = id;
     renderApp();
@@ -1454,12 +1632,14 @@
   // does not, since its whole point is to honour whichever specific
   // shape+period the customer already clicked on the Prices screen.
   function startWizard() {
+    if (requireFutureTrading()) { return; }
     state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "wizard"; state.wizardStep = 0;
     state.wizard = defaultWizard("Base", "month", 0, 0);
     renderApp();
   }
   function startWizardFromPrice(shape, periodType) {
+    if (requireFutureTrading()) { return; }
     state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "wizard"; state.wizardStep = 0;
     state.wizard = defaultWizard(shape, periodType, 0, 0);
@@ -1477,6 +1657,7 @@
     return PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return c.id === id && !c.notEligible; })[0] || null;
   }
   function startWizardFromConnection(id) {
+    if (requireFutureTrading()) { return; }
     if (!tradableConnection(id)) { return; }
     state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "wizard"; state.wizardStep = 0;
@@ -1732,6 +1913,7 @@
    * a hidden container and the link did nothing at all.
    */
   function topUpWallet() {
+    if (requireFutureTrading()) { return; }
     // Default to the real amount that clears the low-balance alert, if any
     // — otherwise a plain round default. Either way this is a real number
     // computed from state, never a hardcoded one.
@@ -1743,12 +1925,21 @@
   }
   function backToWallet() { state.walletView = "ledger"; renderApp(); }
 
-  /** onchange (blur/Enter): parse, clamp, reformat the field, full re-render. */
+  /**
+   * onchange (blur/Enter): parse and reformat the field in place — never
+   * renderApp().
+   *
+   * Blur fires on the MOUSEDOWN that begins a click, so re-rendering here
+   * replaces the button being clicked between mousedown and mouseup and the
+   * browser never raises a click at all. That is what made "Pay with iDEAL"
+   * (and, when it was written the same way, "Withdraw") dead on the first
+   * click after typing an amount. Same failure as the wizard's "Deposit
+   * funds" link; same fix — patch, don't rebuild.
+   */
   function setTopupAmount(raw) {
-    var cleaned = String(raw).replace(/\./g, "").replace(",", ".");
-    var n = parseFloat(cleaned);
-    state.topupAmount = isNaN(n) || n < 0 ? 0 : n;
-    renderApp();
+    state.topupAmount = parseAmount(raw);
+    reformatAmountField("topup-amount-input", state.topupAmount);
+    refreshTopupUi();
   }
 
   /**
@@ -1800,18 +1991,17 @@
     var dateStr = pad(now.getDate()) + "-" + pad(now.getMonth() + 1) + " " + pad(now.getHours()) + ":" + pad(now.getMinutes());
     var monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     var topupDateStr = now.getDate() + " " + monthNames[now.getMonth()] + " " + now.getFullYear() + ", " + pad(now.getHours()) + ":" + pad(now.getMinutes());
-    var ref = "PAY-" + (2292 + state.topupsExtra.length);
+    var ref = "PAY-" + (2292 + state.topupCount);
     var newAvailable = state.walletAvailable + amt;
     var ledgerEntry = {
-      date: dateStr, type: "Deposit (iDEAL)", tone: "success", desc: "Deposit via iDEAL",
-      by: "J. de Vries", byNote: "", ref: ref, refKind: "none", debit: "",
-      credit: PortalSeedData.formatEUR(amt), after: PortalSeedData.formatEUR(newAvailable)
+      date: dateStr, type: "Deposit", tone: "success",
+      amount: "+ " + PortalSeedData.formatEUR(amt), positive: true,
+      by: "J. de Vries", ref: ref, refKind: "none", after: PortalSeedData.formatEUR(newAvailable)
     };
-    var topupEntry = { date: topupDateStr, method: "iDEAL · ING", ref: ref, status: "Succeeded", amount: PortalSeedData.formatEUR(amt) };
     state.walletAvailable += amt;
     state.walletSettled += amt;
+    state.topupCount += 1;
     state.walletLedgerExtra.unshift(ledgerEntry);
-    state.topupsExtra.unshift(topupEntry);
     // A real confirmation state, not an instant bounce to the ledger — see
     // renderWalletTopupSuccess(). lastTopup is a snapshot for that screen;
     // it's fine for it to go stale after the next top-up, nothing else reads it.
@@ -1822,6 +2012,132 @@
 
   /** "Back to wallet" from the confirmation screen. */
   function closeTopupSuccess() { state.walletView = "ledger"; renderApp(); }
+
+  // --- withdrawal ---------------------------------------------------------
+  //
+  // The mirror image of a deposit, with one rule a deposit does not have: you
+  // can only take out what is actually available. Reserved money is already
+  // spoken for by an accepted trade, so `walletAvailable` — not the settled
+  // balance — is the ceiling.
+  //
+  // An outstanding balance is NOT part of that ceiling. It is money still in
+  // the wallet that is already committed to a date, so withdrawing into it is
+  // allowed and warned about rather than refused: the customer may well intend
+  // to fund it again before the due date, and this POC does not enforce
+  // payment anywhere else either.
+
+  function withdrawFunds() {
+    if (requireFutureTrading()) { return; }
+    state.withdrawAmount = 0;
+    state.page = "Wallet"; activatePageDom("wallet");
+    state.walletView = "withdraw";
+    renderApp();
+  }
+
+  /** onchange (blur/Enter) — patched in place, never re-rendered. See setTopupAmount. */
+  function setWithdrawAmount(raw) {
+    state.withdrawAmount = parseAmount(raw);
+    reformatAmountField("withdraw-amount-input", state.withdrawAmount);
+    refreshWithdrawUi();
+  }
+
+  /** Writes the committed value back as NL-formatted text, leaving 0 blank. */
+  function reformatAmountField(id, value) {
+    var el = document.getElementById(id);
+    if (el) { el.value = value > 0 ? ConsumptionCalc.formatNL(value, 0) : ""; }
+  }
+
+  /** Every keystroke: patch in place, never re-render — see onTopupAmountInput. */
+  function onWithdrawAmountInput(raw) {
+    state.withdrawAmount = parseAmount(raw);
+    refreshWithdrawUi();
+  }
+
+  function setWithdrawAmountValue(v) { state.withdrawAmount = v; renderApp(); }
+
+  function parseAmount(raw) {
+    var n = parseFloat(String(raw).replace(/\./g, "").replace(",", "."));
+    return isNaN(n) || n < 0 ? 0 : n;
+  }
+
+  function withdrawAmountValid() {
+    return state.withdrawAmount >= MIN_WITHDRAWAL_EUR && state.withdrawAmount <= state.walletAvailable;
+  }
+
+  /** The one message the amount field can be wrong in two different ways. */
+  function withdrawAmountError() {
+    if (state.withdrawAmount === 0) { return ""; }
+    if (state.withdrawAmount < MIN_WITHDRAWAL_EUR) {
+      return "Minimum withdrawal is € " + ConsumptionCalc.formatNL(MIN_WITHDRAWAL_EUR, 2) + ".";
+    }
+    if (state.withdrawAmount > state.walletAvailable) {
+      return "You can withdraw at most your available balance, € " +
+        ConsumptionCalc.formatNL(state.walletAvailable, 2) + ".";
+    }
+    return "";
+  }
+
+  /** A permitted withdrawal that still leaves a committed balance short. */
+  function withdrawCommitmentWarning() {
+    var outstanding = outstandingTotal();
+    if (!withdrawAmountValid() || outstanding <= 0) { return ""; }
+    var left = state.walletAvailable - state.withdrawAmount;
+    if (left >= outstanding) { return ""; }
+    return "This leaves € " + ConsumptionCalc.formatNL(left, 2) + " against € " +
+      ConsumptionCalc.formatNL(outstanding, 2) + " of balances already committed to a delivery date.";
+  }
+
+  function refreshWithdrawUi() {
+    var valid = withdrawAmountValid();
+    var btn = document.getElementById("withdraw-btn");
+    if (btn) {
+      btn.disabled = !valid;
+      btn.textContent = "Withdraw € " + ConsumptionCalc.formatNL(state.withdrawAmount, 2);
+    }
+    var preview = document.getElementById("withdraw-preview-line");
+    if (preview) {
+      preview.textContent = valid
+        ? "New available balance: € " + ConsumptionCalc.formatNL(state.walletAvailable - state.withdrawAmount, 2)
+        : "";
+    }
+    var msg = document.getElementById("withdraw-validation");
+    if (msg) { msg.textContent = withdrawAmountError(); }
+    var warn = document.getElementById("withdraw-commitment");
+    if (warn) {
+      var text = withdrawCommitmentWarning();
+      // Text and visibility from one string, so an empty warning cannot
+      // render as a blank coloured rectangle.
+      warn.textContent = text;
+      warn.style.display = text ? "" : "none";
+    }
+  }
+
+  function performWithdrawal() {
+    // Re-checked here, not just on the disabled button: a stale screen must
+    // not withdraw its way past the available balance.
+    if (!withdrawAmountValid()) { return; }
+    var amt = state.withdrawAmount;
+    var now = new Date(nowForLink());
+    var monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    var pad = function (n) { return String(n).padStart(2, "0"); };
+    var stamp = now.getDate() + " " + monthNames[now.getMonth()] + " " + now.getFullYear() + ", " + pad(now.getHours()) + ":" + pad(now.getMinutes());
+    var ref = "WDR-" + String(75 + state.withdrawalCount).padStart(4, "0");
+    var newAvailable = state.walletAvailable - amt;
+
+    state.walletAvailable -= amt;
+    state.walletSettled -= amt;
+    state.withdrawalCount += 1;
+    state.walletLedgerExtra.unshift({
+      date: ledgerStamp(), type: "Withdrawal", tone: "neutral",
+      amount: "\u2212 " + PortalSeedData.formatEUR(amt), positive: false,
+      by: "J. de Vries", ref: ref, refKind: "none", after: PortalSeedData.formatEUR(newAvailable)
+    });
+    state.lastWithdrawal = { amount: amt, ref: ref, newAvailable: newAvailable, dateStr: stamp };
+    state.walletView = "withdraw-success";
+    renderApp();
+  }
+
+  function closeWithdrawSuccess() { state.walletView = "ledger"; renderApp(); }
 
   function openSettlement(id) {
     state.page = "Settlements"; activatePageDom("settlements");
@@ -1849,6 +2165,11 @@
     openSettlement: openSettlement, closeSettlement: closeSettlement,
     acceptOffer: acceptOffer, rejectOffer: rejectOffer,
     payTradeBalance: payTradeBalance,
+    setLedgerFilter: setLedgerFilter,
+    withdrawFunds: withdrawFunds, setWithdrawAmount: setWithdrawAmount,
+    onWithdrawAmountInput: onWithdrawAmountInput, setWithdrawAmountValue: setWithdrawAmountValue,
+    performWithdrawal: performWithdrawal, closeWithdrawSuccess: closeWithdrawSuccess,
+    toggleAccountMenu: toggleAccountMenu, goProducts: goProducts, toggleProduct: toggleProduct,
     noop: function () {}
   };
 
@@ -1974,10 +2295,9 @@
     state.walletAvailable -= amount;
     state.walletSettled -= amount;
     state.walletLedgerExtra.unshift({
-      date: ledgerStamp(), type: "Balance paid", tone: "success",
-      desc: (req.shape || "") + " " + (req.period || "") + " · " + pctLabel(100 - req.settlement.depositPct) + " balance",
-      by: "J. de Vries", byNote: "", ref: id, refKind: "trade",
-      debit: eur(amount), credit: "", after: eur(state.walletAvailable)
+      date: ledgerStamp(), type: "Trade", tone: "info",
+      amount: "\u2212 " + eur(amount), positive: false,
+      by: "J. de Vries", ref: id, refKind: "trade", after: eur(state.walletAvailable)
     });
     syncLinkedTrades();
     renderApp();
@@ -2028,10 +2348,9 @@
         state.walletAvailable -= settlement.depositEur;
         state.walletReserved += settlement.depositEur;
         state.walletLedgerExtra.unshift({
-          date: ledgerStamp(), type: "Funds reserved", tone: "warning",
-          desc: (req.shape || "") + " " + (req.period || "") + " · " + pctLabel(settlement.depositPct) + " deposit",
-          by: "J. de Vries", byNote: "", ref: req.id, refKind: "trade",
-          debit: eur(settlement.depositEur), credit: "", after: eur(state.walletAvailable)
+          date: ledgerStamp(), type: "Trade", tone: "info",
+          amount: "\u2212 " + eur(settlement.depositEur), positive: false,
+          by: "J. de Vries", ref: req.id, refKind: "trade", after: eur(state.walletAvailable)
         });
       }
     }
@@ -2062,21 +2381,21 @@
       if (failed) {
         state.walletAvailable += amount;
         state.walletLedgerExtra.unshift({
-          date: ledgerStamp(), type: "Reservation released", tone: "info",
-          desc: r.id + " failed" + (r.failure && r.failure.reason ? " — " + r.failure.reason : ""),
-          by: (r.failure && r.failure.by) || "PeakPower Trading", byNote: "",
-          ref: r.id, refKind: "trade", debit: "", credit: eur(amount), after: eur(state.walletAvailable)
+          date: ledgerStamp(), type: "Trade", tone: "info",
+          amount: "+ " + eur(amount), positive: true,
+          by: (r.failure && r.failure.by) || "PeakPower Trading",
+          ref: r.id, refKind: "trade", after: eur(state.walletAvailable)
         });
       } else {
-        // Debit and credit both, netting to no change in available — the shape
-        // the seeded "reservation settled" row already uses, because the money
-        // left available when it was reserved, not now.
+        // Nets to zero, like the seeded confirmation rows: the money left
+        // available when the deposit was reserved, not now. The settled
+        // balance is what actually moves here.
         state.walletSettled -= amount;
         state.walletLedgerExtra.unshift({
-          date: ledgerStamp(), type: "Trade confirmed", tone: "success",
-          desc: (r.shape || "") + " " + (r.period || "") + " · deposit settled",
-          by: (r.confirmation && r.confirmation.by) || "PeakPower Trading", byNote: "",
-          ref: r.id, refKind: "trade", debit: eur(amount), credit: eur(amount), after: eur(state.walletAvailable)
+          date: ledgerStamp(), type: "Trade", tone: "info",
+          amount: eur(0), positive: false,
+          by: (r.confirmation && r.confirmation.by) || "PeakPower Trading",
+          ref: r.id, refKind: "trade", after: eur(state.walletAvailable)
         });
       }
     });
@@ -2221,6 +2540,8 @@
   // way round would build the first render against the real clock.
   syncDemoClock();
   refreshDemoClockUi();
+  applyProductNav();
+  renderAccountMenu();
   syncLinkedTrades();
   PortalTradeLink.subscribe(window, function () { syncLinkedTrades(); renderApp(); });
   PortalDemoClock.subscribe(window, function () {
@@ -2278,7 +2599,10 @@
     var actionsHtml = "";
     crumb.innerHTML = "";
 
-    if (page === "Dashboard") {
+    if (page === "Products") {
+      var activeCount = PRODUCTS.filter(function (p) { return hasProduct(p.id); }).length;
+      setCrumb("Vandersteen Koeling B.V. · " + activeCount + " of " + PRODUCTS.length + " products active");
+    } else if (page === "Dashboard") {
       setCrumb("Vandersteen Koeling B.V. · 6 connections");
     } else if (page === "Connections" && state.connId) {
       var conn = PortalSeedData.CONNECTIONS.filter(function (c) { return c.id === state.connId; })[0];
@@ -2306,10 +2630,13 @@
     } else if (page === "Wallet" && state.walletView === "topup") {
       title = "Deposit funds";
       setCrumb("Add funds to your wallet", "Wallet", "backToWallet");
+    } else if (page === "Wallet" && state.walletView === "withdraw") {
+      title = "Withdraw funds";
+      setCrumb("Pay out to your own account", "Wallet", "backToWallet");
     } else if (page === "Wallet") {
       setCrumb("Vandersteen Koeling B.V. · EUR");
       actionsHtml = '<button type="button" class="btn-primary" onclick="PP.topUpWallet()">Deposit funds</button>' +
-        '<button type="button" class="btn-secondary" onclick="PP.noop()">Statement</button>';
+        '<button type="button" class="btn-secondary" onclick="PP.withdrawFunds()">Withdraw funds</button>';
     } else if (page === "Settlements" && state.settlementId) {
       var inv = PortalSeedData.SETTLEMENTS.filter(function (x) { return x.id === state.settlementId; })[0];
       title = inv ? "Settlement " + inv.id : "Settlements";
@@ -2333,6 +2660,7 @@
     else if (pageLower === "trading") { renderTradingPage(); }
     else if (pageLower === "wallet") { renderWalletPage(); }
     else if (pageLower === "settlements") { renderSettlementsPage(); }
+    else if (pageLower === "products") { renderProductsPage(); }
   }
 
   function renderCurrentPage() {
@@ -2468,7 +2796,12 @@
         '<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--pp-text-faint)">August position</div>' +
         '<div style="font-size:44px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:10px;color:#004C94">78,4 %</div>' +
         '<div style="font-size:12px;color:var(--pp-text-body);margin-top:8px;line-height:1.5">of forecast volume covered by blocks.<br>1.291,4 MWh forecast across 6 connections.</div>' +
-        '<div style="margin-top:16px"><button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button></div>' +
+        '<div style="margin-top:16px">' +
+          (hasFutureTrading()
+            ? '<button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button>'
+            : '<div style="font-size:11.5px;color:var(--pp-text-faint);line-height:1.5;margin-bottom:10px">Blocks are traded through PeakPower Future Trading, which is not active on this account.</div>' +
+              '<button type="button" class="btn-secondary" onclick="PP.goProducts()">Add the product</button>') +
+        '</div>' +
       '</div>' +
       '<div>' +
         '<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--pp-text-faint)"><span>Composition</span><span>1.291,4 MWh</span></div>' +
@@ -2488,18 +2821,63 @@
     '</div>';
   }
 
+  // --- Products -----------------------------------------------------------
+
+  function productRowHtml(p) {
+    var active = hasProduct(p.id);
+    var action;
+    if (p.comingSoon) { action = badge("Coming soon", "neutral"); }
+    else if (active) { action = '<button type="button" class="btn-secondary btn-sm" onclick="PP.toggleProduct(\'' + p.id + '\')">Remove</button>'; }
+    else { action = '<button type="button" class="btn-primary btn-sm" onclick="PP.toggleProduct(\'' + p.id + '\')">Add</button>'; }
+    return '<div class="product-row' + (p.comingSoon ? " soon" : "") + '">' +
+      '<div style="flex:1;min-width:0"><div class="pr-name">' + esc(p.name) + '</div>' +
+      '<div class="pr-desc">' + esc(p.desc) + '</div></div>' + action + '</div>';
+  }
+
+  function renderProductsPage() {
+    var active = PRODUCTS.filter(function (p) { return !p.comingSoon && hasProduct(p.id); });
+    var available = PRODUCTS.filter(function (p) { return p.comingSoon || !hasProduct(p.id); });
+
+    var banner = '<div class="banner banner-teal">' +
+      '<div class="banner-icon" style="background:var(--pp-teal-600)">i</div>' +
+      '<div class="banner-body"><div class="banner-sub">Products decide what appears in your navigation. ' +
+      'Future Trading adds the Market section — Prices and Trading — and the Wallet that funds those trades.' +
+      '</div></div></div>';
+
+    var activeBody = active.length
+      ? active.map(productRowHtml).join("")
+      : '<div class="empty-state">No products are active on your account. Add one below to see it in your navigation.</div>';
+
+    var body =
+      banner +
+      cardHtml("Active on your account",
+        active.length === 1 ? "1 product · shapes what you see in the rail"
+                            : active.length + " products · shape what you see in the rail",
+        activeBody) +
+      cardHtml("Available products", "Products marked coming soon cannot be added yet.",
+        available.map(productRowHtml).join(""));
+
+    document.getElementById("products-body").innerHTML = body;
+  }
+
   function renderDashboardPage() {
     var pending = state.trades.filter(function (t) { return t.pending; })[0];
 
+    // Without Future Trading there is no wallet and there are no trades, so
+    // the two cards that count them go with it — Coverage and Uncovered stay,
+    // since day-ahead settlement still measures both.
+    var traded = hasFutureTrading();
     var kpiHtml =
-      statCardHtml("Available balance", "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2), "",
-        "settled € " + ConsumptionCalc.formatNL(state.walletSettled, 0) + " · reserved € " + ConsumptionCalc.formatNL(state.walletReserved, 0)) +
+      (traded
+        ? statCardHtml("Available balance", "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2), "",
+            "settled € " + ConsumptionCalc.formatNL(state.walletSettled, 0) + " · reserved € " + ConsumptionCalc.formatNL(state.walletReserved, 0))
+        : "") +
       statCardHtml("Coverage — August", "78,4 %", "brand", "of forecast volume hedged") +
       statCardHtml("Uncovered volume", "214,4 MWh", "critical", "≈ € 18.953 at day-ahead") +
-      statCardHtml("Open trades", "2", "warning", "1 awaiting your response") +
+      (traded ? statCardHtml("Open trades", "2", "warning", "1 awaiting your response") : "") +
       // Only when there is one — an always-present "€ 0,00 outstanding" card
       // would be noise on every other day.
-      (outstandingTotal() > 0
+      (traded && outstandingTotal() > 0
         ? statCardHtml("Balance outstanding", "€ " + ConsumptionCalc.formatNL(outstandingTotal(), 2),
             overdueCount() ? "negative" : "warning",
             outstandingBalances().length + " trade" + (outstandingBalances().length === 1 ? "" : "s") +
@@ -2510,10 +2888,10 @@
     // already owed, the other is an opportunity. Shown as its own banner
     // above, not merged into the offer banner, because they call for
     // different actions.
-    var balanceBannerHtml = balanceBannerHtml_();
+    var balanceBannerHtml = traded ? balanceBannerHtml_() : "";
 
     var offerBannerHtml = "";
-    if (pending) {
+    if (pending && traded) {
       // Field data was fixed once already (was a hardcoded demo string that
       // never matched whatever trade was actually pending). This is a
       // second, separate fix: the light amber .banner/.banner-amber
@@ -2670,11 +3048,16 @@
     // The action sits BELOW the table, on its own line — a request is a
     // deliberate next step after reading the positions, not a header control.
     var tradable = !!tradableConnection(c.id);
-    var blocksFoot = tradable
-      ? '<div class="card-foot-action"><button type="button" class="btn-primary" onclick="PP.startWizardFromConnection(\'' + c.id + '\')">Request a trade</button></div>'
-      : '<div class="caption" style="margin-top:16px">' +
-        (c.notTradeable ? "This connection is not tradeable." : "This connection is not eligible for new trade requests.") +
+    var blocksFoot;
+    if (tradable && hasFutureTrading()) {
+      blocksFoot = '<div class="card-foot-action"><button type="button" class="btn-primary" onclick="PP.startWizardFromConnection(\'' + c.id + '\')">Request a trade</button></div>';
+    } else {
+      blocksFoot = '<div class="caption" style="margin-top:16px">' +
+        (tradable
+          ? "PeakPower Future Trading is not active on this account — add it to request blocks."
+          : c.notTradeable ? "This connection is not tradeable." : "This connection is not eligible for new trade requests.") +
         '</div>';
+    }
     var blocksCard = cardHtml("Block positions on this connection", "", blocksBodyHtml + blocksFoot,
       ((c.blocks ? c.blocks.length : 0) + " active"));
 
@@ -3513,9 +3896,66 @@
       '<div class="caption" style="margin-top:8px">The balance on a bought block is due the day before its delivery period starts. Open a trade to pay it.</div>');
   }
 
+  /**
+   * The Ledger's buckets. Every movement is one of these three, so the tabs
+   * partition the list rather than sampling it — "All" plus the three is the
+   * whole ledger, and a row's own `type` is what the filter matches.
+   */
+  var LEDGER_TABS = ["All", "Deposit", "Withdrawal", "Trade"];
+
+  function setLedgerFilter(i) {
+    state.ledgerFilter = i;
+    renderApp();
+  }
+
+  function ledgerCardHtml() {
+    var all = state.walletLedgerExtra.concat(PortalSeedData.WALLET_LEDGER);
+    var filter = LEDGER_TABS[state.ledgerFilter] === "All" ? null : LEDGER_TABS[state.ledgerFilter];
+    var shown = filter ? all.filter(function (l) { return l.type === filter; }) : all;
+
+    var tabs = '<div class="ds-tabs" style="margin-bottom:12px">' + LEDGER_TABS.map(function (t, i) {
+      return '<button type="button" class="ds-tab' + (i === state.ledgerFilter ? " active" : "") +
+        '" onclick="PP.setLedgerFilter(' + i + ')">' + t + '</button>';
+    }).join("") + '</div>';
+
+    var cols = "0.8fr 1.15fr 0.95fr 0.85fr 1.5fr 1.1fr";
+    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>TYPE</div><div class="gt-cell-num">AMOUNT</div>' +
+      '<div>DATE &amp; TIME</div><div>BY</div><div>REFERENCE</div><div class="gt-cell-num">AVAILABLE AFTER</div></div>';
+
+    var rows = shown.map(function (l) {
+      var refHtml = (l.refKind === "trade")
+        ? '<span class="gt-mono" style="color:var(--pp-teal-700);cursor:pointer" onclick="PP.openTrade(\'' + l.ref + '\')">' + l.ref + '</span>'
+        : ((l.refKind === "settlement")
+          ? '<span class="gt-mono" style="color:var(--pp-teal-700);cursor:pointer" onclick="PP.openSettlement(\'' + l.ref + '\')">' + l.ref + '</span>'
+          : '<span class="gt-mono">' + l.ref + '</span>');
+      // Money in is the only thing that gets a colour — a debit is the normal
+      // case here and reads as the body text it is.
+      var amountStyle = 'font-weight:600' + (l.positive ? ';color:var(--pp-green-text)' : "");
+      return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
+        '<div>' + badge(l.type, l.tone) + '</div>' +
+        '<div class="gt-cell-num" style="' + amountStyle + '">' + l.amount + '</div>' +
+        '<div class="gt-mono">' + l.date + '</div>' +
+        '<div>' + l.by + '</div>' +
+        '<div>' + refHtml + '</div>' +
+        '<div class="gt-cell-num">' + l.after + '</div></div>';
+    }).join("");
+
+    var body = shown.length
+      ? '<div class="grid-table dense">' + head + '<div class="gt-scroll">' + rows + '</div></div>'
+      : '<div class="empty-state">No ' + (filter || "").toLowerCase() + ' movements on this wallet yet.</div>';
+
+    var subtitle = (filter ? filter.toLowerCase() + " movements" : "Every movement") +
+      ", newest first · " + shown.length + " of " + all.length;
+
+    return cardHtml("Ledger", subtitle, tabs + body +
+      '<div class="caption" style="margin-top:8px">Every movement names the colleague who caused it. Reference links open the trade or settlement.</div>');
+  }
+
   function renderWalletPage() {
     if (state.walletView === "topup") { renderWalletTopup(); return; }
     if (state.walletView === "topup-success") { renderWalletTopupSuccess(); return; }
+    if (state.walletView === "withdraw") { renderWalletWithdraw(); return; }
+    if (state.walletView === "withdraw-success") { renderWalletWithdrawSuccess(); return; }
 
     var kpiHtml =
       statCardHtml("Available balance", "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2), "brand", "ready to reserve for new trades") +
@@ -3535,29 +3975,7 @@
         ConsumptionCalc.formatNL(MIN_BALANCE_ALERT, 0) + ' — you are currently below it. Make a deposit to keep trading.</div></div>'
       : "";
 
-    var allLedger = state.walletLedgerExtra.concat(PortalSeedData.WALLET_LEDGER);
-    var cols = "0.9fr 1fr 1.8fr 1fr 1fr 0.8fr 0.8fr 1fr";
-    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>DATE &amp; TIME</div><div>TYPE</div><div>DESCRIPTION</div><div>BY</div>' +
-      '<div>REFERENCE</div><div class="gt-cell-num">DEBIT</div><div class="gt-cell-num">CREDIT</div><div class="gt-cell-num">AVAILABLE AFTER</div></div>';
-    var rows = allLedger.slice(0, 12).map(function (l) {
-      var refHtml = (l.refKind === "trade")
-        ? '<span class="gt-mono" style="color:var(--pp-teal-700);cursor:pointer" onclick="PP.openTrade(\'' + l.ref + '\')">' + l.ref + '</span>'
-        : ((l.refKind === "settlement")
-          ? '<span class="gt-mono" style="color:var(--pp-teal-700);cursor:pointer" onclick="PP.openSettlement(\'' + l.ref + '\')">' + l.ref + '</span>'
-          : '<span class="gt-mono">' + l.ref + '</span>');
-      return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
-        '<div>' + l.date + '</div>' +
-        '<div>' + badge(l.type, l.tone) + '</div>' +
-        '<div>' + l.desc + '</div>' +
-        '<div>' + l.by + (l.byNote ? ' <span style="color:var(--pp-text-faint)">(' + l.byNote + ')</span>' : "") + '</div>' +
-        '<div>' + refHtml + '</div>' +
-        '<div class="gt-cell-num">' + (l.debit || "—") + '</div>' +
-        '<div class="gt-cell-num"' + (l.credit ? ' style="color:var(--pp-green-text);font-weight:600"' : "") + '>' + (l.credit || "—") + '</div>' +
-        '<div class="gt-cell-num">' + l.after + '</div></div>';
-    }).join("");
-    var ledgerCard = cardHtml("Ledger", "Every movement, newest first", '<div class="grid-table dense">' + head + '<div class="gt-scroll">' + rows + '</div></div>' +
-      '<div class="caption" style="margin-top:8px">Every movement names the colleague who caused it. Reference links open the trade, settlement or payment.</div>' +
-      '<div class="caption">Showing ' + Math.min(12, allLedger.length) + ' of 146 entries</div>');
+    var ledgerCard = ledgerCardHtml();
 
     document.getElementById("wallet-body").innerHTML = '<div class="stat-row">' + kpiHtml + '</div>' +
       lowBalanceBanner + outstandingCardHtml() + ledgerCard;
@@ -3662,27 +4080,12 @@
       '<a class="btn-link" style="display:block;text-align:right;font-size:11.5px;color:var(--pp-teal-600)" onclick="PP.noop()">Download instructions as PDF</a>' +
       '</div>';
 
-    var allTopups = state.topupsExtra.concat(PortalSeedData.TOPUPS);
-    // Mockup's own gap for this specific table is 12px, wider than the
-    // shared .grid-table.dense convention's 10px (used app-wide, e.g. the
-    // Wallet ledger and settlement line items) — not changed here since that
-    // convention serves several other screens; see the note sent to
-    // team-lead. cols itself already matches (1.4fr 1.2fr 1.2fr 1fr 1fr).
-    var cols = "1.4fr 1.2fr 1.2fr 1fr 1fr";
-    var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>DATE</div><div>METHOD</div><div>REFERENCE</div><div>STATUS</div><div class="gt-cell-num">AMOUNT</div></div>';
-    var rows = allTopups.map(function (t) {
-      return '<div class="gt-row" style="grid-template-columns:' + cols + '"><div>' + t.date + '</div><div>' + t.method + '</div>' +
-        '<div class="gt-mono">' + t.ref + '</div><div>' + badge(t.status, "success") + '</div><div class="gt-cell-num">' + t.amount + '</div></div>';
-    }).join("");
-    var topupsCard = cardHtml("Recent deposits", "", '<div class="grid-table dense">' + head + rows + '</div>');
-
     // #wallet-body's own 16px flex-column gap (see the shared -body wrapper
-    // rule) already spaces these three top-level children — no manual
+    // rule) already spaces these two top-level children — no manual
     // margin-top needed, matching the mockup's own single outer gap:16px
     // rather than doubling the spacing.
     document.getElementById("wallet-body").innerHTML = topupBannerHtml() +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">' + idealCard + bankCard + '</div>' +
-      topupsCard;
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">' + idealCard + bankCard + '</div>';
   }
 
   /**
@@ -3703,6 +4106,95 @@
       '<div class="bb-row total"><span>Available balance</span><span style="color:var(--pp-green-text)">€ ' + ConsumptionCalc.formatNL(t.newAvailable, 2) + '</span></div>' +
       '</div>' +
       '<button type="button" class="btn-primary" style="width:100%;margin-top:14px" onclick="PP.closeTopupSuccess()">Back to wallet</button>');
+
+    document.getElementById("wallet-body").innerHTML = successBanner + '<div style="margin-top:16px;max-width:420px">' + summaryCard + '</div>';
+  }
+
+  function renderWalletWithdraw() {
+    function chipHtml(amt, label) {
+      var sel = state.withdrawAmount === amt ? " selected" : "";
+      var over = amt > state.walletAvailable ? " disabled" : "";
+      return '<button type="button" class="amount-chip' + sel + '"' + over +
+        ' onclick="PP.setWithdrawAmountValue(' + amt + ')">' + label + '</button>';
+    }
+    // "Everything available" is the one chip a withdrawal actually wants and
+    // a deposit has no equivalent of — it is computed, so it can never quote
+    // a figure the wallet does not hold.
+    var allHtml = state.walletAvailable >= MIN_WITHDRAWAL_EUR
+      ? '<div class="amount-chips">' + chipHtml(state.walletAvailable,
+          "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2) + " — everything available") + '</div>'
+      : "";
+    var chipsHtml = [1000, 5000, 10000, 25000].map(function (a) {
+      return chipHtml(a, "€ " + ConsumptionCalc.formatNL(a, 0));
+    }).join("");
+
+    var fgLabelStyle = ' style="letter-spacing:.03em"';
+    var acct = PortalSeedData.PAYOUT_ACCOUNT;
+    var warning = withdrawCommitmentWarning();
+
+    var formCard = '<div class="ideal-card">' +
+      '<div class="topup-card-head"><div><div class="topup-card-title">Withdraw to your bank</div>' +
+      '<div class="topup-card-subtitle">Paid out on the next business day</div></div>' + badge("ADMIN ONLY", "neutral") + '</div>' +
+      '<div class="field-group" style="margin-bottom:0">' +
+        '<div class="fg-label"' + fgLabelStyle + '>Amount</div>' +
+        '<div class="amount-input-wrap"><span>€</span><input id="withdraw-amount-input" type="text" inputmode="decimal" value="' +
+          ConsumptionCalc.formatNL(state.withdrawAmount, 0) +
+          '" oninput="PP.onWithdrawAmountInput(this.value)" onchange="PP.setWithdrawAmount(this.value)" onfocus="this.select()"></div>' +
+        '<div id="withdraw-validation" class="fg-hint" style="margin-top:6px;color:var(--pp-red-text)">' + esc(withdrawAmountError()) + '</div>' +
+      '</div>' +
+      allHtml + '<div class="amount-chips">' + chipsHtml + '</div>' +
+      '<div id="withdraw-commitment" class="topup-note amber"' + (warning ? "" : ' style="display:none"') + '>' + esc(warning) + '</div>' +
+      '<div id="withdraw-preview-line" style="font-size:11px;font-weight:600;color:var(--pp-teal-700)">' +
+        (withdrawAmountValid() ? "New available balance: € " + ConsumptionCalc.formatNL(state.walletAvailable - state.withdrawAmount, 2) : "") + '</div>' +
+      '<button type="button" id="withdraw-btn" class="btn-primary" style="width:100%"' + (withdrawAmountValid() ? "" : " disabled") +
+        ' onclick="PP.performWithdrawal()">Withdraw € ' + ConsumptionCalc.formatNL(state.withdrawAmount, 2) + '</button>' +
+      '<div class="caption" style="text-align:center;line-height:1.5">Only your available balance can be withdrawn — reserved funds belong to an accepted trade.</div>' +
+      '</div>';
+
+    // Read-only on purpose: changing where money is paid out is a bank-details
+    // change the desk verifies, not a field on a withdrawal form.
+    var accountCard = '<div class="bank-card">' +
+      '<div class="topup-card-head"><div><div class="topup-card-title">Destination account</div>' +
+      '<div class="topup-card-subtitle">The account PeakPower has verified for this customer</div></div>' + badge("VERIFIED", "success") + '</div>' +
+      '<div class="copy-row"><div><div class="cr-label">Account holder</div><div class="cr-value" style="font-family:var(--font-sans);font-weight:600">' + acct.accountHolder + '</div></div></div>' +
+      '<div class="copy-row"><div><div class="cr-label">IBAN</div><div class="cr-value">' + acct.iban + '</div></div></div>' +
+      '<div class="copy-row"><div><div class="cr-label">BIC</div><div class="cr-value">' + acct.bic + '</div></div></div>' +
+      '<div style="font-size:12px;color:var(--pp-text-body);font-weight:500">Verified ' + acct.verifiedOn +
+        '. To pay out to a different account, ask PeakPower to verify it first.</div>' +
+      '</div>';
+
+    document.getElementById("wallet-body").innerHTML = withdrawBannerHtml() +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">' + formCard + accountCard + '</div>';
+  }
+
+  /** What the wallet can actually release right now, stated before anything is typed. */
+  function withdrawBannerHtml() {
+    var outstanding = outstandingTotal();
+    var note = state.walletReserved > 0
+      ? " € " + ConsumptionCalc.formatNL(state.walletReserved, 2) + " is reserved against an accepted trade and cannot be withdrawn."
+      : "";
+    if (outstanding > 0) {
+      note += " € " + ConsumptionCalc.formatNL(outstanding, 2) + " is committed to balances due before delivery.";
+    }
+    return '<div class="topup-note teal">Available to withdraw: € ' +
+      ConsumptionCalc.formatNL(state.walletAvailable, 2) + '.' + note + '</div>';
+  }
+
+  function renderWalletWithdrawSuccess() {
+    var w = state.lastWithdrawal;
+    if (!w) { backToWallet(); return; }
+    var acct = PortalSeedData.PAYOUT_ACCOUNT;
+    var successBanner = '<div class="banner banner-green"><div class="banner-icon success">✓</div><div class="banner-body">' +
+      '<div class="banner-title">Withdrawal requested</div>' +
+      '<div class="banner-sub">€ ' + ConsumptionCalc.formatNL(w.amount, 2) + ' to ' + acct.iban +
+      ' · reference ' + w.ref + ' · ' + w.dateStr + '</div></div></div>';
+
+    var summaryCard = cardHtml("New balance", "", '<div class="balance-box">' +
+      '<div class="bb-row"><span>Amount withdrawn</span><span>€ ' + ConsumptionCalc.formatNL(w.amount, 2) + '</span></div>' +
+      '<div class="bb-row total"><span>Available balance</span><span>€ ' + ConsumptionCalc.formatNL(w.newAvailable, 2) + '</span></div>' +
+      '</div>' +
+      '<div class="caption" style="margin-top:10px">Paid out on the next business day. The ledger row is the record — there is nothing to cancel here.</div>' +
+      '<button type="button" class="btn-primary" style="width:100%;margin-top:14px" onclick="PP.closeWithdrawSuccess()">Back to wallet</button>');
 
     document.getElementById("wallet-body").innerHTML = successBanner + '<div style="margin-top:16px;max-width:420px">' + summaryCard + '</div>';
   }

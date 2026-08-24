@@ -359,7 +359,7 @@ from real data; that was reverted on explicit product direction.
 | **Consumption** | Real, calculated — see below | Single view, arbitrary From/To range |
 | **Prices** | `portal-seed-data.js` (`PRICES`) | Single view. Six indicative cards, each jumping into the wizard via `startWizardFromPrice`, plus a synthetic 90-day trend chart |
 | **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`) + `state.trades` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView` |
-| **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `TOPUPS`, `BANK_DETAILS`) + in-memory balances | **ledger** / **topup**, via `state.walletView`. Interactive but not persisted across reload |
+| **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `BANK_DETAILS`, `PAYOUT_ACCOUNT`) + in-memory balances | **ledger** / **topup** / **withdraw** (+ their success states), via `state.walletView`. Interactive but not persisted across reload |
 | **Settlements** | `portal-seed-data.js` (`SETTLEMENTS`) | **list** / **detail** (`state.settlementId`) |
 
 The Dashboard's mini chart has its own `buildMiniChartSvg()`, kept separate
@@ -395,8 +395,76 @@ Two densities, via a `.dense` modifier:
 | `.dense` | `9px 12px` @10px | `11px 12px` @12px | 10px | tables nested in a card: wallet ledger, settlement line items, connection block positions |
 
 Per-screen `grid-template-columns` are copied verbatim (wallet ledger
-`0.9fr 1fr 1.8fr 1fr 1fr 0.8fr 0.8fr 1fr`, settlement line items
+`0.8fr 1.15fr 0.95fr 0.85fr 1.5fr 1.1fr`, settlement line items
 `0.3fr 2.6fr 1fr 1fr 1fr 1fr`) — don't tidy these into round numbers.
+
+### The Wallet ledger
+
+One **signed movement per row**, in the shape the design project's Ledger
+uses. Six columns — Type (badge), Amount, Date & time, By, Reference,
+Available after — and no description column: the type badge and the reference
+say what the movement was.
+
+Every row is one of three buckets, which is what makes the filter honest —
+`LEDGER_TABS` (`All`, `Deposit`, `Withdrawal`, `Trade`) partitions the ledger
+rather than sampling it, and `state.ledgerFilter` is an index into it. The
+card's subtitle counts what is shown against the whole (`2 of 12`), and an
+empty bucket says so rather than rendering an empty table.
+
+**`amount` is a preformatted signed string, `positive` is the flag the colour
+reads.** Money in is the only thing tinted (`--pp-green-text`); a debit is the
+normal case here and stays body text. Both are written by whoever appends the
+row — the four call sites in `customer-portal.html` (`performTopup`,
+`payTradeBalance`, `respondToOffer`'s reservation, and `reconcileDeposits`)
+and the seeded rows in `portal-seed-data.js` — so a new appender owes both.
+
+**The filter is the design system's Tabs, not `.chart-tabs`.** Those are two
+different components: `.chart-tabs` is a segmented control on one shared track
+(Consumption's Day/Month/Quarter presets), while DS Tabs is a row of separate
+outlined pills — `.ds-tabs` / `.ds-tab`, `gap:6px`, pill radius, 11px/600,
+inactive on `--pp-surface-alt` with a `--pp-border-strong` edge, active on
+`--pp-teal-100` / `--pp-teal-300` / `--pp-teal-700`. Reusing the segmented one
+here was wrong and looked it.
+
+**There is no "Recent deposits" table.** The deposit screen is the two payment
+cards and nothing else; the ledger's Deposit filter is where a deposit history
+lives, and a second list of the same events could only drift from it.
+`PortalSeedData.TOPUPS` and `simulateTopup()` went with it.
+
+### Depositing and withdrawing
+
+The Wallet's topbar carries **Deposit funds** and **Withdraw funds**. (It used
+to carry a decorative "Statement" button that did nothing; it is gone.)
+`state.walletView` runs `ledger` / `topup` / `topup-success` / `withdraw` /
+`withdraw-success`.
+
+A withdrawal is the deposit's mirror image with one rule the deposit does not
+have: **the ceiling is `walletAvailable`, not the settled balance.** Reserved
+money belongs to an accepted trade, so it cannot be paid out —
+`withdrawAmountValid()` enforces both the € 10 floor and that ceiling, and
+`performWithdrawal()` re-checks it rather than trusting the disabled button.
+`withdrawAmountError()` picks between the two messages, because a field can be
+wrong in two different directions.
+
+**An outstanding balance warns, it does not refuse.** That money is still in
+the wallet and merely committed to a date, and nothing in this POC enforces
+payment anywhere else either — so `withdrawCommitmentWarning()` names what
+would be left against what is owed and lets the withdrawal through. Like the
+wizard's allocation note, its text and its visibility come from one string, so
+an empty warning hides rather than rendering as a blank amber rectangle.
+
+The destination is `PortalSeedData.PAYOUT_ACCOUNT` — **the customer's own
+account**, not `BANK_DETAILS`, which is PeakPower's *receiving* account for a
+deposit. It renders read-only: changing where money is paid out is a
+bank-details change the desk verifies, not a field on a withdrawal form.
+
+**Both amount fields patch on blur, never re-render.** `setTopupAmount()` and
+`setWithdrawAmount()` reformat their own `<input>` through
+`reformatAmountField()` and call their `refresh*Ui()` — because blur fires on
+the **mousedown that begins a click**, so a `renderApp()` there replaces the
+button being clicked between mousedown and mouseup and the browser raises no
+click at all. That is the same failure as the wizard's "Deposit funds" link,
+and it made the first click on Pay/Withdraw after typing an amount do nothing.
 
 ### Vertical spacing between sections
 
@@ -1317,6 +1385,55 @@ classes:
 2. `.stat-row` keeps a 16px gap. The mockup is internally inconsistent here
    (16/14/12px across screens), so there's no single correct value to match.
 
+### Account products
+
+An account holds **products**, and the products decide what the rail shows.
+`PRODUCTS` (in `customer-portal.html`) is the catalogue of six; only
+`future-trading` and `day-ahead` are modelled, the other four carry
+`comingSoon` and cannot be switched on. `state.products` starts as
+`["day-ahead"]` — **Future Trading is off by default**, which is the state the
+gating exists to show.
+
+The switch lives at the foot of the rail, in the account menu
+(`.account-menu` → `.account-pop`), because a product is a property of the
+account rather than of a screen. Its "Products" row opens the Products screen
+(`#page-products`, `renderProductsPage()`), which is two cards — active and
+available — plus a banner saying what a product changes.
+
+**`future-trading` gates three pages**, listed once in `FUTURE_TRADING_PAGES`:
+Prices, Trading and Wallet. Off, they leave the rail entirely
+(`applyProductNav()` hides every `[data-nav-product]` element, the Market
+group label included), the Dashboard hero swaps "Request a trade" for the
+locked copy and an "Add the product" button, the wallet and open-trade stat
+cards and both trade banners are dropped, and a connection's detail says the
+product is not active instead of offering a request.
+
+Three rules worth keeping:
+
+- **The gate is in the handlers, not only in the markup.** `goTo()` redirects
+  a gated page to Products, and `requireFutureTrading()` guards
+  `startWizard`, `startWizardFromPrice`, `startWizardFromConnection`,
+  `openTrade` and `topUpWallet`. A hidden button is not a check — a deep link
+  or a stale screen still asks.
+- **Removing the product you are standing on moves you to Products.**
+  `toggleProduct()` checks `FUTURE_TRADING_PAGES[state.page]`; otherwise the
+  customer is left on a visible page with no rail entry to return to.
+- **`goProducts()` re-renders the rail itself.** `goTo()` re-renders the page,
+  not the sidebar, so without the extra `renderAccountMenu()` the popover and
+  its full-viewport `.account-scrim` stay in the DOM and swallow every later
+  click. That was a real bug, caught only by a click test.
+
+Products **persist in this browser** under `peakpower.products.v1`
+(`readProducts()` / `writeProducts()`), so a demo does not begin by switching
+Future Trading on again. It is not a cross-portal link — this is the customer
+switching a product on themselves, not a term the desk sets — and it keeps the
+links' failure discipline: any read problem lands on `DEFAULT_PRODUCTS`
+(`["day-ahead"]`), and a write that cannot happen is not an error the customer
+needs to see.
+Known gap: the Dashboard's seeded "Recent activity" rows still mention trades
+and a wallet deposit while Future Trading is off — that list is verbatim
+mockup seed data, not derived from state.
+
 ### Sidebar
 
 The Customer Portal's nav is four labelled groups — **Overview** (Dashboard),
@@ -1464,7 +1581,7 @@ two different things:
 
 | | means | called |
 |---|---|---|
-| Funding the wallet | money the customer sends in | "Deposit funds", "Recent deposits", "Deposit successful", "Minimum deposit is € 10,00" |
+| Funding the wallet | money the customer sends in | "Deposit funds", "Deposit successful", "Minimum deposit is € 10,00" |
 | The deposit on a block | the share of a bought trade paid up front | "Deposit (20 %)", "Deposit reserved" |
 
 **Only the copy uses that word.** Every identifier stayed `topup` —
@@ -1595,9 +1712,10 @@ scoping is what keeps it honest: the wallet is in-memory and resets on reload,
 so a trade confirmed before the page loaded never had a reservation *here* to
 release, and releasing one anyway would eat into the seeded figures.
 
-The confirm ledger row carries **equal debit and credit**, netting to no change
-in available — the shape the seeded `TRD-1051` "reservation settled" row
-already uses, because the money left available at reservation, not now.
+The confirm ledger row's amount is **€ 0,00** — it nets to no change in
+available, the same as the seeded `TRD-1051` confirmation row, because the
+money left available at reservation, not now. What it does move is the settled
+balance.
 
 ## Cross-portal trade flow
 

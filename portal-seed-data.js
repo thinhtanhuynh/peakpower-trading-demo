@@ -180,24 +180,25 @@
       facts: [["Reference","TRD-1048"],["Requested by","J. de Vries"],["State","Failed"],["Direction","Buy"],["Shape","Peak"],["Delivery period","Sep 2026"],["Total power","0,050 MW"],["Total volume","13,20 MWh"]] }
   ];
 
+  /* The ledger is one signed movement per row, in three buckets the Ledger
+     filter reads: Deposit (money in), Withdrawal (money out to a settlement
+     or a correction) and Trade. A trade confirmation nets to € 0,00 —
+     the money left available when the deposit was reserved, not now. */
   var WALLET_LEDGER = [
-    { date: "13-08 10:15", type: "Funds reserved", tone: "warning", desc: "Base Oct-26 · 0,12 MW", by: "P. Aksoy", byNote: "", ref: "TRD-1072", refKind: "trade", debit: "€ 9.400,00", credit: "", after: "€ 19.722,00" },
-    { date: "12-08 09:14", type: "Deposit (iDEAL)", tone: "success", desc: "Deposit via iDEAL", by: "J. de Vries", byNote: "", ref: "PAY-2291", refKind: "none", debit: "", credit: "€ 25.000,00", after: "€ 29.122,00" },
-    { date: "05-08 16:03", type: "Reservation released", tone: "info", desc: "TRD-1048 failed — counterparty withdrew", by: "M. Bakker", byNote: "PeakPower", ref: "TRD-1048", refKind: "trade", debit: "", credit: "€ 3.900,00", after: "€ 4.122,00" },
-    { date: "05-08 15:22", type: "Funds reserved", tone: "warning", desc: "Base Sep-26 · 0,05 MW", by: "J. de Vries", byNote: "", ref: "TRD-1048", refKind: "trade", debit: "€ 3.900,00", credit: "", after: "€ 222,00" },
-    { date: "01-08 00:04", type: "Settlement", tone: "neutral", desc: "July 2026 · 6 connections", by: "System", byNote: "automatic", ref: "STL-2026-07-0042", refKind: "settlement", debit: "€ 18.110,00", credit: "", after: "€ 4.122,00" },
-    { date: "30-07 14:52", type: "Trade confirmed", tone: "success", desc: "Peak Q1-27 · reservation settled", by: "M. Bakker", byNote: "PeakPower", ref: "TRD-1051", refKind: "trade", debit: "€ 72.768,00", credit: "€ 72.768,00", after: "€ 22.232,00" },
-    { date: "30-07 14:44", type: "Funds reserved", tone: "warning", desc: "Peak Q1-27 · 1,0 MW", by: "M. Vandersteen", byNote: "", ref: "TRD-1051", refKind: "trade", debit: "€ 72.768,00", credit: "", after: "€ 22.232,00" },
-    { date: "28-07 11:20", type: "Trade confirmed", tone: "success", desc: "Base Aug-26 · reservation settled", by: "J. de Vries", byNote: "", ref: "TRD-1042", refKind: "trade", debit: "€ 53.865,60", credit: "€ 53.865,60", after: "€ 95.000,00" },
-    { date: "28-07 11:09", type: "Funds reserved", tone: "warning", desc: "Base Aug-26 · 1,0 MW", by: "J. de Vries", byNote: "", ref: "TRD-1042", refKind: "trade", debit: "€ 53.865,60", credit: "", after: "€ 95.000,00" },
-    { date: "28-07 08:30", type: "Deposit (bank)", tone: "success", desc: "Transfer · ref PP-4821-QK", by: "S. Willems", byNote: "PeakPower", ref: "DEP-0118", refKind: "none", debit: "", credit: "€ 76.500,00", after: "€ 148.865,60" },
-    { date: "27-07 08:55", type: "Trade confirmed", tone: "success", desc: "Base (sell) Aug-26 · surplus sold", by: "J. de Vries", byNote: "", ref: "TRD-1867", refKind: "trade", debit: "", credit: "€ 5.239,40", after: "€ 72.365,60" },
-    { date: "24-07 16:11", type: "Adjustment", tone: "info", desc: "Correction — duplicate deposit reversed", by: "S. Willems", byNote: "PeakPower", ref: "ADJ-0031", refKind: "none", debit: "€ 1.500,00", credit: "", after: "€ 67.126,20" }
+    { date: "13-08 10:15", type: "Trade", tone: "info", amount: "\u2212 \u20ac 9.400,00", positive: false, by: "P. Aksoy", ref: "TRD-1072", refKind: "trade", after: "\u20ac 19.722,00" },
+    { date: "12-08 09:14", type: "Deposit", tone: "success", amount: "+ \u20ac 25.000,00", positive: true, by: "J. de Vries", ref: "PAY-2291", refKind: "none", after: "\u20ac 29.122,00" },
+    { date: "05-08 16:03", type: "Trade", tone: "info", amount: "+ \u20ac 3.900,00", positive: true, by: "M. Bakker", ref: "TRD-1048", refKind: "trade", after: "\u20ac 4.122,00" },
+    { date: "05-08 15:22", type: "Trade", tone: "info", amount: "\u2212 \u20ac 3.900,00", positive: false, by: "J. de Vries", ref: "TRD-1048", refKind: "trade", after: "\u20ac 222,00" },
+    { date: "01-08 00:04", type: "Withdrawal", tone: "neutral", amount: "\u2212 \u20ac 18.110,00", positive: false, by: "System", ref: "STL-2026-07-0042", refKind: "settlement", after: "\u20ac 4.122,00" },
+    { date: "30-07 14:52", type: "Trade", tone: "info", amount: "\u20ac 0,00", positive: false, by: "M. Bakker", ref: "TRD-1051", refKind: "trade", after: "\u20ac 22.232,00" },
+    { date: "30-07 14:44", type: "Trade", tone: "info", amount: "\u2212 \u20ac 72.768,00", positive: false, by: "M. Vandersteen", ref: "TRD-1051", refKind: "trade", after: "\u20ac 22.232,00" },
+    { date: "28-07 11:20", type: "Trade", tone: "info", amount: "\u20ac 0,00", positive: false, by: "J. de Vries", ref: "TRD-1042", refKind: "trade", after: "\u20ac 95.000,00" },
+    { date: "28-07 11:09", type: "Trade", tone: "info", amount: "\u2212 \u20ac 53.865,60", positive: false, by: "J. de Vries", ref: "TRD-1042", refKind: "trade", after: "\u20ac 95.000,00" },
+    { date: "28-07 08:30", type: "Deposit", tone: "success", amount: "+ \u20ac 76.500,00", positive: true, by: "S. Willems", ref: "DEP-0118", refKind: "none", after: "\u20ac 148.865,60" },
+    { date: "27-07 08:55", type: "Trade", tone: "info", amount: "+ \u20ac 5.239,40", positive: true, by: "J. de Vries", ref: "TRD-1867", refKind: "trade", after: "\u20ac 72.365,60" },
+    { date: "24-07 16:11", type: "Withdrawal", tone: "neutral", amount: "\u2212 \u20ac 1.500,00", positive: false, by: "S. Willems", ref: "ADJ-0031", refKind: "none", after: "\u20ac 67.126,20" }
   ];
-  var TOPUPS = [
-    { date: "12 Aug 2026, 09:14", method: "iDEAL · ING", ref: "PAY-2291", status: "Succeeded", amount: "€ 25.000,00" },
-    { date: "28 Jul 2026, 08:30", method: "Bank transfer", ref: "DEP-0118", status: "Credited", amount: "€ 40.000,00" }
-  ];
+
 
   var SETTLEMENT_LINES_AUG = [
     { n: "1", desc: "Base block Aug-26", sub: "block energy at the agreed price", ref: "TRD-1042", volume: "297,60 MWh", unitPrice: "€ 72,4000", amount: "€ 21.546,24" },
@@ -256,6 +257,16 @@
     ["Settlement issued", "STL-2026-07-0042 · € 18.110,00", "01 Aug 00:04", "faint"]
   ];
 
+  /* Where a withdrawal goes: the customer's own account, verified by the desk.
+     Not to be confused with BANK_DETAILS, which is PeakPower's RECEIVING
+     account for a deposit — money moves the other way through each. */
+  var PAYOUT_ACCOUNT = {
+    accountHolder: "Vandersteen Koeling B.V.",
+    iban: "NL42 RABO 0318 4729 06",
+    bic: "RABONL2U",
+    verifiedOn: "14 February 2024"
+  };
+
   var BANK_DETAILS = {
     accountHolder: "PeakPower Trading B.V.",
     iban: "NL18 INGB 0007 2519 44",
@@ -273,30 +284,6 @@
     return sign + "€ " + intPart + "," + pieces[1];
   }
 
-  /**
-   * Builds the ledger row + top-up-history row + updated balances for a
-   * wallet top-up of `amount`, mirroring the mockup's performTopup()
-   * transition. Pure function (no DOM/state mutation) so it stays testable.
-   */
-  function simulateTopup(amount, currentAvailable, currentSettled, now, existingTopupCount) {
-    var pad = function (n) { return String(n).padStart(2, "0"); };
-    var ledgerDate = pad(now.getDate()) + "-" + pad(now.getMonth() + 1) + " " + pad(now.getHours()) + ":" + pad(now.getMinutes());
-    var monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    var topupDate = now.getDate() + " " + monthNames[now.getMonth()] + " " + now.getFullYear() + ", " + pad(now.getHours()) + ":" + pad(now.getMinutes());
-    var ref = "PAY-" + (2292 + existingTopupCount);
-    var newAvailable = currentAvailable + amount;
-    var newSettled = currentSettled + amount;
-    return {
-      newAvailable: newAvailable,
-      newSettled: newSettled,
-      ledgerEntry: {
-        date: ledgerDate, type: "Deposit (iDEAL)", tone: "success", desc: "Deposit via iDEAL",
-        by: "J. de Vries", byNote: "", ref: ref, refKind: "none", debit: "", credit: formatEUR(amount), after: formatEUR(newAvailable)
-      },
-      topupEntry: { date: topupDate, method: "iDEAL · ING", ref: ref, status: "Succeeded", amount: formatEUR(amount) }
-    };
-  }
-
   var api = {
     NAV: NAV,
     USER_LINE: USER_LINE,
@@ -309,14 +296,13 @@
     PRICES: PRICES,
     TRADES_SEED: TRADES_SEED,
     WALLET_LEDGER: WALLET_LEDGER,
-    TOPUPS: TOPUPS,
     SETTLEMENTS: SETTLEMENTS,
     WALLET_AVAILABLE_BALANCE: WALLET_AVAILABLE_BALANCE,
     DASHBOARD_PRICE_TILES: DASHBOARD_PRICE_TILES,
     DASHBOARD_RECENT_ACTIVITY: DASHBOARD_RECENT_ACTIVITY,
     BANK_DETAILS: BANK_DETAILS,
-    formatEUR: formatEUR,
-    simulateTopup: simulateTopup
+    PAYOUT_ACCOUNT: PAYOUT_ACCOUNT,
+    formatEUR: formatEUR
   };
 
   if (typeof module !== "undefined" && module.exports) {
