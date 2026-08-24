@@ -57,7 +57,9 @@ platform. Four things live here:
 2. **EPEX day-ahead tariff data** plus generated large-consumer usage and
    production test data, at 15-minute resolution.
 3. **Two working portals** — `customer-portal.html` and
-   `back-office-portal.html` — hand-written rebuilds that actually run.
+   `back-office-portal.html` — hand-written rebuilds that actually run, plus
+   `customer-onboarding.html`, the flow a customer signs up through before
+   either of them exists for them.
 4. **Pure JS modules** (dual Node/browser) behind them, with Node test
    suites for the ones that calculate.
 
@@ -80,6 +82,7 @@ node usage-projection.test.js
 node portal-trade-link.test.js
 node portal-terms-link.test.js
 node portal-demo-clock.test.js
+node onboarding-flow.test.js
 ```
 
 They run against fixtures, not the multi-MB source files. `portal-seed-data.js`
@@ -109,6 +112,8 @@ jsdom or Playwright smoke test after changing a page shell.
 | `portal-seed-data.js` | Static seed data for the customer screens with no live source |
 | `back-office-desk-data.js` | Back-office seeded trades/queues plus `buildQueues()` |
 | `back-office-screens-data.js` | Back-office seeded data for Home, Customers, Wallets, Settlements, Data & feeds |
+| `onboarding-flow.js` | The onboarding flow's nine steps and the rules that gate them. Tested |
+| `customer-onboarding.html` | The nine-step onboarding flow a new customer signs up through |
 | `customer-portal.html` | The working customer portal (7 screens) |
 | `back-office-portal.html` | The working back-office portal (6 real screens + 2 placeholders) |
 
@@ -1284,7 +1289,9 @@ grounds undoes something measured.
   claims a distinction the pixels don't carry. Texture is one of four
   redundant cues, so dropping the one that can't render loses no meaning.
 
-**One breakpoint, at 760px** — the page's only `@media` rule. Everything else
+**Consumption's own breakpoint is 760px.** The page has since grown two more
+(`767px` and `768–999px`, for the stat stack) and `customer-onboarding.html`
+has one of its own at 900px, where its 296px rail stops being affordable. Everything else
 responsive is emergent (`flex-wrap` + `min-width` + `flex:1`, plus the day
 chart's `ResizeObserver`), which is fine until wrap *position* carries
 meaning. It does in three places: the equation, the chart toolbar and the
@@ -1456,7 +1463,11 @@ were not edited. **Don't "fix" a live page's colour back to a mockup value.**
 
 ### Palette (SB-2026)
 
-Identical `:root` in `customer-portal.html` and `back-office-portal.html`.
+Identical `:root` in `customer-portal.html`, `back-office-portal.html` and
+`customer-onboarding.html` — copied, not shared, because there is no build
+step to share it with. The onboarding page inherits the `--pp-chart-*` roles
+it has no charts for; that is the cost of keeping one block byte-identical
+across three files rather than three that drift.
 
 | Role | Value |
 |---|---|
@@ -2142,6 +2153,136 @@ regression test, but still prefer an explicit wrapper.
 
 **Not implemented:** any wallet movement. Accepting says funds are reserved
 and confirming says the wallet is debited, but no balance changes.
+
+## Customer onboarding (`customer-onboarding.html`)
+
+The flow a customer signs up through, before either portal has an account for
+them. A standalone page: it reads no seed data, writes no link, and knows
+nothing about the portals — a person on step 1 does not have an account yet,
+so there is nothing for it to join to.
+
+Nine steps in five groups — Account, Company (three), Profile, Verification,
+Agreement (three) — with the answers and the rules in `onboarding-flow.js` and
+only the rendering in the page. Same split as every other calculating module
+here, for the same reason: `stepValid()` and `hint()` are what stand between a
+half-filled application and the desk, and they are worth testing.
+
+### The two rules that hold the flow together
+
+**`stepValid()` refuses and `hint()` says why — always both.** Every reason a
+step can refuse has a line naming the field that is missing, and a test asserts
+the pairing: for each refusable step, the refusal must read differently from
+the all-clear. A disabled Next with no explanation is the whole failure this
+prevents.
+
+**Four steps are always passable on purpose.** The registered address may
+genuinely not exist, the industry is optional, the one cent can arrive after
+submission, and step 9 is a receipt rather than a question. Refusing on those
+would block an application the desk is perfectly able to finish — which is what
+the copy on each of them says out loud.
+
+### Easy to get wrong
+
+- **`volumeIndex` and `authorityIndex` start at −1, not 0.** Index 0 is a real
+  answer in both lists ("Less than 250 MWh", "Yes, I am authorised to sign"),
+  so a falsy test would treat the first option as no answer at all.
+- **`[].every()` is `true`.** Step 8 checks the list's length as well as every
+  row being complete, or an empty list submits an agreement nobody signs.
+- **"Together with another authorised person" means two.** `minSignatories()`
+  is the one place that rule lives, read by both `stepValid()` and the remove
+  button — otherwise the second row can be deleted and the application submits
+  with one signer under an answer that says two.
+- **A KvK number is eight *digits*, not eight characters.** `kvkDigits()`
+  strips formatting first, so a number pasted as `24 39 81 12` is accepted.
+- **The email check is deliberately loose** — an `@` past position 0. Position
+  0 matters: `@company.nl` has no local part. A stricter pattern refuses real
+  addresses more often than it catches a typo.
+- **A Dutch legal form ends in a full stop.** Any sentence that appends one
+  after the company name prints "B.V..".
+
+### Typing must not re-render
+
+`setField()` stores the value and calls `refreshFooter()` — never
+`renderStep()`. Two reasons, both already recorded elsewhere in this file: a
+re-render rebuilds the `<input>` under the caret, and blur fires on the
+**mousedown that begins a click**, so rebuilding here would replace the Next
+button between mousedown and mouseup and the browser would raise no click at
+all.
+
+That makes the footer the live part of the page: the hint, the Next button's
+label and enabled state, and the two readouts that sit inside a step body and
+change while a neighbouring field has focus — `#password-note` (which counts
+down rather than repeating the rule) and `#mail-greeting` (the name in the
+preview email). Both are patched by id, so keep the ids.
+
+**Everything else re-renders**, because nothing else can hold a caret: picking
+a choice, toggling the terms, adding or removing a signatory, and the two bank
+actions. The two `<select>` handlers do neither — nothing on the page reads
+the entity type or the industry until step 9's summary, which is rebuilt on
+the way there.
+
+**Enter advances the flow.** There is no `<form>` — the nine steps are one
+long-lived page, not nine submissions — so the browser has no
+implicit-submission path to inherit, and a keydown listener on the step body
+supplies it. Fields carry a real `<label for>` and an `autocomplete` token;
+the password's is `new-password`, since the browser's stored one would be
+the wrong account's.
+
+### Step 6's two banners are independent
+
+A prepared bank transfer and a settled iDEAL payment are separate facts — a
+transfer can be in flight when the cent arrives another way — so the two
+banners stack rather than chaining through `else if`. Chaining them hid the
+instructions banner the moment the cent landed, and that banner is the only
+place the `PP-ONB-7F3K` payment description is explained.
+
+### The authority answer decides who signs
+
+Step 7 rebuilds the signatory list, because the answer *is* who signs:
+`signatoriesForAuthority()` gives "I sign alone" the applicant alone,
+"together with another" the applicant plus a blank row so the requirement is
+visible rather than implied, and "someone else signs" a blank row with the
+applicant dropped — they manage the account but do not sign it, and leaving
+them listed would send them an agreement they cannot execute.
+
+**The applicant's own row is `locked`**: disabled in the markup, and refused by
+`setSignatory()` and `removeSignatory()` in the handler. It is their account,
+and editing it here would silently disagree with the name on step 1.
+
+**Answering step 7 *differently* discards rows the new answer does not keep.**
+That is correct — those rows answered a different question — but `pickAuthority()`
+returns early when the option clicked is the one already chosen. Without that
+guard, going back and clicking the highlighted option wipes every colleague
+typed in on step 8 with nothing on screen having changed.
+
+### What this page does not share
+
+- **A 296px rail, not the portals' 236px.** Nine step labels, and "Authorised
+  signatories" wraps at 236.
+- **Its own breakpoint at 900px**, below which the rail goes horizontal and
+  every two-column row stacks. Card, Badge, Banner, Button and StatCard are
+  hand-reimplemented here for the third time — there is no build step to share
+  them through, so a change to one is a change to make three times.
+- **`?prefill=1` writes a plaintext demo password into the page state.** It is
+  synthetic, on a page that authenticates nothing, but it is in the source and
+  worth knowing before this page is shown to anyone.
+
+### Demo affordances
+
+`?step=N` opens on a step (clamped to 1–9 by `clampStep()`, so a bad link lands
+on a real one), `?prefill=1` fills the application in, and `?bankVerified`
+marks the cent as received. All three are for walking a demo to a later step
+without typing nine screens; none is required and none changes the rules.
+
+**The rail only goes backwards.** `goStep()` refuses `n > state.step`, and a
+step that has not been reached carries no handler and no pointer cursor —
+a rail that looks clickable everywhere and answers on three of nine is worse
+than one that does not.
+
+**Nothing is submitted.** There is no back end and no cross-portal link here;
+the page says so at the foot of every step. If onboarding should ever hand an
+application to the Back Office, that is a new contract to design — the desk's
+own Add customer flow is where a customer is created today.
 
 ## Back Office portal (`back-office-portal.html`)
 
