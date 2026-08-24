@@ -553,9 +553,6 @@
      line items, connection block positions, wizard volumes). */
   .grid-table.dense .gt-head { padding:9px 12px; font-size:10px; gap:10px; }
   .grid-table.dense .gt-row { padding:11px 12px; font-size:12px; gap:10px; }
-  /* Totals row: same grid, weighted and ruled off like the desk's own
-     "Total requested" footer rather than reading as one more block. */
-  .gt-row.gt-total { font-weight:700; border-top:2px solid var(--pp-border-strong); background:var(--pp-surface-alt); }
   .gt-row.clickable { cursor:pointer; }
   .gt-row.clickable:hover { background:var(--pp-surface-alt); }
   .gt-row.disabled-row { cursor:default; color:var(--pp-text-faint); }
@@ -883,10 +880,12 @@
      both already meaningful elsewhere in this app rather than invented for
      this table: blue for "has real cover" (the app's own brand hue), grey
      for none, amber for ineligible (this app's existing warning tone). */
-  .conn-card .cc-pill { display:inline-flex; align-items:center; padding:3px 9px; border-radius:var(--radius-pill); font-size:11px; font-weight:700; border:1px solid; }
-  .conn-card .cc-pill.covered { background:var(--pp-blue-050); color:var(--pp-blue-700); border-color:var(--pp-blue-300); }
-  .conn-card .cc-pill.none { background:var(--pp-surface-alt); color:var(--pp-text-faint); border-color:var(--pp-border); }
-  .conn-card .cc-pill.ineligible { background:var(--pp-amber-bg); color:var(--pp-amber-text); border-color:var(--pp-amber-border); }
+  .cc-pill { display:inline-flex; align-items:center; padding:3px 9px; border-radius:var(--radius-pill); font-size:11px; font-weight:700; border:1px solid; }
+  .cc-pill.covered { background:var(--pp-blue-050); color:var(--pp-blue-700); border-color:var(--pp-blue-300); }
+  .cc-pill.none { background:var(--pp-surface-alt); color:var(--pp-text-faint); border-color:var(--pp-border); }
+  .cc-pill.ineligible { background:var(--pp-amber-bg); color:var(--pp-amber-text); border-color:var(--pp-amber-border); }
+  /* Cover is one account-level fact, so it is stated once above the grid. */
+  .cc-account-cover { display:flex; align-items:center; gap:10px; font-size:12px; color:var(--pp-text-body); margin-bottom:12px; }
   .wizard-actions { display:flex; gap:10px; margin-top:16px; }
 
   /* Wallet — top-up screen, fidelity-matched to Customer Portal - Preview.html's
@@ -2435,11 +2434,13 @@
     linked.forEach(function (r) { linkedIds[r.id] = true; });
 
     var seeded = PortalSeedData.TRADES_SEED.filter(function (t) { return !linkedIds[t.id]; });
-    // Newest request first, above the seeded history.
+    // Newest request first, above the seeded history, with the contracted
+    // blocks last — they are the oldest, settled part of the book, and a block
+    // is a trade like any other (see blockAsTrade).
     var fromLink = linked.slice().reverse().map(function (r) {
       return PortalTradeLink.toCustomerTrade(r, nowForLink());
     });
-    state.trades = fromLink.concat(seeded);
+    state.trades = fromLink.concat(seeded).concat(contractedBlockTrades());
 
     // Keep issuing ids after anything already on the link.
     linked.forEach(function (r) {
@@ -2647,7 +2648,11 @@
       title = "Request a trade";
       setCrumb("Step " + (state.wizardStep + 1) + " of 3");
     } else if (page === "Trading") {
-      setCrumb("Vandersteen Koeling B.V. · 6 open or recent trades");
+      // Counted, not hardcoded: the list now carries the contracted blocks too,
+      // so a fixed "6" would be wrong the moment a block is added.
+      var blockCount = state.trades.filter(function (t) { return t.isBlock; }).length;
+      setCrumb("Vandersteen Koeling B.V. · " + (state.trades.length - blockCount) +
+        " open or recent trades · " + blockCount + " contracted blocks");
       actionsHtml = '<button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button>';
     } else if (page === "Wallet" && state.walletView === "topup") {
       title = "Deposit funds";
@@ -2950,12 +2955,24 @@
     var chartTitle = "Consumption — Wednesday 12 August 2026";
     var chartHtml = '<div class="empty-state">Loading live data…</div>';
     if (DATA) {
-      var siteId = "rot", date = MAX_DATE;
+      // The whole account, like the Consumption screen and like the blocks
+      // themselves — a mini chart of one connection under an account-level
+      // hedge line would draw a position against a fraction of its load.
+      var date = MAX_DATE;
       var dateSeries = DATA.byDate[date];
-      var siteSeries = DATA.bySite[siteId] && DATA.bySite[siteId][date];
-      var hedgeBlocks = hedgeBlocksForSite(siteId, date, date);
-      if (dateSeries && siteSeries) {
-        var dSeries = ConsumptionCalc.computeIntervalSeries(dateSeries.t, dateSeries.p, siteSeries.c, siteSeries.g, date, hedgeBlocks);
+      var sumC = null, sumG = null;
+      if (dateSeries) {
+        sumC = dateSeries.t.map(function () { return 0; });
+        sumG = dateSeries.t.map(function () { return 0; });
+        allSiteIds().forEach(function (id) {
+          var ss = DATA.bySite[id] && DATA.bySite[id][date];
+          if (!ss) { return; }
+          for (var i = 0; i < sumC.length; i++) { sumC[i] += ss.c[i]; sumG[i] += ss.g[i]; }
+        });
+      }
+      var hedgeBlocks = hedgeBlocksFor(date, date);
+      if (dateSeries && sumC) {
+        var dSeries = ConsumptionCalc.computeIntervalSeries(dateSeries.t, dateSeries.p, sumC, sumG, date, hedgeBlocks);
         chartHtml = '<svg viewBox="0 0 960 220" style="width:100%;height:220px;display:block">' +
           buildMiniChartSvg(dateSeries.t, dSeries.actualUsage, dSeries.hedgeVolume) + '</svg>';
         chartTitle = "Consumption — " + formatDateLong(date);
@@ -2969,7 +2986,7 @@
       offerBannerHtml +
       cardHtml("Price indications", "Indicative only — not an offer", '<div class="price-card-grid" style="grid-template-columns:repeat(6,1fr);gap:10px">' + tilesHtml + '</div>') +
       '<div style="display:flex;gap:20px;align-items:flex-start">' +
-        '<div style="flex:1.7;min-width:0">' + cardHtml(chartTitle, "Rotterdam DC · provisional data", chartHtml) + '</div>' +
+        '<div style="flex:1.7;min-width:0">' + cardHtml(chartTitle, "All connections · provisional data", chartHtml) + '</div>' +
         '<div style="flex:1;min-width:0">' + cardHtml("Recent activity", "", activityHtml) + '</div>' +
       '</div>';
 
@@ -3046,29 +3063,21 @@
       '<div class="caption" style="margin-top:8px">Intervals received today: 96 of 96 · consumption and production</div>' +
       '<div class="caption">Corrections received this month: 1 (31 July, received 1 August 08:00)</div>');
 
-    var blocksBodyHtml;
-    if (c.blocks && c.blocks.length) {
-      var bcols = "1fr 1fr 1fr 1fr 1fr 1fr 1fr";
-      var bhead = '<div class="gt-head" style="grid-template-columns:' + bcols + '"><div>TRADE</div><div>SHAPE</div><div>PERIOD</div>' +
-        '<div class="gt-cell-num">ALLOCATED</div><div class="gt-cell-num">PRICE</div><div class="gt-cell-num">VOLUME</div><div>STATUS</div></div>';
-      var brows = c.blocks.map(function (b) {
-        var negStyle = b.negative ? ' style="color:var(--pp-red-text)"' : "";
-        return '<div class="gt-row" style="grid-template-columns:' + bcols + '">' +
-          '<div class="gt-mono" style="color:var(--pp-blue-500);cursor:pointer" onclick="PP.openTrade(\'' + b.trade + '\')">' + b.trade + '</div>' +
-          '<div>' + b.shape + '</div><div>' + b.period + '</div>' +
-          '<div class="gt-cell-num"' + negStyle + '>' + b.allocated + '</div>' +
-          '<div class="gt-cell-num">' + b.price + '</div>' +
-          '<div class="gt-cell-num"' + negStyle + '>' + b.volume + '</div>' +
-          '<div>' + badge(b.status, "success") + '</div></div>';
-      }).join("");
-      blocksBodyHtml = '<div class="grid-table dense">' + bhead + brows + '</div>';
-    } else {
-      blocksBodyHtml = '<div class="empty-state">No active block positions on this connection.</div>';
-    }
-    // A block is traded against one connection, so the request can start right
-    // here with this connection already decided.
-    // The action sits BELOW the table, on its own line — a request is a
-    // deliberate next step after reading the positions, not a header control.
+    // Blocks are held for the WHOLE account, so there is no per-connection
+    // allocation to list here. The seeded `blocks` arrays on CONNECTIONS said
+    // otherwise — they were a mockup fiction from before the data model said
+    // so — and printing them next to an account-level hedge line would have
+    // the two screens contradicting each other. The card now says where the
+    // positions actually live and links there.
+    var blocksBodyHtml = '<div class="empty-state" style="text-align:left;padding:14px 2px">' +
+      'Blocks are contracted for the whole account, not against a single connection — ' +
+      'this connection draws on every block the account holds. ' +
+      '<a class="btn-link" onclick="PP.goTo(\'Trading\')">See all blocks →</a></div>';
+
+    // A request still starts from a connection — that is what the customer is
+    // looking at — even though what it buys is held for the account.
+    // The action sits BELOW the text, on its own line: a request is a
+    // deliberate next step after reading the position, not a header control.
     var tradable = !!tradableConnection(c.id);
     var blocksFoot;
     if (tradable && hasFutureTrading()) {
@@ -3080,8 +3089,7 @@
           : c.notTradeable ? "This connection is not tradeable." : "This connection is not eligible for new trade requests.") +
         '</div>';
     }
-    var blocksCard = cardHtml("Block positions on this connection", "", blocksBodyHtml + blocksFoot,
-      ((c.blocks ? c.blocks.length : 0) + " active"));
+    var blocksCard = cardHtml("Block positions", "Held at account level", blocksBodyHtml + blocksFoot);
 
     document.getElementById("connections-body").innerHTML =
       '<div style="display:grid;grid-template-columns:400px 1fr;gap:16px;align-items:start">' +
@@ -3155,90 +3163,74 @@
   // --- Trading ----------------------------------------------------------
 
   /**
-   * Every contracted hedge block on the account, in one table.
+   * A contracted hedge block, in the shape the Trading list and detail already
+   * render a trade in.
    *
-   * These are the positions the Consumption chart draws as its hedge line —
-   * until now they existed only as a line on a chart and as hardcoded strings
-   * on a connection's detail. This is the list behind that line, read from
-   * DATA.hedge (never hedge_blocks_2026.json directly), so editing that file
-   * and reloading is all it takes to change what shows here.
+   * A block IS a trade — it was bought or sold at an agreed price for a
+   * delivery period, and it is already executed. It used to sit in a table of
+   * its own below the trades, which read as a second, different kind of
+   * object; folding it into `state.trades` means one list, one detail view and
+   * one vocabulary.
    *
-   * Confirmed live trades are deliberately NOT folded in — they are already
-   * the table above, and showing them twice would double-count the position
-   * to anyone reading down the page. The subtitle says which half this is.
+   * It carries no connection because a block is bought for the WHOLE account:
+   * `hedge_blocks_2026.json` has no EAN on a row and neither does this.
    */
-  function hedgeBlocksCardHtml() {
-    if (!DATA) {
-      return cardHtml("Contracted blocks", "Positions held per connection",
-        '<div class="empty-state">Loading live data…</div>');
-    }
+  function blockAsTrade(b) {
+    var hours = PortalTradeLink.hoursInPeriod(b.periodStart, b.periodEnd, b.shape);
+    var volumeMwh = (b.powerKw / 1000) * hours;
+    var priceMwh = b.priceKwh * 1000;
+    var valueEur = volumeMwh * priceMwh;
+    var sold = b.powerKw < 0;
+    var shapeLabel = b.shape.charAt(0).toUpperCase() + b.shape.slice(1) + (sold ? " (sell)" : "");
+    // formatNL emits an ASCII hyphen; this page writes a real minus sign and
+    // puts it before the € — the ledger and the seeded block rows both do.
+    var num = function (v, dp) { return ConsumptionCalc.formatNL(v, dp).replace("-", "\u2212"); };
+    var money = function (v) { return (v < 0 ? "\u2212 € " : "€ ") + ConsumptionCalc.formatNL(Math.abs(v), 2); };
 
-    var rows = [];
-    (DATA.sites || []).forEach(function (site) {
-      (DATA.hedge[site.id] || []).forEach(function (b) {
-        rows.push({ site: site, block: b });
-      });
-    });
-    // Grouped by connection, then chronologically, then base before peak —
-    // the order someone reads a position in, not the file's own order.
-    rows.sort(function (a, b) {
-      if (a.site.id !== b.site.id) { return a.site.id < b.site.id ? -1 : 1; }
-      if (a.block.periodStart !== b.block.periodStart) { return a.block.periodStart < b.block.periodStart ? -1 : 1; }
-      return a.block.shape < b.block.shape ? -1 : 1;
-    });
+    return {
+      id: b.id,
+      isBlock: true,
+      shape: shapeLabel,
+      period: b.periodLabel,
+      direction: sold ? "Sell" : "Buy",
+      power: num(b.powerKw / 1000, 3) + " MW",
+      volume: num(volumeMwh, 2) + " MWh",
+      price: "€ " + ConsumptionCalc.formatNL(priceMwh, 4),
+      value: money(valueEur),
+      status: "Contracted",
+      statusTone: "success",
+      periodStart: b.periodStart,
+      periodEnd: b.periodEnd,
+      facts: [
+        ["Reference", b.id],
+        ["State", "Contracted · delivering"],
+        ["Direction", sold ? "Sell" : "Buy"],
+        ["Shape", shapeLabel],
+        ["Delivery period", b.periodLabel + " · " + formatDateShort(b.periodStart) + " – " + formatDateShort(b.periodEnd)],
+        ["Applies to", "All connections on the account"],
+        ["Power", num(b.powerKw / 1000, 3) + " MW"],
+        ["Volume", num(volumeMwh, 2) + " MWh"],
+        ["Agreed price", "€ " + ConsumptionCalc.formatNL(priceMwh, 4) + " / MWh"]
+      ],
+      events: [{
+        title: "Block contracted",
+        actor: "PeakPower Trading",
+        ts: "delivery " + formatDateShort(b.periodStart) + " – " + formatDateShort(b.periodEnd),
+        body: "Held across every connection on the account. " +
+          (sold ? "A sold block reduces cover" : "Drawn as part of the hedge line") +
+          " on the consumption chart for this period.",
+        tone: "success"
+      }]
+    };
+  }
 
-    if (!rows.length) {
-      return cardHtml("Contracted blocks", "Positions held per connection",
-        '<div class="empty-state">No contracted blocks on this account.</div>');
-    }
-
-    var totalVolumeMwh = 0, totalValueEur = 0;
-    var cols = "1.5fr 1fr 0.9fr 0.9fr 1.1fr 1fr 1.1fr";
-    var head = '<div class="gt-head dense" style="grid-template-columns:' + cols + '"><div>CONNECTION</div><div>SHAPE</div><div>PERIOD</div>' +
-      '<div class="gt-cell-num">POWER</div><div class="gt-cell-num">VOLUME</div><div class="gt-cell-num">PRICE</div><div class="gt-cell-num">VALUE</div></div>';
-
-    var body = rows.map(function (r) {
-      var b = r.block;
-      // Volume is derived from the block's own hours, exactly as
-      // hedge_blocks_2026.json computes its MWh field — one formula, so the
-      // screen and the file cannot drift apart.
-      var hours = PortalTradeLink.hoursInPeriod(b.periodStart, b.periodEnd, b.shape);
-      var volumeMwh = (b.powerKw / 1000) * hours;
-      var valueEur = volumeMwh * (b.priceKwh * 1000);
-      totalVolumeMwh += volumeMwh;
-      totalValueEur += valueEur;
-
-      // A negative power is a SOLD block — the same convention the
-      // connection detail's own block table uses ("Base (sell)", negative
-      // volume), not a separate flag.
-      var sold = b.powerKw < 0;
-      // formatNL emits an ASCII hyphen; this page writes a real minus sign
-      // (U+2212) and puts it BEFORE the currency symbol, the way the ledger
-      // and the seeded block positions already do.
-      var num = function (v, dp) { return ConsumptionCalc.formatNL(v, dp).replace("-", "\u2212"); };
-      var money = function (v) { return (v < 0 ? "\u2212 € " : "€ ") + ConsumptionCalc.formatNL(Math.abs(v), 2); };
-      var shapeLabel = b.shape.charAt(0).toUpperCase() + b.shape.slice(1) + (sold ? " (sell)" : "");
-      return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
-        '<div>' + esc(r.site.name) + '</div>' +
-        '<div>' + badge(shapeLabel, sold ? "info" : (b.shape === "peak" ? "warning" : "neutral")) + '</div>' +
-        '<div>' + esc(b.periodLabel || rangeLabel(b.periodStart, b.periodEnd)) + '</div>' +
-        '<div class="gt-cell-num">' + num(b.powerKw / 1000, 2) + ' MW</div>' +
-        '<div class="gt-cell-num">' + num(volumeMwh, 1) + ' MWh</div>' +
-        '<div class="gt-cell-num">€ ' + ConsumptionCalc.formatNL(b.priceKwh * 1000, 2) + '</div>' +
-        '<div class="gt-cell-num">' + money(valueEur) + '</div></div>';
-    }).join("");
-
-    var foot = '<div class="gt-row gt-total" style="grid-template-columns:' + cols + '">' +
-      '<div>Total · ' + rows.length + ' blocks</div><div></div><div></div><div></div>' +
-      '<div class="gt-cell-num">' + ConsumptionCalc.formatNL(totalVolumeMwh, 1).replace("-", "\u2212") + ' MWh</div>' +
-      '<div></div><div class="gt-cell-num">' +
-      (totalValueEur < 0 ? "\u2212 € " : "€ ") + ConsumptionCalc.formatNL(Math.abs(totalValueEur), 2) + '</div></div>';
-
-    return cardHtml("Contracted blocks",
-      rows.length + " blocks across " + (DATA.sites || []).length + " connections · the hedge the consumption chart draws",
-      '<div class="grid-table dense">' + head + body + foot + '</div>' +
-      '<div class="caption" style="margin-top:8px">A sold block carries a negative power and reduces cover. ' +
-      'Confirmed trades from the table above are not repeated here.</div>');
+  /** Every contracted block, newest delivery period first. */
+  function contractedBlockTrades() {
+    if (!DATA || !DATA.hedge) { return []; }
+    return DATA.hedge.slice().sort(function (x, y) {
+      if (x.periodStart !== y.periodStart) { return x.periodStart < y.periodStart ? 1 : -1; }
+      return x.shape < y.shape ? -1 : 1;
+    }).map(blockAsTrade);
   }
 
   function renderTradingPage() {
@@ -3259,8 +3251,7 @@
         '<div>' + badge(t.status, t.statusTone) + '</div></div>';
     }).join("");
     document.getElementById("trading-body").innerHTML =
-      '<div class="grid-table">' + head + '<div class="gt-scroll">' + rows + '</div></div>' +
-      hedgeBlocksCardHtml();
+      '<div class="grid-table">' + head + '<div class="gt-scroll">' + rows + '</div></div>';
   }
 
   function renderTradeDetail() {
@@ -3729,18 +3720,21 @@
   }
 
   /**
-   * A connection's total contracted power (MW) overlapping a delivery period —
-   * its static hedge_blocks_2026.json blocks PLUS every CONFIRMED live trade,
-   * via hedgeBlocksForSite() — the per-connection half of the same join the
-   * Consumption chart reads portfolio-wide (never DATA.hedge directly, or a
-   * confirmed trade would silently drop out here). hedgeBlocksForSite() itself
-   * doesn't filter its static half by date, so the overlap check is this
-   * function's own job — matching coversRange()'s inclusive-overlap test.
-   * Returns raw MW (can be negative — a sold block reduces cover, and that's
-   * a real, not a clamped, position); callers decide how to display zero.
+   * The ACCOUNT's total contracted power (MW) overlapping a delivery period —
+   * every contracted block plus every confirmed live trade, through
+   * hedgeBlocksFor() (never DATA.hedge directly, or a confirmed trade would
+   * silently drop out here). hedgeBlocksFor() doesn't date-filter its static
+   * half, so the overlap check is this function's own job — matching
+   * coversRange()'s inclusive-overlap test.
+   *
+   * There is no per-connection variant any more, and there must not be one:
+   * a block is held for the whole account, so printing the same figure on six
+   * connection cards would claim a per-connection split that does not exist.
+   * Returns raw MW (can be negative — a sold block reduces cover, and that's a
+   * real, not a clamped, position); callers decide how to display zero.
    */
-  function connectionCoverMw(connId, periodStart, periodEnd) {
-    var blocks = hedgeBlocksForSite(connId, periodStart, periodEnd).filter(function (b) {
+  function accountCoverMw(periodStart, periodEnd) {
+    var blocks = hedgeBlocksFor(periodStart, periodEnd).filter(function (b) {
       return b.periodStart && b.periodEnd && !(b.periodEnd < periodStart || b.periodStart > periodEnd);
     });
     var totalKw = blocks.reduce(function (sum, b) { return sum + (b.powerKw || 0); }, 0);
@@ -3766,10 +3760,10 @@
    *
    * Each card shows the connection's full EAN (looked up from
    * PortalSeedData.CONNECTIONS by id — the shared source, not a second
-   * copy; see CLAUDE.md "Derived detail must not out-claim its source")
-   * and a CURRENT COVER pill, computed live from connectionCoverMw()
-   * against the wizard's own currently-selected delivery period rather
-   * than a static seeded string.
+   * copy; see CLAUDE.md "Derived detail must not out-claim its source").
+   * Cover is NOT on the card: a block is held for the whole account, so it
+   * is stated once above the grid, computed live from accountCoverMw()
+   * against the wizard's own currently-selected delivery period.
    *
    * The volume field itself is a stepper (2026-08-18, "enhance the
    * professional UI/UX approach to the volume input") — a bordered,
@@ -3797,15 +3791,11 @@
         : '<input type="checkbox"' + (sel ? " checked" : "") + (locked ? " disabled" : "") + '>';
       var click = (c.notEligible || locked) ? "" : ' onclick="PP.toggleWizardConnection(\'' + c.id + '\')"';
       var fullEan = connectionEan(c.id) || c.id;
-      var foot;
-      if (c.notEligible) {
-        foot = '<span class="cc-pill ineligible">Not eligible' + (c.note ? " · " + c.note : "") + '</span>';
-      } else {
-        var coverMw = connectionCoverMw(c.id, period.start, period.end);
-        foot = coverMw === 0
-          ? '<span class="cc-pill none">No current cover</span>'
-          : '<span class="cc-pill covered">' + ConsumptionCalc.formatNL(coverMw, 2) + ' MW covered</span>';
-      }
+      // Only a reason a card cannot be picked goes here now. Cover is an
+      // account-level figure and is stated once, above the grid.
+      var foot = c.notEligible
+        ? '<span class="cc-pill ineligible">Not eligible' + (c.note ? " · " + c.note : "") + '</span>'
+        : "";
       return '<div class="conn-card' + (sel ? " selected" : "") + (c.notEligible ? " not-eligible" : "") + (locked ? " locked" : "") + '"' + click + '>' +
         pick +
         '<div class="cc-body"><div class="cc-name">' + c.name + '</div><div class="cc-ean">' + fullEan + '</div>' +
@@ -3816,7 +3806,17 @@
         '<button type="button" class="btn-select-all" onclick="PP.selectAllWizardConnections()">✓ Select all</button>' +
         '<button type="button" class="btn-clear-all" onclick="PP.clearWizardConnections()">✕ Clear all</button>' +
       '</div>';
-    var grid = toolbar + '<div class="conn-grid">' + cards + '</div>';
+    // One account-level cover line, from the real blocks, for the period the
+    // wizard currently has selected.
+    var coverMw = accountCoverMw(period.start, period.end);
+    var coverText = coverMw === 0
+      ? "No cover is held for " + period.period + " yet."
+      : ConsumptionCalc.formatNL(coverMw, 2).replace("-", "\u2212") + " MW is already held for " + period.period +
+        ", across every connection on the account.";
+    var coverLine = '<div class="cc-account-cover"><span class="cc-pill ' + (coverMw === 0 ? "none" : "covered") + '">Current cover</span>' +
+      '<span>' + esc(coverText) + '</span></div>';
+
+    var grid = coverLine + toolbar + '<div class="conn-grid">' + cards + '</div>';
 
     var invalid = !wizardVolumeValid();
     var atMin = (state.wizard.volumeMw || 0) <= MIN_VOLUME_MW;
@@ -5242,27 +5242,17 @@
   }
 
   /**
-   * The portfolio's hedge for a range: every connection's contracted blocks
-   * from hedge_blocks_2026.json plus every confirmed trade over that range.
+   * The account's hedge for a range: every contracted block from
+   * hedge_blocks_2026.json plus every confirmed trade over that range.
+   * Blocks are held for the whole account, so there is nothing to group or
+   * filter by connection here.
    * This is the single place the two are joined — read the hedge through here,
    * never DATA.hedge directly, or confirmed trades silently drop out of the
    * line, the Hedge Cost and the coverage figures.
    */
   function hedgeBlocksFor(from, to) {
-    var blocks = [];
-    allSiteIds().forEach(function (id) { blocks = blocks.concat(hedgeBlocksForSite(id, from, to)); });
-    return blocks;
-  }
-
-  /**
-   * The same join for ONE connection. Still needed where a figure really is
-   * per-connection — the wizard's CURRENT COVER pill and the Dashboard's
-   * single-site mini chart — even though Consumption itself no longer is.
-   */
-  function hedgeBlocksForSite(siteId, from, to) {
-    var contracted = (DATA && DATA.hedge && DATA.hedge[siteId]) || [];
-    var confirmed = confirmedBlocksForRange(from, to).filter(function (b) { return b.siteId === siteId; });
-    return confirmed.length ? contracted.concat(confirmed) : contracted;
+    var contracted = (DATA && DATA.hedge) || [];
+    return contracted.concat(confirmedBlocksForRange(from, to));
   }
 
   /**
@@ -6177,10 +6167,8 @@
     // of the metering data existing for it. Falls back to MAX_DATE if there's
     // somehow no hedge data at all.
     MAX_SELECTABLE_DATE = MAX_DATE;
-    Object.keys(DATA.hedge || {}).forEach(function (siteId) {
-      (DATA.hedge[siteId] || []).forEach(function (block) {
-        if (block.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = block.periodEnd; }
-      });
+    (DATA.hedge || []).forEach(function (block) {
+      if (block.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = block.periodEnd; }
     });
     // The wizard's own furthest quoted year (WIZARD_PERIODS.year, now out to
     // Cal 2028 — see "Three period rows, one selection" in CLAUDE.md) widens
@@ -6236,6 +6224,10 @@
     dayDate.addEventListener("change", function () { setDayDate(this.value); });
 
     markActivePreset();
+    // The contracted blocks only exist once DATA has arrived, and they are
+    // part of the trade list — so rebuild it here, before the first render,
+    // rather than leaving Trading showing the link/seed half only.
+    syncLinkedTrades();
     renderCurrentPage();
   }
 

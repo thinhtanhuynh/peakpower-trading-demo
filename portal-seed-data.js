@@ -32,40 +32,22 @@
   var CONNECTIONS = [
     { id: "rot", name: "Rotterdam DC", ean: "8716 8710 0000 0000 11", commodity: "Electricity", status: "Active", statusTone: "success", latestDate: "12 Aug 2026", latestNote: "provisional", volume: "385,4 MWh", coverage: 94,
       description: "Data centre — 3 halls", gridOperator: "Stedin", capacity: "4.200 kW", address: "Waalhaven Zuidzijde 8, Rotterdam", activeSince: "1 January 2024", contractUntil: "open-ended", lastChanged: "2 Feb 2026",
-      dq: ["F","F","F","F","F","F","F","F","C","F","F","F","F","F"],
-      blocks: [
-        { trade: "TRD-1042", shape: "Base", period: "Aug 2026", allocated: "0,200 MW", price: "€ 72,4000", volume: "148,80 MWh", status: "Confirmed" },
-        { trade: "TRD-1051", shape: "Peak", period: "Q1 2027", allocated: "0,200 MW", price: "€ 94,7500", volume: "153,60 MWh", status: "Confirmed" }
-      ] },
+      dq: ["F","F","F","F","F","F","F","F","C","F","F","F","F","F"] },
     { id: "venlo", name: "Venlo cold store", ean: "8716 8710 0000 0000 27", commodity: "Electricity", status: "Active", statusTone: "success", latestDate: "12 Aug 2026", latestNote: "provisional", volume: "291,7 MWh", coverage: 71,
       description: "Freezer hall + dock 3 compressors", gridOperator: "Enexis", capacity: "2.500 kW", address: "Ceresstraat 14, Venlo", activeSince: "1 January 2024", contractUntil: "open-ended", lastChanged: "14 Mar 2026",
-      dq: ["F","F","F","F","F","F","F","F","C","F","P","P","P","N"],
-      blocks: [
-        { trade: "TRD-1042", shape: "Base", period: "Aug 2026", allocated: "0,300 MW", price: "€ 72,4000", volume: "223,20 MWh", status: "Confirmed" },
-        { trade: "TRD-1051", shape: "Peak", period: "Q3 2026", allocated: "0,200 MW", price: "€ 96,1500", volume: "50,40 MWh", status: "Confirmed" },
-        { trade: "TRD-1867", shape: "Base (sell)", period: "Aug 2026", allocated: "−0,040 MW", price: "€ 78,2000", volume: "−29,76 MWh", status: "Confirmed", negative: true }
-      ] },
+      dq: ["F","F","F","F","F","F","F","F","C","F","P","P","P","N"] },
     { id: "tilburg", name: "Tilburg plant", ean: "8716 8710 0000 0000 43", commodity: "Electricity", status: "Active", statusTone: "success", latestDate: "12 Aug 2026", latestNote: "provisional", volume: "612,0 MWh", coverage: 83,
       description: "Logistics hub — 2 cold docks", gridOperator: "Enexis", capacity: "3.800 kW", address: "Vossenberg 22, Tilburg", activeSince: "1 January 2024", contractUntil: "open-ended", lastChanged: "2 Feb 2026",
-      dq: ["F","F","F","F","F","F","F","F","F","F","F","F","P","P"],
-      blocks: [
-        { trade: "TRD-1051", shape: "Peak", period: "Q1 2027", allocated: "0,400 MW", price: "€ 94,7500", volume: "307,20 MWh", status: "Confirmed" },
-        { trade: "TRD-1867", shape: "Base (sell)", period: "Aug 2026", allocated: "−0,030 MW", price: "€ 78,2000", volume: "−22,32 MWh", status: "Confirmed", negative: true }
-      ] },
+      dq: ["F","F","F","F","F","F","F","F","F","F","F","F","P","P"] },
     { id: "almere", name: "Almere office", ean: "8716 8710 0000 0000 59", commodity: "Electricity", status: "Active", statusTone: "success", latestDate: "10 Aug 2026", latestNote: "no data 2 days", volume: "18,2 MWh", coverage: 0,
       description: "Office + small server room", gridOperator: "Liander", capacity: "800 kW", address: "Hogering 145, Almere", activeSince: "1 January 2024", contractUntil: "open-ended", lastChanged: "—",
-      dq: ["F","F","F","F","F","F","F","F","F","F","F","N","N","N"],
-      blocks: [
-        { trade: "TRD-1051", shape: "Peak", period: "Q1 2027", allocated: "0,100 MW", price: "€ 94,7500", volume: "76,80 MWh", status: "Confirmed" }
-      ] },
+      dq: ["F","F","F","F","F","F","F","F","F","F","F","N","N","N"] },
     { id: "unnamed", name: "— no name set —", ean: "8716 8710 0000 0000 61", commodity: "Electricity", status: "Active", statusTone: "success", latestDate: "12 Aug 2026", latestNote: "", volume: "44,9 MWh", coverage: 35,
       description: "—", gridOperator: "Enexis", capacity: "1.200 kW", address: "—", activeSince: "—", contractUntil: "—", lastChanged: "—",
-      dq: ["F","F","F","F","F","F","F","F","F","F","F","F","F","F"],
-      blocks: [] },
+      dq: ["F","F","F","F","F","F","F","F","F","F","F","F","F","F"] },
     { id: "breda", name: "Breda warehouse", ean: "8716 8710 0000 0000 78", commodity: "Electricity", status: "Ending 31 Dec", statusTone: "warning", latestDate: "12 Aug 2026", latestNote: "", volume: "102,3 MWh", coverage: 60,
       description: "Warehouse — ends this year", gridOperator: "Enexis", capacity: "1.600 kW", address: "Konijnenberg 30, Breda", activeSince: "1 January 2024", contractUntil: "31 December 2026", lastChanged: "20 Jan 2026",
-      dq: ["F","F","F","F","F","F","F","F","C","F","F","P","P","P"],
-      blocks: [ { trade: "TRD-1867", shape: "Base (sell)", period: "Aug 2026", allocated: "−0,020 MW", price: "€ 78,2000", volume: "−14,88 MWh", status: "Confirmed", negative: true } ] },
+      dq: ["F","F","F","F","F","F","F","F","C","F","F","P","P","P"] },
     { id: "tilburg-gas", name: "Tilburg plant — gas", ean: "8716 8710 0000 0000 92", commodity: "Gas", status: "Not tradeable", statusTone: "neutral", latestDate: "—", latestNote: "", volume: "—", coverage: null, notTradeable: true }
   ];
 

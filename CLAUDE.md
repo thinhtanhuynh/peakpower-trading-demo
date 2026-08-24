@@ -186,9 +186,16 @@ The portal's 7th connection, `tilburg-gas` (EAN `871687100000000092`, Gas,
 
 ## Hedge block test data
 
-`hedge_blocks_2026.json` is hand-maintained: one row per EAN per shape per
-period, expressing a hedge as a power (MW) held for a period, converted to
-energy (MWh) and to kW/kWh. New rows go straight into the JSON.
+`hedge_blocks_2026.json` is hand-maintained: **one row per shape per period
+for the whole account**, expressing a hedge as a power (MW) held for a period,
+converted to energy (MWh) and to kW/kWh. New rows go straight into the JSON.
+
+**A block has no EAN.** It is bought for the account, not against a metering
+point, so there is nothing to group or filter by connection — a row carries an
+`id` (`BLK-26xx`), a `direction` and its period/shape/power/price, and that is
+all. This replaced a per-EAN model where the same period appeared six times,
+once per connection; every screen that split cover by connection was rewritten
+with it (see "Blocks belong to the account, not a connection").
 
 **Shapes**: `base` is held 24/7 across the period; `peak` only Mon–Fri
 08:00–20:00 within it.
@@ -219,8 +226,8 @@ the daily mean and the overnight trough goes long while the evening peak goes
 short, so one day shows short *and* long several times over. That is what the
 40 rows are sized to do.
 
-Each block is a multiple of its connection's own mean net load over the
-period, and the multiple is what decides the day's character:
+Each block is a multiple of the **account's** mean net load over the period,
+and the multiple is what decides the day's character:
 
 | Multiple | Where the line sits | The day reads |
 |---|---|---|
@@ -232,41 +239,42 @@ period, and the multiple is what decides the day's character:
 Laid out over the measured range as two layers, quarter blocks with monthly
 top-ups stacked on them:
 
-| Period | Rows | Multiple | Result |
+| Period | Rows | Portfolio power | Result |
 |---|---|---|---|
-| `Q1 2026` | 8 | 1.00 | Jan and Mar read mixed |
-| `Feb 2026` | 8 | +0.60 on top of Q1 | February is long all month |
+| `Q1 2026` | 2 | base 3,760 MW + peak 0,939 MW | Jan and Mar read mixed |
+| `Feb 2026` | 2 | base 2,265 + peak 0,563, stacked on Q1 | February is long all month |
 | *April* | **none** | — | April is genuinely unhedged |
-| `May 2026` | 8 | 1.00 | mixed |
-| `Jun 2026` | 8 | 0.62 | June is short all month |
-| `Q3 2026` | 8 | 1.00 | Jul and Aug read mixed |
+| `May 2026` | 2 | base 3,768 + peak 0,917 | mixed |
+| `Jun 2026` | 2 | base 2,419 + peak 0,546 | June is short all month |
+| `Q3 2026` | 2 | base 3,991 + peak 0,897 | Jul and Aug read mixed |
 
 Across the 217 measured days that gives **131 mixed, 26 long-only, 30
 short-only and 30 unhedged** — the distribution to re-check after touching
 this file, because it is the whole point of the sizing.
 
-**Breda and Almere take 30 % of their cover as a `peak` block**, split by
-*energy* rather than power (a peak block only runs weekday 08:00–20:00, so the
-same energy needs a larger power). That keeps both shapes represented and the
-step it puts in at 08:00 and 20:00 adds crossings of its own.
+**Every period carries a `peak` block alongside its `base` one**, about 20 % of
+the cover by energy (a peak block only runs weekday 08:00–20:00, so the same
+energy needs a larger power). That keeps both shapes represented and the step
+it puts in at 08:00 and 20:00 adds crossings of its own.
 
 **There is no YEAR row any more.** A year block would cover April, and April
 existing as a genuinely unhedged month is deliberate — it is the only way the
 screen can show what no position looks like.
 
-**A negative `powerKw` is a sold block, not a data error.** The greenhouse
-runs CHP day and night and exports more than it draws, so every one of its
-rows is negative; `computeIntervalHedgeVolumes` sums it with no special case,
-the same convention a confirmed SELL trade already uses.
+**A negative `powerKw` is a sold block, not a data error** — `direction` reads
+`"Sell"` and `computeIntervalHedgeVolumes` sums it with no special case, the
+same convention a confirmed SELL trade already uses. No row is negative today:
+the greenhouse's export is netted into the account total rather than carried as
+its own sold position, which is what dropping the per-EAN split means.
 
 Prices vary per period and are not round, so the stacked Q1+February rows
 exercise per-block pricing in Hedge Cost. `tilburg-gas` is excluded — not
 tradeable.
 
 **Regenerating it:** there is no checked-in generator (same rule as the usage
-data). Rebuild with a one-off ephemeral script that reads each site's mean net
-load per window straight out of `consumption_compact_2026.json`, multiplies by
-the table above, and takes volume from `PortalTradeLink.hoursInPeriod(start,
+data). Rebuild with a one-off ephemeral script that reads the account's mean
+net load per window straight out of `consumption_compact_2026.json`, multiplies
+by the table above, and takes volume from `PortalTradeLink.hoursInPeriod(start,
 end, shape)`. The check is the day-kind distribution above, counted with
 `ConsumptionCalc.computeIntervalSeries`.
 
@@ -305,16 +313,17 @@ small and is grouped live, so editing a hedge period needs no rebuild.
   "sites": [{ "id": "rot", "ean": "871687100000000011", "name": "Rotterdam DC" }],
   "byDate": { "2026-01-01": { "t": ["00:00"], "p": [0.0896] } },
   "bySite": { "rot": { "2026-01-01": { "c": [612.4], "g": [0.0] } } },
-  "hedge":  { "rot": [{ "shape": "base", "periodLabel": "2026", "periodStart": "2026-01-01", "periodEnd": "2026-12-31", "powerKw": 1000.0, "priceKwh": 0.07 }] }
+  "hedge":  [{ "id": "BLK-2601", "shape": "base", "direction": "Buy", "periodLabel": "Q1 2026", "periodStart": "2026-01-01", "periodEnd": "2026-03-31", "powerKw": 3760.0, "priceKwh": 0.0814 }]
 }
 ```
 
 `byDate[date].t`/`.p` (local time-of-day, EPEX €/kWh) are stored once per
 date and shared across sites; `bySite[id][date].c`/`.g` are per-site
 consumption/production in kW, index-aligned with `.t`. Array length is 96
-every day except 2026-03-29 (spring forward), which has 92. `hedge[id]` keeps
-period start/end per block, so any mix of YEAR/QUARTER/MONTH rows is picked
-up with no code change.
+every day except 2026-03-29 (spring forward), which has 92. **`hedge` is a
+flat array, not a per-site map** — one entry per contracted block, each
+keeping its own period start/end, so any mix of YEAR/QUARTER/MONTH rows is
+picked up with no code change.
 
 The page shows a "Loading live data…" state with controls disabled until both
 fetches resolve, and an inline error card if one fails — most often because
@@ -404,7 +413,7 @@ from real data; that was reverted on explicit product direction.
 | **Connections** | `portal-seed-data.js` (`CONNECTIONS`) | **list** / **detail** (`state.connId`) |
 | **Consumption** | Real, calculated — see below | Single view, arbitrary From/To range |
 | **Prices** | `portal-seed-data.js` (`PRICES`) | Single view. Six indicative cards, each jumping into the wizard via `startWizardFromPrice`, plus a synthetic 90-day trend chart |
-| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`) + `state.trades`, plus `DATA.hedge` for the contracted-blocks table | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView` |
+| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`) + `state.trades`, which includes the contracted blocks from `DATA.hedge` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView` |
 | **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `BANK_DETAILS`, `PAYOUT_ACCOUNT`) + in-memory balances | **ledger** / **topup** / **withdraw** (+ their success states), via `state.walletView`. Interactive but not persisted across reload |
 | **Settlements** | `portal-seed-data.js` (`SETTLEMENTS`) | **list** / **detail** (`state.settlementId`) |
 
@@ -529,31 +538,44 @@ A new screen rendering into its own `-body` wrapper must be added to that
 list, or its sections stack flush. Detail sub-views render into the same
 wrapper and inherit it.
 
-### The contracted-blocks table
+### Blocks belong to the account, not a connection
 
-The Trading list carries a second table under the trades: **Contracted
-blocks**, every row of `hedge_blocks_2026.json` for this account
-(`hedgeBlocksCardHtml()`), grouped by connection then period then shape.
-Until it existed those positions were visible only as a line on the
-Consumption chart and as hardcoded strings on a connection's detail.
+A block is bought for the whole account: `hedge_blocks_2026.json` carries no
+EAN, `DATA.hedge` is a flat array, and every connection draws on every block.
+That replaced a per-EAN model, and four screens were rewritten to stop
+claiming a split that no longer exists:
 
-Four rules it follows:
+| Where | Was | Now |
+|---|---|---|
+| Trading list | a separate "Contracted blocks" table below the trades | the blocks **are** trades — `blockAsTrade()` folds them into `state.trades` |
+| Wizard step 2 | a CURRENT COVER pill per connection card | one `accountCoverMw()` line above the grid |
+| Connection detail | a "Block positions on this connection" table from seeded `CONNECTIONS[].blocks` | a line saying blocks are held at account level, linking to Trading |
+| Dashboard mini chart | Rotterdam DC's own day under a hedge line | the whole portfolio, like Consumption |
 
-- **It reads `DATA.hedge`, never the JSON file directly**, so editing that
-  file and reloading is the whole edit loop — no regeneration step.
-- **Volume is derived**, not stored: `powerKw / 1000 × hoursInPeriod(start,
-  end, shape)`, the same formula the file's own MWh field uses. One formula
-  means the screen and the file cannot drift apart. `periodLabel` is the one
-  display-only field carried through `buildHedgeSection()`, because "Q3 2026"
-  reads better than a pair of ISO dates.
-- **Confirmed live trades are deliberately not folded in.** They are already
-  the table directly above, and showing them twice would double-count the
-  position to anyone reading down the page. The subtitle says which half this
-  is.
-- **A negative power renders as a sold block** — "Base (sell)", a real minus
-  sign, and the minus placed before the € — matching the convention the
-  connection detail's own block table already uses. `ConsumptionCalc.formatNL`
-  emits an ASCII hyphen, so both are rewritten at the call site.
+`PortalSeedData.CONNECTIONS[].blocks` is **gone**, not merely unread — it was
+a mockup fiction that would have contradicted the account-level hedge line on
+the screen next to it.
+
+### Blocks in the trade list
+
+`blockAsTrade(b)` converts a contracted block into the exact shape the Trading
+list and detail already render a trade in, and `contractedBlockTrades()`
+appends them to `state.trades` (newest delivery period first, after the linked
+and seeded rows). A block **is** a trade — bought or sold at an agreed price
+for a delivery period, already executed — so it gets one list, one detail view
+and one vocabulary rather than a table of its own that read as a second kind
+of object. It shows `Contracted` in a success tone, and its facts say *Applies
+to: All connections on the account*.
+
+Two things this depends on:
+
+- **`syncLinkedTrades()` runs again at the end of `init()`.** The blocks only
+  exist once `DATA` has arrived, so the first build (before the fetch
+  resolves) has the link and seed halves only. Without the second call the
+  Trading screen silently shows six rows instead of sixteen.
+- **The chart does not double-count them.** `confirmedBlocksForRange()` reads
+  `liveTradeRecords()` — the cross-portal link — not `state.trades`, so a
+  block appearing in the trade list never reaches the hedge line twice.
 
 ### Trading wizard
 
@@ -735,14 +757,16 @@ state unambiguously, so there is no extra badge on top of it.
   `PortalSeedData.CONNECTIONS` by id — not duplicated onto
   `WIZARD_CONNECTIONS`, which would be a second copy free to drift. Only
   Breda carries an extra `note` ("ends 31 Dec 2026").
-- **CURRENT COVER is real**, not a seed string: `connectionCoverMw(connId,
-  periodStart, periodEnd)` sums every block from `hedgeBlocksForSite(connId, …)`
-  whose period overlaps the **currently selected** delivery period, and
-  renders it as a `.cc-pill` — blue when covered, grey when not, amber
-  carrying the reason when the connection is ineligible. `hedgeBlocksForSite()`
-  does not date-filter its static half, so the overlap test is this
-  function's job. A negative figure (a sold block reducing net cover) is
-  shown as negative, not clamped.
+- **Cover is stated once, above the grid, not per card.** `accountCoverMw(
+  periodStart, periodEnd)` sums every block from `hedgeBlocksFor()` whose
+  period overlaps the **currently selected** delivery period and renders it in
+  a `.cc-account-cover` line. It is not on the cards, and must not go back
+  there: a block is held for the whole account, so the same figure printed six
+  times would claim a per-connection split that does not exist.
+  `hedgeBlocksFor()` does not date-filter its static half, so the overlap test
+  is this function's job. A negative figure (a sold block reducing net cover)
+  is shown as negative, not clamped. A card's `.cc-pill` now carries only a
+  reason it cannot be picked.
 - `Select all` / `Clear all` sit above the grid, styled as opposites —
   `.btn-select-all` tinted blue, `.btn-clear-all` neutral outlined. Select
   all's hover inverts to a solid blue-700 fill with white text; the previous
@@ -858,9 +882,8 @@ Two things fall out of that and are worth keeping straight:
   weekday/weekend and time-of-day shape, which is the same arithmetic the
   measured path does.
 
-`hedgeBlocksForSite(siteId, from, to)` is the per-connection half of the same
-join, still read by the two figures that genuinely are per-connection: the
-wizard's CURRENT COVER pill and the Dashboard's single-site mini chart.
+There is no per-connection variant of the hedge read, and there must not be
+one — see "Blocks belong to the account, not a connection".
 
 #### Where the controls live
 
@@ -1263,8 +1286,8 @@ Restoring an overlay means restoring all of it — the band, the boundary
 markers, the legend and the tooltip wording are one vocabulary, and shipping
 the line alone leaves an unexplained dotted stroke.
 
-**Read the hedge through `hedgeBlocksFor(from, to)` — or
-`hedgeBlocksForSite()` for one connection — never `DATA.hedge` directly.** That helper is the one place the contracted
+**Read the hedge through `hedgeBlocksFor(from, to)`, never `DATA.hedge`
+directly.** That helper is the one place the contracted
 blocks and the confirmed live trades are joined; going around it silently
 drops confirmed trades out of the line, the cost and the coverage. A confirmed
 trade is signed by direction (a sold block is negative) and priced at its firm

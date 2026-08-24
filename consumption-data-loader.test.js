@@ -17,15 +17,15 @@ function makeRow(ean, date, isp, hhmm, epex, consumption, production) {
   };
 }
 
-function makeHedgeRow(ean, shape, periodStart, periodEnd, powerKw, priceKwh) {
+function makeHedgeRow(id, shape, periodStart, periodEnd, powerKw, priceKwh) {
   return {
-    EAN: ean,
+    id: id,
+    direction: powerKw < 0 ? "Sell" : "Buy",
     shape: shape,
     periodStart: periodStart,
     periodEnd: periodEnd,
     powerKw: powerKw,
     priceKwh: priceKwh,
-    organization_name: "irrelevant for this function",
     periodType: "YEAR",
     periodLabel: periodStart + ".." + periodEnd
   };
@@ -92,62 +92,52 @@ function makeHedgeRow(ean, shape, periodStart, periodEnd, powerKw, priceKwh) {
   assert.deepStrictEqual(result.sites, Loader.SITE_META);
 })();
 
-// buildHedgeSection: groups by site with only the needed fields
+// buildHedgeSection: one flat list for the whole account, only the needed fields
 (function () {
   var rows = [
-    makeHedgeRow(ROT_EAN, "base", "2026-01-01", "2026-12-31", 1000.0, 0.07),
-    makeHedgeRow(ROT_EAN, "peak", "2026-01-01", "2026-12-31", 1000.0, 0.095)
+    makeHedgeRow("BLK-1", "base", "2026-01-01", "2026-12-31", 1000.0, 0.07),
+    makeHedgeRow("BLK-2", "peak", "2026-01-01", "2026-12-31", 1000.0, 0.095)
   ];
-  var result = Loader.buildHedgeSection(rows);
-  assert.deepStrictEqual(result.rot, [
-    { shape: "base", periodLabel: "2026-01-01..2026-12-31", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000.0, priceKwh: 0.07 },
-    { shape: "peak", periodLabel: "2026-01-01..2026-12-31", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000.0, priceKwh: 0.095 }
+  assert.deepStrictEqual(Loader.buildHedgeSection(rows), [
+    { id: "BLK-1", shape: "base", direction: "Buy", periodLabel: "2026-01-01..2026-12-31", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000.0, priceKwh: 0.07 },
+    { id: "BLK-2", shape: "peak", direction: "Buy", periodLabel: "2026-01-01..2026-12-31", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000.0, priceKwh: 0.095 }
   ]);
 })();
 
-// buildHedgeSection: unknown EAN is ignored
+// buildHedgeSection: no rows -> no blocks (not an empty per-site map)
 (function () {
-  var rows = [makeHedgeRow(UNKNOWN_EAN, "base", "2026-01-01", "2026-12-31", 1000.0, 0.07)];
+  assert.deepStrictEqual(Loader.buildHedgeSection([]), []);
+})();
+
+// buildHedgeSection: a sold block keeps its negative power and its direction
+(function () {
+  var rows = [makeHedgeRow("BLK-S", "base", "2026-01-01", "2026-12-31", -500.0, 0.07)];
   var result = Loader.buildHedgeSection(rows);
-  Object.keys(result).forEach(function (id) {
-    assert.deepStrictEqual(result[id], []);
-  });
+  assert.strictEqual(result[0].powerKw, -500.0);
+  assert.strictEqual(result[0].direction, "Sell");
 })();
 
-// buildHedgeSection: all sites present even when empty
-(function () {
-  var result = Loader.buildHedgeSection([]);
-  assert.deepStrictEqual(
-    Object.keys(result).sort(),
-    Loader.SITE_META.map(function (m) { return m.id; }).sort()
-  );
-})();
-
-// buildHedgeSection: a site can carry multiple periods at once (e.g. YEAR + QUARTER + MONTH)
-// -- this is exactly what adding a new hedge period to hedge_blocks_2026.json produces.
+// buildHedgeSection: several periods at once (YEAR + QUARTER + MONTH) are all kept
 (function () {
   var rows = [
-    makeHedgeRow(ROT_EAN, "base", "2026-01-01", "2026-12-31", 1000.0, 0.07),
-    makeHedgeRow(ROT_EAN, "base", "2026-04-01", "2026-06-30", 2000.0, 0.06639),
-    makeHedgeRow(ROT_EAN, "peak", "2026-04-01", "2026-06-30", 1000.0, 0.09115),
-    makeHedgeRow(ROT_EAN, "base", "2026-07-01", "2026-07-31", 2000.0, 0.07779)
+    makeHedgeRow("BLK-Y", "base", "2026-01-01", "2026-12-31", 1000.0, 0.07),
+    makeHedgeRow("BLK-Q", "base", "2026-04-01", "2026-06-30", 2000.0, 0.06639),
+    makeHedgeRow("BLK-QP", "peak", "2026-04-01", "2026-06-30", 1000.0, 0.09115),
+    makeHedgeRow("BLK-M", "base", "2026-07-01", "2026-07-31", 2000.0, 0.07779)
   ];
   var result = Loader.buildHedgeSection(rows);
-  assert.strictEqual(result.rot.length, 4, "all periods for a site are kept, not just the first");
-  assert.strictEqual(result.rot[1].periodStart, "2026-04-01");
-  assert.strictEqual(result.rot[3].periodStart, "2026-07-01");
-  // periodLabel rides along for the Trading page's block list.
-  assert.strictEqual(result.rot[0].periodLabel, "2026-01-01..2026-12-31");
+  assert.strictEqual(result.length, 4, "all periods are kept, not just the first");
+  assert.strictEqual(result[1].periodStart, "2026-04-01");
+  assert.strictEqual(result[3].periodStart, "2026-07-01");
 })();
 
 // assembleDataset: wires buildCompactDataset + buildHedgeSection together
 (function () {
   var rows = [makeRow(ROT_EAN, "2026-01-01", 1, "00:00", 0.10, 100.0, 0.0)];
-  var hedgeRows = [makeHedgeRow(ROT_EAN, "base", "2026-01-01", "2026-12-31", 1000.0, 0.07)];
+  var hedgeRows = [makeHedgeRow("BLK-1", "base", "2026-01-01", "2026-12-31", 1000.0, 0.07)];
   var dataset = Loader.assembleDataset(rows, hedgeRows);
   assert.deepStrictEqual(dataset.bySite.rot["2026-01-01"].c, [100.0]);
-  assert.strictEqual(dataset.hedge.rot.length, 1);
-  assert.strictEqual(dataset.hedge.venlo.length, 0);
+  assert.strictEqual(dataset.hedge.length, 1);
 })();
 
 // attachHedge: merges a hedge section onto an already-pre-grouped dataset
@@ -160,22 +150,18 @@ function makeHedgeRow(ean, shape, periodStart, periodEnd, powerKw, priceKwh) {
     byDate: { "2026-01-01": { t: ["00:00"], p: [0.1] } },
     bySite: { rot: { "2026-01-01": { c: [100.0], g: [0.0] } } }
   };
-  var hedgeRows = [makeHedgeRow(ROT_EAN, "base", "2026-01-01", "2026-12-31", 1000.0, 0.07)];
+  var hedgeRows = [makeHedgeRow("BLK-1", "base", "2026-01-01", "2026-12-31", 1000.0, 0.07)];
   var result = Loader.attachHedge(precomputedDataset, hedgeRows);
   assert.strictEqual(result, precomputedDataset, "mutates and returns the same dataset object");
-  assert.strictEqual(result.hedge.rot.length, 1);
-  assert.strictEqual(result.hedge.venlo.length, 0);
+  assert.strictEqual(result.hedge.length, 1);
   // the pre-grouped parts are untouched
   assert.deepStrictEqual(result.bySite.rot["2026-01-01"].c, [100.0]);
 })();
 
-// attachHedge: defaults siteMeta to Loader.SITE_META when omitted
+// attachHedge: no hedge rows leaves an empty list, never undefined
 (function () {
   var result = Loader.attachHedge({ byDate: {}, bySite: {} }, []);
-  assert.deepStrictEqual(
-    Object.keys(result.hedge).sort(),
-    Loader.SITE_META.map(function (m) { return m.id; }).sort()
-  );
+  assert.deepStrictEqual(result.hedge, []);
 })();
 
 console.log("consumption-data-loader.test.js: all assertions passed");
