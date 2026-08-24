@@ -1087,8 +1087,11 @@
           <!-- The range/preset controls live with the chart they drive, not
                the page header — this card is the one thing they act on. -->
           <div class="chart-toolbar">
-            <span class="ctl">From <input type="date" id="from-date" disabled></span>
-            <span class="ctl">To <input type="date" id="to-date" disabled></span>
+            <!-- One day needs one date. From/To stay the source of truth for every
+                 reader (render, the presets, the export); #day-date writes both. -->
+            <span class="ctl" id="day-ctl">Date <input type="date" id="day-date" disabled></span>
+            <span class="ctl" id="from-ctl">From <input type="date" id="from-date" disabled></span>
+            <span class="ctl" id="to-ctl">To <input type="date" id="to-date" disabled></span>
             <div class="chart-tabs">
               <button type="button" class="chart-tab active" data-period="day" disabled>Day</button>
               <button type="button" class="chart-tab" data-period="month" disabled>Month</button>
@@ -1249,6 +1252,10 @@
   function allSiteIds() { return (DATA && DATA.sites ? DATA.sites : []).map(function (s) { return s.id; }); }
   var fromDate = document.getElementById("from-date");
   var toDate = document.getElementById("to-date");
+  var dayDate = document.getElementById("day-date");
+  var dayCtl = document.getElementById("day-ctl");
+  var fromCtl = document.getElementById("from-ctl");
+  var toCtl = document.getElementById("to-ctl");
   var exportBtn = document.getElementById("export-csv");
   var crumb = document.getElementById("crumb");
   var pageTitle = document.getElementById("page-title");
@@ -5784,6 +5791,32 @@
   }
 
   /** Lights up whichever preset button matches the range currently shown. */
+  /**
+   * A single-day range is asked for with one date, not two identical ones.
+   *
+   * From/To stay the source of truth — every reader (render, the presets, the
+   * export, goToConsumption) still goes through them, and #day-date simply
+   * writes both. So this is a display swap, not a second mode: a custom range
+   * that starts and ends on the same day IS a day, and gets the one input,
+   * exactly as the chart already switches to its single-day variant on the
+   * same test.
+   */
+  function syncDateControls() {
+    var oneDay = !!fromDate.value && fromDate.value === toDate.value;
+    dayCtl.style.display = oneDay ? "" : "none";
+    fromCtl.style.display = oneDay ? "none" : "";
+    toCtl.style.display = oneDay ? "none" : "";
+    if (oneDay && dayDate.value !== fromDate.value) { dayDate.value = fromDate.value; }
+  }
+
+  function setDayDate(value) {
+    var d = clampDate(value || fromDate.value);
+    fromDate.value = d;
+    toDate.value = d;
+    markActivePreset();
+    render();
+  }
+
   function markActivePreset() {
     var from = fromDate.value;
     var to = toDate.value;
@@ -5797,6 +5830,9 @@
     for (var i = 0; i < tabs.length; i++) {
       tabs[i].classList.toggle("active", tabs[i].getAttribute("data-period") === match);
     }
+    // Every path that changes the range already ends here, so the Date/From-To
+    // swap follows one call rather than being repeated at each call site.
+    syncDateControls();
   }
 
   // Holds everything the CSV export needs for whatever range is on screen.
@@ -6077,7 +6113,7 @@
       if (r.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = r.periodEnd; }
     });
 
-    [fromDate, toDate].forEach(function (el) {
+    [fromDate, toDate, dayDate].forEach(function (el) {
       el.min = MIN_DATE;
       el.max = MAX_SELECTABLE_DATE;
       el.disabled = false;
@@ -6105,6 +6141,7 @@
     exportBtn.addEventListener("click", exportCsv);
     fromDate.addEventListener("change", function () { markActivePreset(); render(); });
     toDate.addEventListener("change", function () { markActivePreset(); render(); });
+    dayDate.addEventListener("change", function () { setDayDate(this.value); });
 
     markActivePreset();
     renderCurrentPage();

@@ -211,18 +211,40 @@ use one shape:
 | `periodStart` / `periodEnd` | ISO dates | inclusive first/last day |
 | `periodLabel` | string | e.g. `"Aug 2026"`, `"Q3 2026"`, `"2026"` |
 
-Currently 36 rows — 6 EANs × 2 shapes × 3 periods:
+**The blocks are sized to each connection's real load, and deliberately
+mis-sized in places.** Every EAN used to hold the same 1 MW base + 1 MW peak,
+which made the whole portfolio read Long 46 % on an ordinary day — the same
+uninformative state everywhere. It is now 15 rows telling six different
+stories, so covered, short and long all appear on screen, and change with the
+season:
 
-| periodLabel | periodType | power MW base / peak | price €/MWh base / peak |
+| Connection | Standing 2026 block | Extra periods | Position it produces |
 |---|---|---|---|
-| `2026` | `YEAR` | 1.0 / 1.0 | 70.00 / 95.00 |
-| `Q2 2026` | `QUARTER` | 2.0 / 1.0 | 66.39 / 91.15 |
-| `Jul 2026` | `MONTH` | 2.0 / 1.0 | 77.79 / 91.19 |
+| Rotterdam DC | base 2.30 MW | Q3 +0.20 base, Aug +0.40 base | covered all year (94–101 %), deliberately long in August (117 %) |
+| Venlo cold store | base 0.35 MW | Q1 +0.20 base | long in winter, then clearly short from April (≈60 %) |
+| Tilburg plant | base 0.45 MW | Mar 0.15 peak | short in January, long from spring as the rooftop solar comes up (up to 158 %) |
+| Almere office | base 0.08 + peak 0.10 MW | Jun +0.03 base | the peak-shaped one — near-covered, long in June |
+| Greenhouse (`unnamed`) | base **−0.20 MW** | Q1 −0.20 base | a **sold** position: the site is a net exporter, so its hedge is negative |
+| Breda warehouse | base 0.50 + peak 1.30 MW | Q4 +0.15 base | the best-hedged connection — 97–102 % every month |
 
-The `2026` row uses round numbers so the volume maths is hand-checkable; the
-other two use a different base/peak split and non-round prices to exercise
-several simultaneously-active periods per site. Adding a period means adding
-6 EANs × 2 shapes = 12 rows. `tilburg-gas` is excluded — not tradeable.
+Portfolio cover works out at **97,1 %** across the measured range, and a
+typical day (5 Aug 2026) carries both legs at once: 116.093,3 kWh usage,
+114.720,0 kWh hedged, 6.326,4 short and 4.953,1 long.
+
+**A negative `powerKw` is a sold block, not a data error.** The greenhouse
+runs CHP day and night and exports more than it draws, so it sells forward;
+`computeIntervalHedgeVolumes` sums a negative block with no special case, the
+same convention a confirmed SELL trade already uses.
+
+Prices vary per period and are not round, so several simultaneously-active
+periods per site exercise the per-block pricing in Hedge Cost. `tilburg-gas`
+is excluded — not tradeable.
+
+**Regenerating it:** there is no checked-in generator (same rule as the usage
+data). The file is hand-maintained; a one-off ephemeral script that reads
+`PortalTradeLink.hoursInPeriod(start, end, shape)` for the volume is the way
+to rebuild it, and the check is that the covered/short/long mix above still
+comes out of `ConsumptionCalc.computeIntervalSeries`.
 
 ## Regenerating `consumption_compact_2026.json`
 
@@ -796,7 +818,7 @@ There is no single controls row. Each control sits with what it filters:
 
 | Control | Lives | Because |
 |---|---|---|
-| From/To + Day/Month/Quarter `#from-date` `#to-date` | the usage-chart card's toolbar | they filter the charts and table |
+| Date `#day-date` *or* From/To `#from-date` `#to-date`, plus the Day/Month/Quarter presets | the usage-chart card's toolbar | they filter the charts and table |
 | Zoom `#chart-zoom` (`#zoom-out`/`#zoom-in`) | same toolbar, right of the presets | it changes how closely the already-filtered range is viewed |
 | Export CSV `#export-csv` | the interval table's summary row | export belongs with what it exports |
 
@@ -814,6 +836,18 @@ above the title looking like a real breadcrumb. All three Consumption paths
 assign `""`.
 
 #### Date-range filter
+
+**A one-day range is asked for with one date.** When From and To are equal the
+toolbar shows a single `Date` input (`#day-date`) and hides the pair; any
+longer range shows From and To. `syncDateControls()` is the whole of it, called
+from `markActivePreset()` — which every path that changes the range already
+ends in, so there is one call site rather than one per entry point.
+
+**From/To remain the source of truth.** `#day-date` writes both and nothing
+else reads it: `render()`, the presets, the export and `goToConsumption()` are
+untouched. So this is a display swap, not a second mode — a custom range that
+starts and ends on the same day *is* a day and gets the single input, on the
+same `from === to` test the chart already uses to pick its single-day variant.
 
 From and To `<input type="date">` plus Day / Month / Quarter presets. From/To
 are the single source of truth for everything rendered. The presets are
