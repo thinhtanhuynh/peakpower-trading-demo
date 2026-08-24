@@ -211,25 +211,34 @@ use one shape:
 | `periodStart` / `periodEnd` | ISO dates | inclusive first/last day |
 | `periodLabel` | string | e.g. `"Aug 2026"`, `"Q3 2026"`, `"2026"` |
 
-**The blocks are sized to each connection's real load, and deliberately
-mis-sized in places.** Every EAN used to hold the same 1 MW base + 1 MW peak,
-which made the whole portfolio read Long 46 % on an ordinary day — the same
-uninformative state everywhere. It is now 15 rows telling six different
-stories, so covered, short and long all appear on screen, and change with the
-season:
+**The blocks are sized to each connection's real load, and the portfolio is
+deliberately swung between short and long.** Every EAN used to hold the same
+1 MW base + 1 MW peak, which pinned the whole portfolio to one uninformative
+state. It is now 19 rows in two layers:
 
-| Connection | Standing 2026 block | Extra periods | Position it produces |
-|---|---|---|---|
-| Rotterdam DC | base 2.30 MW | Q3 +0.20 base, Aug +0.40 base | covered all year (94–101 %), deliberately long in August (117 %) |
-| Venlo cold store | base 0.35 MW | Q1 +0.20 base | long in winter, then clearly short from April (≈60 %) |
-| Tilburg plant | base 0.45 MW | Mar 0.15 peak | short in January, long from spring as the rooftop solar comes up (up to 158 %) |
-| Almere office | base 0.08 + peak 0.10 MW | Jun +0.03 base | the peak-shaped one — near-covered, long in June |
-| Greenhouse (`unnamed`) | base **−0.20 MW** | Q1 −0.20 base | a **sold** position: the site is a net exporter, so its hedge is negative |
-| Breda warehouse | base 0.50 + peak 1.30 MW | Q4 +0.15 base | the best-hedged connection — 97–102 % every month |
+| Layer | What it is | What it produces |
+|---|---|---|
+| **2026** (YEAR) | about two thirds of each connection's own measured load — Rotterdam 1,58 MW, Venlo 0,35, Tilburg 0,25, Almere 0,05 base + 0,08 peak, greenhouse **−0,19** (sold), Breda 0,33 base + 0,84 peak | any period with no top-up reads clearly **short** |
+| **Q1 2026** and **Q3 2026** (QUARTER) | top-ups bought ahead of the winter and the summer, on top of the year block | those quarters read clearly **long** |
 
-Portfolio cover works out at **97,1 %** across the measured range, and a
-typical day (5 Aug 2026) carries both legs at once: 116.093,3 kWh usage,
-114.720,0 kWh hedged, 6.326,4 short and 4.953,1 long.
+The result, measured with `ConsumptionCalc.computeDayStats` over the real
+data, is that the position panel lands in a 30–40 % band **in both
+directions** depending on the period in view:
+
+| Period | Panel reads |
+|---|---|
+| Jan / Feb / Mar (Q1) | Covered 64–65 % · **Long 35–36 %** |
+| Apr / May / Jun (Q2) | Covered 64–66 % · **Short 34–36 %** |
+| Jul / Aug (Q3) | Covered 61–62 % · **Long 38–39 %** |
+| 5 Aug 2026 (the default single day) | Covered 68 % · Long 32 % |
+
+That is the number to re-check after touching this file: the panel's
+Short/Long share is `short` (or `long`) over `covered + short + long`, not
+over usage, so a block sized against usage alone lands lower than intended.
+
+**The greenhouse's Q3 has no top-up on purpose.** Its export collapses in
+summer, so the standing sold block already over-covers it and a top-up would
+be buying cover it does not need.
 
 **A negative `powerKw` is a sold block, not a data error.** The greenhouse
 runs CHP day and night and exports more than it draws, so it sells forward;
@@ -243,8 +252,8 @@ is excluded — not tradeable.
 **Regenerating it:** there is no checked-in generator (same rule as the usage
 data). The file is hand-maintained; a one-off ephemeral script that reads
 `PortalTradeLink.hoursInPeriod(start, end, shape)` for the volume is the way
-to rebuild it, and the check is that the covered/short/long mix above still
-comes out of `ConsumptionCalc.computeIntervalSeries`.
+to rebuild it, and the check is that the short/long band above still comes out
+of `ConsumptionCalc.computeDayStats`.
 
 ## Regenerating `consumption_compact_2026.json`
 
@@ -281,7 +290,7 @@ small and is grouped live, so editing a hedge period needs no rebuild.
   "sites": [{ "id": "rot", "ean": "871687100000000011", "name": "Rotterdam DC" }],
   "byDate": { "2026-01-01": { "t": ["00:00"], "p": [0.0896] } },
   "bySite": { "rot": { "2026-01-01": { "c": [612.4], "g": [0.0] } } },
-  "hedge":  { "rot": [{ "shape": "base", "periodStart": "2026-01-01", "periodEnd": "2026-12-31", "powerKw": 1000.0, "priceKwh": 0.07 }] }
+  "hedge":  { "rot": [{ "shape": "base", "periodLabel": "2026", "periodStart": "2026-01-01", "periodEnd": "2026-12-31", "powerKw": 1000.0, "priceKwh": 0.07 }] }
 }
 ```
 
@@ -380,7 +389,7 @@ from real data; that was reverted on explicit product direction.
 | **Connections** | `portal-seed-data.js` (`CONNECTIONS`) | **list** / **detail** (`state.connId`) |
 | **Consumption** | Real, calculated — see below | Single view, arbitrary From/To range |
 | **Prices** | `portal-seed-data.js` (`PRICES`) | Single view. Six indicative cards, each jumping into the wizard via `startWizardFromPrice`, plus a synthetic 90-day trend chart |
-| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`) + `state.trades` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView` |
+| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`) + `state.trades`, plus `DATA.hedge` for the contracted-blocks table | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView` |
 | **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `BANK_DETAILS`, `PAYOUT_ACCOUNT`) + in-memory balances | **ledger** / **topup** / **withdraw** (+ their success states), via `state.walletView`. Interactive but not persisted across reload |
 | **Settlements** | `portal-seed-data.js` (`SETTLEMENTS`) | **list** / **detail** (`state.settlementId`) |
 
@@ -504,6 +513,32 @@ nothing. Those wrappers carry the gap themselves:
 A new screen rendering into its own `-body` wrapper must be added to that
 list, or its sections stack flush. Detail sub-views render into the same
 wrapper and inherit it.
+
+### The contracted-blocks table
+
+The Trading list carries a second table under the trades: **Contracted
+blocks**, every row of `hedge_blocks_2026.json` for this account
+(`hedgeBlocksCardHtml()`), grouped by connection then period then shape.
+Until it existed those positions were visible only as a line on the
+Consumption chart and as hardcoded strings on a connection's detail.
+
+Four rules it follows:
+
+- **It reads `DATA.hedge`, never the JSON file directly**, so editing that
+  file and reloading is the whole edit loop — no regeneration step.
+- **Volume is derived**, not stored: `powerKw / 1000 × hoursInPeriod(start,
+  end, shape)`, the same formula the file's own MWh field uses. One formula
+  means the screen and the file cannot drift apart. `periodLabel` is the one
+  display-only field carried through `buildHedgeSection()`, because "Q3 2026"
+  reads better than a pair of ISO dates.
+- **Confirmed live trades are deliberately not folded in.** They are already
+  the table directly above, and showing them twice would double-count the
+  position to anyone reading down the page. The subtitle says which half this
+  is.
+- **A negative power renders as a sold block** — "Base (sell)", a real minus
+  sign, and the minus placed before the € — matching the convention the
+  connection detail's own block table already uses. `ConsumptionCalc.formatNL`
+  emits an ASCII hyphen, so both are rewritten at the call site.
 
 ### Trading wizard
 

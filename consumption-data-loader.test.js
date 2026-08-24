@@ -26,7 +26,8 @@ function makeHedgeRow(ean, shape, periodStart, periodEnd, powerKw, priceKwh) {
     powerKw: powerKw,
     priceKwh: priceKwh,
     organization_name: "irrelevant for this function",
-    periodType: "YEAR"
+    periodType: "YEAR",
+    periodLabel: periodStart + ".." + periodEnd
   };
 }
 
@@ -99,8 +100,8 @@ function makeHedgeRow(ean, shape, periodStart, periodEnd, powerKw, priceKwh) {
   ];
   var result = Loader.buildHedgeSection(rows);
   assert.deepStrictEqual(result.rot, [
-    { shape: "base", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000.0, priceKwh: 0.07 },
-    { shape: "peak", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000.0, priceKwh: 0.095 }
+    { shape: "base", periodLabel: "2026-01-01..2026-12-31", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000.0, priceKwh: 0.07 },
+    { shape: "peak", periodLabel: "2026-01-01..2026-12-31", periodStart: "2026-01-01", periodEnd: "2026-12-31", powerKw: 1000.0, priceKwh: 0.095 }
   ]);
 })();
 
@@ -135,6 +136,8 @@ function makeHedgeRow(ean, shape, periodStart, periodEnd, powerKw, priceKwh) {
   assert.strictEqual(result.rot.length, 4, "all periods for a site are kept, not just the first");
   assert.strictEqual(result.rot[1].periodStart, "2026-04-01");
   assert.strictEqual(result.rot[3].periodStart, "2026-07-01");
+  // periodLabel rides along for the Trading page's block list.
+  assert.strictEqual(result.rot[0].periodLabel, "2026-01-01..2026-12-31");
 })();
 
 // assembleDataset: wires buildCompactDataset + buildHedgeSection together

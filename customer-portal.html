@@ -553,6 +553,9 @@
      line items, connection block positions, wizard volumes). */
   .grid-table.dense .gt-head { padding:9px 12px; font-size:10px; gap:10px; }
   .grid-table.dense .gt-row { padding:11px 12px; font-size:12px; gap:10px; }
+  /* Totals row: same grid, weighted and ruled off like the desk's own
+     "Total requested" footer rather than reading as one more block. */
+  .gt-row.gt-total { font-weight:700; border-top:2px solid var(--pp-border-strong); background:var(--pp-surface-alt); }
   .gt-row.clickable { cursor:pointer; }
   .gt-row.clickable:hover { background:var(--pp-surface-alt); }
   .gt-row.disabled-row { cursor:default; color:var(--pp-text-faint); }
@@ -3151,6 +3154,93 @@
 
   // --- Trading ----------------------------------------------------------
 
+  /**
+   * Every contracted hedge block on the account, in one table.
+   *
+   * These are the positions the Consumption chart draws as its hedge line —
+   * until now they existed only as a line on a chart and as hardcoded strings
+   * on a connection's detail. This is the list behind that line, read from
+   * DATA.hedge (never hedge_blocks_2026.json directly), so editing that file
+   * and reloading is all it takes to change what shows here.
+   *
+   * Confirmed live trades are deliberately NOT folded in — they are already
+   * the table above, and showing them twice would double-count the position
+   * to anyone reading down the page. The subtitle says which half this is.
+   */
+  function hedgeBlocksCardHtml() {
+    if (!DATA) {
+      return cardHtml("Contracted blocks", "Positions held per connection",
+        '<div class="empty-state">Loading live data…</div>');
+    }
+
+    var rows = [];
+    (DATA.sites || []).forEach(function (site) {
+      (DATA.hedge[site.id] || []).forEach(function (b) {
+        rows.push({ site: site, block: b });
+      });
+    });
+    // Grouped by connection, then chronologically, then base before peak —
+    // the order someone reads a position in, not the file's own order.
+    rows.sort(function (a, b) {
+      if (a.site.id !== b.site.id) { return a.site.id < b.site.id ? -1 : 1; }
+      if (a.block.periodStart !== b.block.periodStart) { return a.block.periodStart < b.block.periodStart ? -1 : 1; }
+      return a.block.shape < b.block.shape ? -1 : 1;
+    });
+
+    if (!rows.length) {
+      return cardHtml("Contracted blocks", "Positions held per connection",
+        '<div class="empty-state">No contracted blocks on this account.</div>');
+    }
+
+    var totalVolumeMwh = 0, totalValueEur = 0;
+    var cols = "1.5fr 1fr 0.9fr 0.9fr 1.1fr 1fr 1.1fr";
+    var head = '<div class="gt-head dense" style="grid-template-columns:' + cols + '"><div>CONNECTION</div><div>SHAPE</div><div>PERIOD</div>' +
+      '<div class="gt-cell-num">POWER</div><div class="gt-cell-num">VOLUME</div><div class="gt-cell-num">PRICE</div><div class="gt-cell-num">VALUE</div></div>';
+
+    var body = rows.map(function (r) {
+      var b = r.block;
+      // Volume is derived from the block's own hours, exactly as
+      // hedge_blocks_2026.json computes its MWh field — one formula, so the
+      // screen and the file cannot drift apart.
+      var hours = PortalTradeLink.hoursInPeriod(b.periodStart, b.periodEnd, b.shape);
+      var volumeMwh = (b.powerKw / 1000) * hours;
+      var valueEur = volumeMwh * (b.priceKwh * 1000);
+      totalVolumeMwh += volumeMwh;
+      totalValueEur += valueEur;
+
+      // A negative power is a SOLD block — the same convention the
+      // connection detail's own block table uses ("Base (sell)", negative
+      // volume), not a separate flag.
+      var sold = b.powerKw < 0;
+      // formatNL emits an ASCII hyphen; this page writes a real minus sign
+      // (U+2212) and puts it BEFORE the currency symbol, the way the ledger
+      // and the seeded block positions already do.
+      var num = function (v, dp) { return ConsumptionCalc.formatNL(v, dp).replace("-", "\u2212"); };
+      var money = function (v) { return (v < 0 ? "\u2212 € " : "€ ") + ConsumptionCalc.formatNL(Math.abs(v), 2); };
+      var shapeLabel = b.shape.charAt(0).toUpperCase() + b.shape.slice(1) + (sold ? " (sell)" : "");
+      return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
+        '<div>' + esc(r.site.name) + '</div>' +
+        '<div>' + badge(shapeLabel, sold ? "info" : (b.shape === "peak" ? "warning" : "neutral")) + '</div>' +
+        '<div>' + esc(b.periodLabel || rangeLabel(b.periodStart, b.periodEnd)) + '</div>' +
+        '<div class="gt-cell-num">' + num(b.powerKw / 1000, 2) + ' MW</div>' +
+        '<div class="gt-cell-num">' + num(volumeMwh, 1) + ' MWh</div>' +
+        '<div class="gt-cell-num">€ ' + ConsumptionCalc.formatNL(b.priceKwh * 1000, 2) + '</div>' +
+        '<div class="gt-cell-num">' + money(valueEur) + '</div></div>';
+    }).join("");
+
+    var foot = '<div class="gt-row gt-total" style="grid-template-columns:' + cols + '">' +
+      '<div>Total · ' + rows.length + ' blocks</div><div></div><div></div><div></div>' +
+      '<div class="gt-cell-num">' + ConsumptionCalc.formatNL(totalVolumeMwh, 1).replace("-", "\u2212") + ' MWh</div>' +
+      '<div></div><div class="gt-cell-num">' +
+      (totalValueEur < 0 ? "\u2212 € " : "€ ") + ConsumptionCalc.formatNL(Math.abs(totalValueEur), 2) + '</div></div>';
+
+    return cardHtml("Contracted blocks",
+      rows.length + " blocks across " + (DATA.sites || []).length + " connections · the hedge the consumption chart draws",
+      '<div class="grid-table dense">' + head + body + foot + '</div>' +
+      '<div class="caption" style="margin-top:8px">A sold block carries a negative power and reduces cover. ' +
+      'Confirmed trades from the table above are not repeated here.</div>');
+  }
+
   function renderTradingPage() {
     if (state.tradingView === "wizard") { renderWizard(); return; }
     if (state.tradingView === "detail") { renderTradeDetail(); return; }
@@ -3168,7 +3258,9 @@
         '<div class="gt-cell-num">' + esc(t.value || "—") + '</div>' +
         '<div>' + badge(t.status, t.statusTone) + '</div></div>';
     }).join("");
-    document.getElementById("trading-body").innerHTML = '<div class="grid-table">' + head + '<div class="gt-scroll">' + rows + '</div></div>';
+    document.getElementById("trading-body").innerHTML =
+      '<div class="grid-table">' + head + '<div class="gt-scroll">' + rows + '</div></div>' +
+      hedgeBlocksCardHtml();
   }
 
   function renderTradeDetail() {
