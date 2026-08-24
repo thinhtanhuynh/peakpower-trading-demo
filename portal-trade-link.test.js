@@ -21,8 +21,12 @@ function fakeStorage(initial) {
 (function () {
   assert.strictEqual(Link.formatNL(1234.5, 2), "1.234,50");
   assert.strictEqual(Link.formatNL(0.5, 3), "0,500");
-  assert.strictEqual(Link.formatMw(1), "1,000 MW", "desk power format");
-  assert.strictEqual(Link.formatMw(0.5), "0,500 MW");
+  assert.strictEqual(Link.formatMw(1), "1,00 MW", "desk power format");
+  assert.strictEqual(Link.formatMw(0.5), "0,50 MW");
+  // Nothing exercised the rounding before, so a floor-vs-round change was free.
+  assert.strictEqual(Link.formatMw(0.125), "0,13 MW", "power rounds, never floors");
+  // A sold position keeps the real minus sign, not formatNL's ASCII hyphen.
+  assert.strictEqual(Link.formatMw(-0.09), "\u2212" + "0,09 MW", "sold power uses U+2212");
   assert.strictEqual(Link.formatMwh(768), "768,00 MWh");
 })();
 
@@ -38,7 +42,7 @@ function fakeStorage(initial) {
 
 // --- period hours -----------------------------------------------------------
 (function () {
-  // Q1 2027 Peak = 768 h, which is exactly the "1,000 MW -> 768,00 MWh" pair
+  // Q1 2027 Peak = 768 h, which is exactly the "1,00 MW -> 768,00 MWh" pair
   // the Customer Portal mockup hardcodes for its submitted trade.
   assert.strictEqual(Link.hoursInPeriod("2027-01-01", "2027-03-31", "Peak"), 768, "Q1 2027 peak hours");
   assert.strictEqual(Link.hoursInPeriod("2027-01-01", "2027-03-31", "Base"), 90 * 24, "Q1 2027 base hours");
@@ -71,7 +75,8 @@ var CONNS = [
   { id: "almere", name: "Almere office", sub: "…0059" }
 ];
 function opts(extra) {
-  var o = { id: "TRD-1079", customer: "Vandersteen Koeling", connections: CONNS, periods: PERIODS };
+  // powerMw is the trade's own size, no longer a sum of per-connection lines.
+  var o = { id: "TRD-1079", customer: "Vandersteen Koeling", powerMw: 1.0, connections: CONNS, periods: PERIODS };
   for (var k in (extra || {})) { o[k] = extra[k]; }
   return o;
 }
@@ -115,10 +120,11 @@ function opts(extra) {
 
 // --- buildRequest -----------------------------------------------------------
 (function () {
-  // The wizard's own default state: Peak / Q1 2027 / 1.0 MW across 4 sites --
-  // the combination the portal mockup hardcodes as "1,000 MW / 768,00 MWh".
-  var wizard = { direction: "Buy", shape: "Peak", periodType: "quarter", monthIdx: 0, quarterIdx: 1,
-                 volumes: { rot: 0.200, venlo: 0.300, tilburg: 0.400, almere: 0.100 }, note: "" };
+  // Peak / Q1 2027 / 1,0 MW for the whole account — the combination the portal
+  // mockup hardcodes as "1,00 MW / 768,00 MWh", and the one that validates
+  // hoursInPeriod. The size comes from opts.powerMw; the wizard no longer
+  // carries a per-connection volume map at all.
+  var wizard = { direction: "Buy", shape: "Peak", periodType: "quarter", monthIdx: 0, quarterIdx: 1, note: "" };
   var req = Link.buildRequest(wizard, opts({ submittedAt: "2026-08-11T10:00:00Z" }));
 
   assert.strictEqual(req.id, "TRD-1079");
@@ -127,12 +133,13 @@ function opts(extra) {
   assert.strictEqual(req.shape, "Peak");
   assert.strictEqual(req.period, "Q1 2027");
   assert.strictEqual(req.periodType, "quarter");
-  assertClose(req.powerMw, 1.0, "power sums the per-connection volumes");
+  assertClose(req.powerMw, 1.0, "power is the requested total for the account");
   assertClose(req.volumeMwh, 768, "volume = power x peak hours in Q1 2027");
   assertClose(req.indicativePrice, 94.75, "Peak shape takes the period's peak price");
   assert.strictEqual(req.status, "Awaiting price");
-  assert.strictEqual(req.connections.length, 4, "only connections with volume are carried");
-  assert.deepStrictEqual(req.connections[0], { id: "rot", name: "Rotterdam DC", sub: "…0011", powerMw: 0.2 });
+  assert.strictEqual(req.connections.length, 4, "every connection on the account is carried");
+  assert.deepStrictEqual(req.connections[0], { id: "rot", name: "Rotterdam DC", sub: "…0011" },
+    "an unweighted roster — a line carries no powerMw, because nobody chose one");
 
   // Base shape takes the base price and the full-hours volume.
   var baseReq = Link.buildRequest({ ...wizard, shape: "Base" }, opts());
@@ -146,16 +153,19 @@ function opts(extra) {
   assertClose(sellReq.indicativePrice, 94.75 * 0.98, "Sell submits at 2% below the quoted Peak price");
   assert.strictEqual(sellReq.direction, "Sell");
 
-  // Zero-volume connections are dropped entirely.
-  var sparse = Link.buildRequest({ ...wizard, volumes: { rot: 0.5, venlo: 0, tilburg: 0 } }, opts());
-  assert.strictEqual(sparse.connections.length, 1, "zero-volume connections are omitted");
-  assertClose(sparse.powerMw, 0.5);
-
-  // No volumes at all -> a well-formed request with zero power, not a crash.
-  var empty = Link.buildRequest({ ...wizard, volumes: {} }, opts());
+  // Garbage in, well-formed out: no power at all is a zero request, not a
+  // crash. This is a guard on bad input, NOT a state the wizard can reach —
+  // wizardVolumeValid() refuses to submit below MIN_VOLUME_MW.
+  var empty = Link.buildRequest(wizard, opts({ powerMw: 0 }));
   assertClose(empty.powerMw, 0);
   assertClose(empty.volumeMwh, 0);
-  assert.strictEqual(empty.connections.length, 0);
+  assert.strictEqual(empty.connections.length, 4, "the roster is unaffected by the size");
+
+  // A roster is optional: a request with no connections at all still prices.
+  var noConns = Link.buildRequest(wizard, opts({ connections: [] }));
+  assertClose(noConns.powerMw, 1.0);
+  assertClose(noConns.volumeMwh, 768);
+  assert.strictEqual(noConns.connections.length, 0);
 })();
 
 // --- toDeskCard -------------------------------------------------------------
@@ -167,9 +177,9 @@ function opts(extra) {
   assert.strictEqual(card.column, "toPrice", "live requests land in the To price queue");
   assert.strictEqual(card.customer, "Vandersteen Koeling");
   assert.strictEqual(card.period, "Q1-27", "desk uses the short period label");
-  assert.strictEqual(card.power, "1,000 MW");
+  assert.strictEqual(card.power, "1,00 MW");
   assert.strictEqual(card.valueLabel, "768,00 MWh");
-  assert.strictEqual(card.meta, "Peak · Q1-27 · 1,000 MW", "meta matches the seeded cards' format");
+  assert.strictEqual(card.meta, "Peak · Q1-27 · 1,00 MW", "meta matches the seeded cards' format");
   assert.strictEqual(card.actionLabel, "open to price →");
   assert.strictEqual(card.live, true, "live cards are distinguishable from seeded ones");
   assert.strictEqual(card.request.note, "");
@@ -349,7 +359,7 @@ function pricedFixture(extra) {
   assert.strictEqual(t.pending, false);
   assert.strictEqual(t.price, null);
   assert.strictEqual(t.value, null);
-  assert.strictEqual(t.power, "1,000 MW");
+  assert.strictEqual(t.power, "1,00 MW");
   assert.strictEqual(t.volume, "768,00 MWh");
   assert.strictEqual(t.events.length, 1, "only the submission event");
   assert.strictEqual(t.linked, true, "linked trades are distinguishable from seeded ones");

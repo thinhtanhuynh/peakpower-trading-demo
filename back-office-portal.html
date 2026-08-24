@@ -596,10 +596,11 @@
       return '<div class="kv-row"><span class="k">' + esc(f[0]) + '</span><span class="v">' + esc(f[1]) + "</span></div>";
     }).join("");
 
-    // The connections this block is traded for, and nothing else: the desk
-    // prices the whole request, so the per-connection split is not a pricing
-    // input. The one figure that is — the total — sits in the footer, in
-    // TRD-1058's own format (2px rule, label + badge left, 14px/700 right).
+    // The connections this block covers, and nothing else. A block is bought
+    // for the whole account, so there is no per-connection split to show and
+    // no line carries a power — the one figure that matters, the total, sits
+    // in the footer in TRD-1058's own format (2px rule, label + badge left,
+    // 14px/700 right).
     var cols = "2fr 1fr";
     var rows = req.connections.map(function (c) {
       return '<div class="gt-row" style="grid-template-columns:' + cols + '">' +
@@ -920,11 +921,13 @@
     var rows = [], used = 0;
     for (var i = 0; i < n; i++) {
       var isLast = i === n - 1;
-      // Round to 3 decimals (the app's own MW precision) at every step so
-      // the running total and the final remainder both stay exact.
-      var mw = isLast ? Math.round((totalMw - used) * 1000) / 1000 : Math.round((totalMw / n) * 1000) / 1000;
+      // Round to 2 decimals (the app's own MW precision) at every step so
+      // the running total and the final remainder both stay exact. The maths
+      // and the display move together: rounding only the display would print
+      // 0,67 + 0,67 + 0,67 under a "2,00 MW" footer in the same card.
+      var mw = isLast ? Math.round((totalMw - used) * 100) / 100 : Math.round((totalMw / n) * 100) / 100;
       used += mw;
-      rows.push({ name: cityOrName + " site " + (i + 1), ean: "…" + (kvkTail + i), requested: Link.formatNL(mw, 3) });
+      rows.push({ name: cityOrName + " site " + (i + 1), ean: "…" + (kvkTail + i), requested: Link.formatNL(mw, 2) });
     }
     return rows;
   }
@@ -1102,8 +1105,8 @@
       "</svg>";
     var chartLegend = '<div style="display:flex;gap:22px;margin-top:10px;flex-wrap:wrap">' +
       '<div style="display:flex;align-items:center;gap:6px"><div style="width:12px;height:10px;border-radius:2px;background:#006ECF"></div><span style="font-size:11px;color:var(--pp-text-body)">Typical day</span></div>' +
-      '<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#004C94"></div><span style="font-size:11px;color:var(--pp-text-body)">Existing cover 0,4 MW</span></div>' +
-      '<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#004C94"></div><span style="font-size:11px;color:var(--pp-text-body)">After this trade 2,4 MW</span></div>' +
+      '<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#004C94"></div><span style="font-size:11px;color:var(--pp-text-body)">Existing cover 0,40 MW</span></div>' +
+      '<div style="display:flex;align-items:center;gap:6px"><div style="width:16px;height:2px;background:#004C94"></div><span style="font-size:11px;color:var(--pp-text-body)">After this trade 2,40 MW</span></div>' +
     "</div>";
 
     var marketRows = r.marketRows.map(function (row) {

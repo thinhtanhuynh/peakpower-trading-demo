@@ -28,11 +28,11 @@
     "periodLabel": "Q1 2026",
     "shape": "peak",
     "direction": "Buy",
-    "power (MW)": 0.939,
-    "volume (MWh)": 721.15,
+    "power (MW)": 0.94,
+    "volume (MWh)": 721.92,
     "offered price (€/MWh)": 104.6,
-    "powerKw": 939,
-    "volumeKwh": 721152,
+    "powerKw": 940,
+    "volumeKwh": 721920,
     "priceKwh": 0.1046
   },
   {
@@ -46,11 +46,11 @@
     "periodLabel": "Feb 2026",
     "shape": "base",
     "direction": "Buy",
-    "power (MW)": 2.265,
-    "volume (MWh)": 1522.08,
+    "power (MW)": 2.27,
+    "volume (MWh)": 1525.44,
     "offered price (€/MWh)": 83.25,
-    "powerKw": 2265,
-    "volumeKwh": 1522080,
+    "powerKw": 2270,
+    "volumeKwh": 1525440,
     "priceKwh": 0.08325
   },
   {
@@ -64,11 +64,11 @@
     "periodLabel": "Feb 2026",
     "shape": "peak",
     "direction": "Buy",
-    "power (MW)": 0.563,
-    "volume (MWh)": 135.12,
+    "power (MW)": 0.56,
+    "volume (MWh)": 134.4,
     "offered price (€/MWh)": 106.1,
-    "powerKw": 563,
-    "volumeKwh": 135120,
+    "powerKw": 560,
+    "volumeKwh": 134400,
     "priceKwh": 0.1061
   },
   {
@@ -82,11 +82,11 @@
     "periodLabel": "May 2026",
     "shape": "base",
     "direction": "Buy",
-    "power (MW)": 3.768,
-    "volume (MWh)": 2803.39,
+    "power (MW)": 3.77,
+    "volume (MWh)": 2804.88,
     "offered price (€/MWh)": 69.4,
-    "powerKw": 3768,
-    "volumeKwh": 2803392,
+    "powerKw": 3770,
+    "volumeKwh": 2804880,
     "priceKwh": 0.0694
   },
   {
@@ -100,11 +100,11 @@
     "periodLabel": "May 2026",
     "shape": "peak",
     "direction": "Buy",
-    "power (MW)": 0.917,
-    "volume (MWh)": 231.08,
+    "power (MW)": 0.92,
+    "volume (MWh)": 231.84,
     "offered price (€/MWh)": 89.75,
-    "powerKw": 917,
-    "volumeKwh": 231084,
+    "powerKw": 920,
+    "volumeKwh": 231840,
     "priceKwh": 0.08975
   },
   {
@@ -118,11 +118,11 @@
     "periodLabel": "Jun 2026",
     "shape": "base",
     "direction": "Buy",
-    "power (MW)": 2.419,
-    "volume (MWh)": 1741.68,
+    "power (MW)": 2.42,
+    "volume (MWh)": 1742.4,
     "offered price (€/MWh)": 68.9,
-    "powerKw": 2419,
-    "volumeKwh": 1741680,
+    "powerKw": 2420,
+    "volumeKwh": 1742400,
     "priceKwh": 0.0689
   },
   {
@@ -136,11 +136,11 @@
     "periodLabel": "Jun 2026",
     "shape": "peak",
     "direction": "Buy",
-    "power (MW)": 0.546,
-    "volume (MWh)": 144.14,
+    "power (MW)": 0.55,
+    "volume (MWh)": 145.2,
     "offered price (€/MWh)": 88.45,
-    "powerKw": 546,
-    "volumeKwh": 144144,
+    "powerKw": 550,
+    "volumeKwh": 145200,
     "priceKwh": 0.08845
   },
   {
@@ -154,11 +154,11 @@
     "periodLabel": "Q3 2026",
     "shape": "base",
     "direction": "Buy",
-    "power (MW)": 3.991,
-    "volume (MWh)": 8812.13,
+    "power (MW)": 3.99,
+    "volume (MWh)": 8809.92,
     "offered price (€/MWh)": 72.15,
-    "powerKw": 3991,
-    "volumeKwh": 8812128,
+    "powerKw": 3990,
+    "volumeKwh": 8809920,
     "priceKwh": 0.07215
   },
   {
@@ -172,11 +172,11 @@
     "periodLabel": "Q3 2026",
     "shape": "peak",
     "direction": "Buy",
-    "power (MW)": 0.897,
-    "volume (MWh)": 710.42,
+    "power (MW)": 0.9,
+    "volume (MWh)": 712.8,
     "offered price (€/MWh)": 93.8,
-    "powerKw": 897,
-    "volumeKwh": 710424,
+    "powerKw": 900,
+    "volumeKwh": 712800,
     "priceKwh": 0.0938
   }
 ]

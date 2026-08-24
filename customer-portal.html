@@ -832,54 +832,19 @@
   .volume-input-wrap input::-webkit-outer-spin-button, .volume-input-wrap input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
   .volume-input-wrap .viw-unit { font-size:12px; font-weight:700; color:var(--pp-blue-700); padding-left:8px; user-select:none; }
   .field-group .fg-hint { font-size:10.5px; color:var(--pp-text-faint); margin-top:5px; }
-  /* Connection picker — a card grid, not a table (2026-08-18, "refactor to
-     approach the best UI/UX design with colorful"). Selection is carried by
-     the SAME three-cue language the wizard's own period-picker cards
-     already established one step earlier: border colour, a light wash, and
-     — standing in for a floating checkmark badge — the real <input
-     type=checkbox> itself, which already IS a third, unambiguous cue here;
-     adding a manufactured badge on top of a real checkbox would just repeat
-     the same signal a second time. One selection language across the whole
-     wizard, not two. */
-  .conn-toolbar { display:flex; gap:8px; justify-content:flex-end; margin-bottom:10px; }
-  .conn-toolbar button { display:inline-flex; align-items:center; gap:5px; border-radius:var(--radius-pill); padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; font-family:var(--font-sans); border:1px solid; transition:background-color .18s ease, border-color .18s ease, color .18s ease, transform .12s ease, box-shadow .18s ease; }
-  /* Select all reads constructive (tinted in the app's own brand blue);
-     Clear all reads neutral/reset. The two actions are opposites and
-     shouldn't share one visual weight — a colourful table with two
-     identical grey buttons above it would still read as flat. */
-  .conn-toolbar .btn-select-all { background:var(--pp-blue-050); border-color:var(--pp-blue-300); color:var(--pp-blue-700); }
-  /* Fixed (2026-08-18): the previous hover target, blue-100 (#e7f0fa), was
-     one shade off blue-050 (#eaf2fb) — close enough to read as no hover at
-     all. Hover now inverts to a solid blue-700 fill with white text (an
-     unmistakable, high-contrast state change) plus a lift and shadow, with
-     a distinct :active press-down — the same tactile language
-     .conn-card:hover already established for this table, extended to its
-     own toolbar. */
-  .conn-toolbar .btn-select-all:hover { background:var(--pp-blue-700); border-color:var(--pp-blue-700); color:#fff; transform:translateY(-1px); box-shadow:0 4px 10px rgba(0,76,148,.28); }
-  .conn-toolbar .btn-select-all:active { transform:translateY(0); box-shadow:0 2px 5px rgba(0,76,148,.24); }
-  .conn-toolbar .btn-clear-all { background:#fff; border-color:var(--pp-border-strong); color:var(--pp-text-body); }
-  .conn-toolbar .btn-clear-all:hover { background:var(--pp-surface-alt); color:var(--pp-text-heading); }
+  /* The roster of connections a block covers. Read-only since a block is
+     bought for the whole account — no checkbox, no hover, no selected state,
+     and no pointer cursor, because there is nothing to click. */
   .conn-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-  .conn-card { position:relative; display:flex; align-items:flex-start; gap:10px; background:#fff; border:1.5px solid var(--pp-border); border-radius:var(--radius-md); padding:12px 14px; cursor:pointer; transition:border-color .15s ease, box-shadow .15s ease, transform .1s ease, background-color .15s ease; }
-  .conn-card:hover:not(.not-eligible):not(.locked) { border-color:var(--pp-blue-300); box-shadow:0 3px 10px rgba(45,63,84,.10); transform:translateY(-1px); }
-  .conn-card.selected { border-color:var(--pp-blue-700); background:var(--pp-blue-050); box-shadow:0 3px 12px rgba(0,76,148,.16); }
-  .conn-card.not-eligible { cursor:default; opacity:.55; }
-  /* Locked (opened from a connection's own detail page, see
-     startWizardFromConnection): still selected/full-opacity, just not
-     interactive — unlike .not-eligible, this card IS the trade, so dimming
-     it would read as "unavailable" rather than "already decided." */
-  .conn-card.locked { cursor:default; }
-  .conn-card input[type=checkbox] { width:17px; height:17px; margin-top:1px; accent-color:var(--pp-blue-700); cursor:pointer; flex-shrink:0; }
-  .conn-card input[type=checkbox]:disabled { cursor:default; }
+  .conn-card { position:relative; display:flex; align-items:flex-start; gap:10px; background:#fff; border:1.5px solid var(--pp-border); border-radius:var(--radius-md); padding:12px 14px; }
+  .conn-card.not-eligible { opacity:.55; }
   .conn-card .cc-body { flex:1; min-width:0; }
   .conn-card .cc-name { font-size:13px; font-weight:700; color:var(--pp-text-heading); }
   .conn-card .cc-ean { font-family:var(--font-mono); font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
   .conn-card .cc-foot { margin-top:10px; }
-  /* A pill, not plain coloured text — "colorful" means a chip carries more
-     visual weight per card than a coloured number would. Two tones only,
-     both already meaningful elsewhere in this app rather than invented for
-     this table: blue for "has real cover" (the app's own brand hue), grey
-     for none, amber for ineligible (this app's existing warning tone). */
+  /* A pill, not plain coloured text. Three tones, all already meaningful
+     elsewhere in this app rather than invented here: blue for "has real
+     cover" (the brand hue), grey for none, amber for ineligible. */
   .cc-pill { display:inline-flex; align-items:center; padding:3px 9px; border-radius:var(--radius-pill); font-size:11px; font-weight:700; border:1px solid; }
   .cc-pill.covered { background:var(--pp-blue-050); color:var(--pp-blue-700); border-color:var(--pp-blue-300); }
   .cc-pill.none { background:var(--pp-surface-alt); color:var(--pp-text-faint); border-color:var(--pp-border); }
@@ -1334,11 +1299,6 @@
   var MIN_VOLUME_MW = 0.01;
   var VOLUME_STEP_MW = 0.01;
   var VOLUME_HINT = "Volume must be at least 0,01 MW and a multiple of 0,01 MW.";
-  // Distinct from VOLUME_HINT: reachable now that connections are a checkbox
-  // multi-select ("Clear all" can genuinely empty the selection), where the
-  // single-select radio picker's connId could never go missing once the
-  // wizard opened with one preselected.
-  var NO_CONNECTION_HINT = "Pick at least one connection to trade this block against.";
   // Shared with the Wallet ledger's own low-balance banner (renderWalletPage)
   // so the top-up screen's banner/chip are derived from the SAME real
   // threshold rather than a second hardcoded number.
@@ -1395,7 +1355,7 @@
     // Which bucket the Ledger's filter is on — an index into LEDGER_TABS.
     ledgerFilter: 0,
     wizard: { direction: "Buy", shape: "Peak", periodType: "quarter", monthIdx: 0, quarterIdx: 1,
-              connIds: ["rot"], volumeMw: 0.200, note: "" },
+              volumeMw: 0.200, note: "" },
     settlementId: null,
     trades: PortalSeedData.TRADES_SEED.slice(),
     nextSeq: 1079,
@@ -1603,47 +1563,7 @@
   }
   function backToTrades() { state.tradingView = "list"; state.tradeId = null; renderApp(); }
 
-  /**
-   * A block can be traded against one or more connections at once (2026-08-18
-   * — see CLAUDE.md, "Multiple connections, one shared volume"), each at the
-   * SAME requested volume — so the wizard carries `connIds` (array) +
-   * `volumeMw` (one shared figure) rather than a volume-per-connection map.
-   * The map shape PortalTradeLink.buildRequest() expects is derived on demand
-   * by wizardVolumes(), so the link module needs no change.
-   */
-  function eligibleConnectionIds() {
-    return PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return !c.notEligible; }).map(function (c) { return c.id; });
-  }
-  function firstEligibleConnection() {
-    var ids = eligibleConnectionIds();
-    return ids.length ? ids[0] : null;
-  }
-  /** The shared input IS the requested total across every selected
-   * connection — not a per-connection figure multiplied up (see CLAUDE.md,
-   * "One shared volume is the total, not per connection"). buildRequest()
-   * sums a volume-per-connection map to get its own total, so this map is
-   * built to split state.wizard.volumeMw evenly across the selected ids —
-   * with the LAST id absorbing the rounding remainder, the same
-   * "consistent by construction" pattern back-office-portal.html's own
-   * deriveConnRows() already uses for its illustrative connection split —
-   * so the sum is exact, never a cent or a watt short from floating-point
-   * division. */
-  function wizardVolumes() {
-    var m = {};
-    var ids = state.wizard.connIds || [];
-    var total = state.wizard.volumeMw || 0;
-    if (!ids.length) { return m; }
-    var share = Math.round((total / ids.length) * 1e6) / 1e6;
-    var used = 0;
-    ids.forEach(function (id, i) {
-      if (i === ids.length - 1) { m[id] = Math.round((total - used) * 1e6) / 1e6; }
-      else { m[id] = share; used += share; }
-    });
-    return m;
-  }
-
   function defaultWizard(shape, periodType, monthIdx, quarterIdx) {
-    var first = firstEligibleConnection();
     return {
       direction: "Buy", shape: shape, periodType: periodType, monthIdx: monthIdx, quarterIdx: quarterIdx,
       // No caller currently needs to preselect a specific year row (Prices'
@@ -1651,7 +1571,7 @@
       // renderPricesPage), so this only ever needs its own default, unlike
       // month/quarterIdx which every caller sets explicitly.
       yearIdx: 0,
-      connIds: first ? [first] : [], volumeMw: 0.200, note: ""
+      volumeMw: 0.200, note: ""
     };
   }
 
@@ -1678,25 +1598,42 @@
   }
 
   /**
-   * "Request a trade" from a connection's detail page. Since a block is traded
-   * against exactly one connection, the connection is already decided here —
-   * so the wizard opens with it preselected and step 2's picker locked to it.
-   * Ineligible / non-tradeable connections are refused in the handler, not just
-   * hidden in the markup.
+   * Every connection a power block covers: all of them except the gas one.
+   *
+   * This is exactly the set the Consumption screen sums and the set
+   * `hedgeBlocksFor()` prices against, read from the one CONNECTIONS list so
+   * the roster the desk is shown, the cards the wizard lists and the load the
+   * hedge is measured against cannot drift apart. It replaced a separate
+   * WIZARD_CONNECTIONS array, which was a second copy that had already
+   * drifted — it omitted the greenhouse, so a block silently claimed to cover
+   * four connections when it covered six.
+   */
+  function tradableConnections() {
+    return PortalSeedData.CONNECTIONS.filter(function (c) { return !c.notTradeable; });
+  }
+
+  /**
+   * "Request a trade" from a connection's detail page. A block covers the
+   * whole account, so nothing about the connection carries into the wizard —
+   * this is simply the entry point that page offers. The only thing that can
+   * refuse it is a connection a power block cannot cover at all: the gas one.
+   * An expiring contract is no longer a reason, because the block is not
+   * bought against that connection in the first place.
    */
   function tradableConnection(id) {
-    return PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return c.id === id && !c.notEligible; })[0] || null;
+    return tradableConnections().filter(function (c) { return c.id === id; })[0] || null;
   }
   function startWizardFromConnection(id) {
     if (requireFutureTrading()) { return; }
     if (!tradableConnection(id)) { return; }
     state.page = "Trading"; activatePageDom("trading");
     state.tradingView = "wizard"; state.wizardStep = 0;
-    // Same default as startWizard() — see its comment. Only the connection
-    // is decided by this entry point; the period defaults the same way.
+    // Same default as startWizard() — see its comment. Nothing is carried
+    // through from the connection any more: the block covers the whole
+    // account whichever page the request was started from. The eligibility
+    // check above stays, because it is still what decides whether that
+    // connection's own page offers the button at all.
     state.wizard = defaultWizard("Base", "month", 0, 0);
-    state.wizard.connIds = [id];
-    state.wizard.lockedConn = true;
     renderApp();
   }
   function cancelWizard() { state.tradingView = "list"; state.wizardStep = 0; renderApp(); }
@@ -1705,7 +1642,7 @@
   /**
    * Step 2 -> review, and review -> submitted. Both re-check the deposit
    * rather than trusting the disabled Continue button, matching how
-   * toggleWizardConnection and respondToOffer guard themselves: the button is the
+   * respondToOffer guards itself: the button is the
    * affordance, the handler is the rule. Without this, PP.wizardGoStep2() from
    * anywhere — a stale screen, a console, a future call site — walks straight
    * past a check the UI only paints.
@@ -1733,32 +1670,6 @@
   }
   function setHoverBar(type, i) { state.hoverBar = type + ":" + i; renderApp(); }
   function clearHoverBar() { state.hoverBar = null; renderApp(); }
-  /** Checkbox multi-select: a click toggles that one connection in/out of
-   * state.wizard.connIds. Refuses ineligible ids and, once locked (opened
-   * from a connection's own detail page), refuses to change the selection
-   * at all — that connection IS the trade by the time you're on its detail
-   * page, so there is nothing left to toggle. Guard lives in the handler,
-   * not only in the markup, matching every other wizard guard on this page. */
-  function toggleWizardConnection(id) {
-    if (state.wizard.lockedConn) { return; }
-    var c = PortalSeedData.WIZARD_CONNECTIONS.filter(function (x) { return x.id === id; })[0];
-    if (!c || c.notEligible) { return; }
-    var ids = state.wizard.connIds || (state.wizard.connIds = []);
-    var idx = ids.indexOf(id);
-    if (idx === -1) { ids.push(id); } else { ids.splice(idx, 1); }
-    renderApp();
-  }
-  function selectAllWizardConnections() {
-    if (state.wizard.lockedConn) { return; }
-    state.wizard.connIds = eligibleConnectionIds();
-    renderApp();
-  }
-  function clearWizardConnections() {
-    if (state.wizard.lockedConn) { return; }
-    state.wizard.connIds = [];
-    renderApp();
-  }
-
   /**
    * Live volume edit. Deliberately does NOT renderApp() — a full re-render
    * rebuilds the <input> and steals focus mid-keystroke, which is exactly why
@@ -1814,12 +1725,10 @@
     var invalid = !wizardVolumeValid();
     var note = document.getElementById("wizard-volume-note");
     if (note) {
-      // wizardAllocationNote() can now return "" (2+ connections selected —
-      // see its own comment), and an empty banner box is worse than none:
-      // hidden, not just emptied, so it never sits there as a blank coloured
-      // rectangle. Mirrors the same text/visibility pairing
-      // buildWizardVolumeTable()'s own noteBox uses at initial render.
-      var text = invalid ? wizardVolumeHint() : wizardAllocationNote();
+      // Hidden, not just emptied, so an empty note never sits there as a
+      // blank coloured rectangle. Byte-parallel with the noteBox in
+      // buildWizardVolumeTable() at initial render.
+      var text = invalid ? VOLUME_HINT : wizardAllocationNote();
       note.className = "banner " + (invalid ? "banner-amber" : "banner-teal");
       note.textContent = text;
       note.style.display = text ? "" : "none";
@@ -1862,25 +1771,21 @@
     // refused at acceptance — wasting the desk's time and the customer's.
     if (!wizardVolumeValid() || !wizardFundsSufficient()) { renderApp(); return; }
     var id = "TRD-" + state.nextSeq;
-    // buildRequest() always took a volume-per-connection map — wizardVolumes()
-    // now populates one entry per selected connection instead of at most one,
-    // so multi-select needed no change here.
-    var wizardForRequest = {};
-    Object.keys(state.wizard).forEach(function (k) { wizardForRequest[k] = state.wizard[k]; });
-    wizardForRequest.volumes = wizardVolumes();
-
-    var req = PortalTradeLink.buildRequest(wizardForRequest, {
+    var req = PortalTradeLink.buildRequest(state.wizard, {
       id: id,
       customer: PortalSeedData.CUSTOMER_NAME,
       customerId: PortalSeedData.CUSTOMER_ID,
-      // Carrying the EAN onto the published record, not just the name: the
-      // desk identifies a connection by its metering point, and it has no
-      // business joining against this customer's own seed list to find one.
-      connections: PortalSeedData.WIZARD_CONNECTIONS.map(function (c) {
-        var out = {};
-        for (var k in c) { if (c.hasOwnProperty(k)) { out[k] = c[k]; } }
-        out.sub = connectionEan(c.id);
-        return out;
+      // The trade's own size, one number — not a sum of per-connection lines,
+      // because nobody chooses a per-connection allocation any more.
+      powerMw: wizardTotalMW(),
+      // The roster of connections the block covers — every one of them,
+      // carrying the EAN and not just the name: the desk identifies a
+      // connection by its metering point, and it has no business joining
+      // against this customer's own seed list to find one. Nothing is
+      // filtered out: the hedge is measured against all six connections'
+      // summed load, so a shorter roster would understate what was bought.
+      connections: tradableConnections().map(function (c) {
+        return { id: c.id, name: c.name, sub: connectionEan(c.id) };
       }),
       periods: PortalSeedData.WIZARD_PERIODS,
       submittedAt: new Date(nowForLink()).toISOString()
@@ -1888,11 +1793,9 @@
 
     var power = PortalTradeLink.formatMw(req.powerMw);
     var volume = PortalTradeLink.formatMwh(req.volumeMwh);
-    var connNames = req.connections.map(function (c) { return c.name; });
-    var connName = connNames.length ? joinWithAnd(connNames) : "—";
     var bodyText = req.note
       ? 'Comment: "' + req.note + '"'
-      : req.direction + " " + req.shape + " " + req.period + " · " + power + " for " + connName + ".";
+      : req.direction + " " + req.shape + " " + req.period + " · " + power + " for the whole account.";
 
     var trade = {
       id: id, shape: req.shape, period: req.period, direction: req.direction,
@@ -1900,7 +1803,8 @@
       price: null, value: null, status: "Awaiting price", statusTone: "info",
       events: [{ title: "Request submitted", actor: "J. de Vries · Admin (you)", ts: "just now", body: bodyText, tone: "submit" }],
       facts: [["Reference", id], ["Requested by", "J. de Vries"], ["State", "Awaiting price"], ["Direction", req.direction],
-        ["Shape", req.shape], ["Delivery period", req.period], ["Connection" + (connNames.length === 1 ? "" : "s"), connName], ["Power", power], ["Volume", volume]]
+        ["Shape", req.shape], ["Delivery period", req.period], ["Applies to", "All connections on the account"],
+        ["Power", power], ["Volume", volume]]
     };
     // Hand off to the Back Office desk, then rebuild the list from the link so
     // this trade has exactly one source of truth. Storage may be unavailable
@@ -2186,8 +2090,7 @@
     wizardGoStep0: wizardGoStep0, wizardGoStep1: wizardGoStep1, wizardGoStep2: wizardGoStep2,
     setDirIdx: setDirIdx,
     selectWizardBar: selectWizardBar, setHoverBar: setHoverBar, clearHoverBar: clearHoverBar,
-    toggleWizardConnection: toggleWizardConnection, selectAllWizardConnections: selectAllWizardConnections,
-    clearWizardConnections: clearWizardConnections, setWizardVolume: setWizardVolume,
+    setWizardVolume: setWizardVolume,
     commitWizardVolume: commitWizardVolume, stepWizardVolume: stepWizardVolume,
     onWizardNoteChange: onWizardNoteChange, submitWizard: submitWizard,
     topUpWallet: topUpWallet, backToWallet: backToWallet, closeTopupSuccess: closeTopupSuccess,
@@ -2251,9 +2154,7 @@
 
   /**
    * A connection's full EAN, read live from CONNECTIONS by id. Kept in one
-   * place so the wizard's cards and the request it publishes can't drift —
-   * WIZARD_CONNECTIONS deliberately carries no EAN of its own, which would be
-   * a second copy free to go stale.
+   * place so the wizard's cards and the request it publishes can't drift.
    */
   function connectionEan(id) {
     var c = PortalSeedData.CONNECTIONS.filter(function (x) { return x.id === id; })[0];
@@ -3096,7 +2997,7 @@
       blocksFoot = '<div class="caption" style="margin-top:16px">' +
         (tradable
           ? "PeakPower Future Trading is not active on this account — add it to request blocks."
-          : c.notTradeable ? "This connection is not tradeable." : "This connection is not eligible for new trade requests.") +
+          : "A power block cannot cover a gas connection.") +
         '</div>';
     }
     var blocksCard = cardHtml("Block positions", "Held at account level", blocksBodyHtml + blocksFoot);
@@ -3215,7 +3116,7 @@
     var events = [
       { title: "Request submitted", actor: "J. de Vries · Admin (you)",
         ts: formatDateShort(requested) + ", 10:12:00",
-        body: shapeLabel + " " + b.periodLabel + " · " + num(Math.abs(b.powerKw) / 1000, 3) +
+        body: shapeLabel + " " + b.periodLabel + " · " + num(Math.abs(b.powerKw) / 1000, 2) +
           " MW " + (sold ? "offered for sale" : "requested") + " across every connection on the account.",
         tone: "submit" },
       { title: "Offer published", actor: "PeakPower Trading",
@@ -3247,7 +3148,7 @@
       shape: shapeLabel,
       period: b.periodLabel,
       direction: sold ? "Sell" : "Buy",
-      power: num(b.powerKw / 1000, 3) + " MW",
+      power: num(b.powerKw / 1000, 2) + " MW",
       volume: num(volumeMwh, 2) + " MWh",
       price: "€ " + ConsumptionCalc.formatNL(priceMwh, 4),
       value: money(valueEur),
@@ -3262,7 +3163,7 @@
         ["Shape", shapeLabel],
         ["Delivery period", b.periodLabel + " · " + formatDateShort(b.periodStart) + " – " + formatDateShort(b.periodEnd)],
         ["Applies to", "All connections on the account"],
-        ["Power", num(b.powerKw / 1000, 3) + " MW"],
+        ["Power", num(b.powerKw / 1000, 2) + " MW"],
         ["Volume", num(volumeMwh, 2) + " MWh"],
         // No "Total value" row here: renderTradeDetail appends one from
         // `value` itself, and listing it twice was exactly that.
@@ -3561,59 +3462,26 @@
       peak: PortalTradeLink.sellAdjustedPrice(row.peak, w.direction)
     };
   }
-  /** The shared input already IS the requested total — see wizardVolumes(),
-   * which splits (not multiplies) it across whichever connections are
-   * selected so buildRequest()'s own sum recovers this exact number. Was
-   * volumeMw * connIds.length for one turn (2026-08-18); reverted the same
-   * day on explicit direction ("do not multiply for multiple EANs"). */
+  /** The input IS the block's power for the whole account — one number,
+   * published as buildRequest()'s own `powerMw`. It was briefly multiplied by
+   * the number of selected connections (2026-08-18) and reverted the same day
+   * on explicit direction ("do not multiply for multiple EANs"); there is no
+   * selection left for it to multiply by. */
   function wizardTotalMW() {
     return state.wizard.volumeMw || 0;
   }
 
-  /** Valid iff at least one connection is picked and the volume is a ≥0,1 MW
-   * multiple of 0,1. Two distinct failure reasons collapse into one boolean
-   * here (it only gates the Continue button); wizardVolumeHint() below is
-   * what tells them apart for the person reading the error. */
+  /** Valid iff the volume is a ≥0,01 MW multiple of 0,01. One reason to
+   * refuse, so VOLUME_HINT is the only message this field can show. */
   function wizardVolumeValid() {
     var v = state.wizard.volumeMw || 0;
-    if (!state.wizard.connIds || !state.wizard.connIds.length) { return false; }
     if (v < MIN_VOLUME_MW) { return false; }
     return Math.abs(v / VOLUME_STEP_MW - Math.round(v / VOLUME_STEP_MW)) < 1e-9;
   }
-  function wizardVolumeHint() {
-    if (!state.wizard.connIds || !state.wizard.connIds.length) { return NO_CONNECTION_HINT; }
-    return VOLUME_HINT;
-  }
-  /** Every selected connection's own record, in WIZARD_CONNECTIONS' own
-   * (stable) order — not connIds' push/splice order, so the list doesn't
-   * reshuffle as rows are toggled on and off. */
-  function wizardConnections() {
-    var ids = state.wizard.connIds || [];
-    return PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return ids.indexOf(c.id) !== -1; });
-  }
-  /** "A, B and C" — Oxford-and, not a bare comma list, so three or more
-   * connection names still read as one sentence rather than a raw array dump. */
-  function joinWithAnd(names) {
-    if (names.length <= 1) { return names[0] || ""; }
-    if (names.length === 2) { return names[0] + " and " + names[1]; }
-    return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
-  }
-  /** No message at all once 2+ connections are selected (2026-08-18,
-   * "remove the text 'This block's total volume will be split across…'") —
-   * which connections are getting the volume is already visible from their
-   * own checked cards above; a sentence restating it added words without
-   * adding information. The single-connection case is kept: with only one
-   * card, "which" isn't in question, but naming it here still confirms
-   * *what happens next* ("once the trade is confirmed"), which the card
-   * alone doesn't say. */
+  /** One unconditional sentence: a block is bought for the whole account, so
+   * "which connections" is no longer a question the wizard asks. */
   function wizardAllocationNote() {
-    var list = wizardConnections();
-    if (!list.length) { return NO_CONNECTION_HINT; }
-    if (list.length === 1) {
-      return "This block will be allocated to " + list[0].name + " once the trade is confirmed.";
-    }
-    // "across", not "to": wizardVolumes() divides the total between them.
-    return "This block will be allocated across all selected connections once the trade is confirmed.";
+    return "This block will be held for the whole account once the trade is confirmed.";
   }
   function wizardHours(period) {
     if (state.wizard.shape === "Base") { return countDaysInRange(period.start, period.end) * 24; }
@@ -3621,10 +3489,8 @@
   }
   function wizardSummaryRows(period, totalMW, hours) {
     var w = state.wizard;
-    var conns = wizardConnections();
-    var connLabel = conns.length ? joinWithAnd(conns.map(function (c) { return c.name; })) : "—";
     var rows = [["Direction", w.direction], ["Shape", w.shape], ["Delivery period", period.period],
-      ["Connection" + (conns.length === 1 ? "" : "s"), connLabel]];
+      ["Applies to", "All connections on the account"]];
     if (w.shape === "Peak") {
       rows.push(["Peak days in period", String(countWeekdaysInRange(period.start, period.end))]);
       rows.push(["Peak hours", "Mon–Fri 08:00–20:00"]);
@@ -3632,7 +3498,7 @@
       rows.push(["Base days in period", String(countDaysInRange(period.start, period.end))]);
       rows.push(["Base hours", "00:00–24:00"]);
     }
-    rows.push(["Power", ConsumptionCalc.formatNL(totalMW, 3) + " MW"]);
+    rows.push(["Power", ConsumptionCalc.formatNL(totalMW, 2) + " MW"]);
     rows.push(["Volume", ConsumptionCalc.formatNL(totalMW * hours, 2) + " MWh"]);
     return rows;
   }
@@ -3675,7 +3541,7 @@
   }
 
   function buildStepIndicator(step) {
-    var labels = ["Product & period", "Connection & volume", "Review & submit"];
+    var labels = ["Product & period", "Volume", "Review & submit"];
     // Each step is its own flex:1 group (circle + label + trailing connector),
     // matching the mockup so the connectors distribute evenly.
     var html = '<div class="step-indicator">';
@@ -3800,70 +3666,31 @@
   }
 
   /**
-   * Connection & volume: a card grid, not a table (2026-08-18 — refactored
-   * for "the best UI/UX design, colorful"; see CLAUDE.md "The picker
-   * becomes a card grid" for the redesign in full), plus a "Select all" /
-   * "Clear all" pair. Volume is entered once below the grid and is the
-   * REQUESTED TOTAL across every selected connection, not a per-connection
-   * figure (see wizardTotalMW/wizardVolumes — reverted the same day it
-   * shipped, on explicit direction "do not multiply for multiple EANs");
-   * the redundant "Requested volume: X MW" line that used to restate that
-   * same number just below the input is gone too (2026-08-18, later still
-   * — "remove the requested volume text"), since the input's own value
-   * already shows it and the Summary card beside this one derives and
-   * shows the real total from it. Locked mode (opened from a connection's
-   * own detail page) shows only that one card, non-interactive, with no
-   * toolbar — the choice was already made by which detail page this came
-   * from.
+   * Step 2: the volume, and a read-only roster of what the block will cover.
    *
-   * Each card shows the connection's full EAN (looked up from
-   * PortalSeedData.CONNECTIONS by id — the shared source, not a second
-   * copy; see CLAUDE.md "Derived detail must not out-claim its source").
-   * Cover is NOT on the card: a block is held for the whole account, so it
-   * is stated once above the grid, computed live from accountCoverMw()
-   * against the wizard's own currently-selected delivery period.
+   * There is nothing to pick here. A block is bought for the whole account, so
+   * the connection cards are informational: they name every metering point the
+   * block covers, which is the same set the Consumption screen sums. The gas
+   * connection is the only one left out — a power block cannot cover it.
    *
-   * The volume field itself is a stepper (2026-08-18, "enhance the
-   * professional UI/UX approach to the volume input") — a bordered,
-   * unit-suffixed input flanked by +/− buttons (stepWizardVolume()),
-   * echoing the Wallet top-up screen's own .amount-input-wrap shape rather
-   * than a bare number field. See CLAUDE.md for the full redesign.
+   * The volume field below is a stepper reusing the Wallet top-up screen's
+   * .amount-input-wrap shape, with flanking -/+ buttons that snap to the same
+   * 0,01 MW grid so repeated clicks cannot drift off it.
    */
   function buildWizardVolumeTable() {
     var period = getSelectedWizardPeriod();
-    var locked = state.wizard.lockedConn;
-    var ids = state.wizard.connIds || [];
-    var list = locked
-      ? PortalSeedData.WIZARD_CONNECTIONS.filter(function (c) { return ids.indexOf(c.id) !== -1; })
-      : PortalSeedData.WIZARD_CONNECTIONS;
-    var cards = list.map(function (c) {
-      var sel = ids.indexOf(c.id) !== -1;
-      var pick = c.notEligible
-        ? ""
-        // No separate onchange: a click anywhere in the card (including
-        // directly on the checkbox) already bubbles to the card's own
-        // onclick below. A second handler here would double-fire on a
-        // direct checkbox click and immediately toggle the selection back
-        // off — harmless for the old radio's idempotent "set" but not for
-        // this checkbox's toggle.
-        : '<input type="checkbox"' + (sel ? " checked" : "") + (locked ? " disabled" : "") + '>';
-      var click = (c.notEligible || locked) ? "" : ' onclick="PP.toggleWizardConnection(\'' + c.id + '\')"';
-      var fullEan = connectionEan(c.id) || c.id;
-      // Only a reason a card cannot be picked goes here now. Cover is an
-      // account-level figure and is stated once, above the grid.
-      var foot = c.notEligible
-        ? '<span class="cc-pill ineligible">Not eligible' + (c.note ? " · " + c.note : "") + '</span>'
+    var cards = tradableConnections().map(function (c) {
+      var fullEan = c.ean || c.id;
+      // A contract that ends is worth saying — it is not a reason the block
+      // skips this connection, only a date the reader should know.
+      var foot = c.status && c.status !== "Active"
+        ? '<span class="cc-pill ineligible">' + esc(c.status) + '</span>'
         : "";
-      return '<div class="conn-card' + (sel ? " selected" : "") + (c.notEligible ? " not-eligible" : "") + (locked ? " locked" : "") + '"' + click + '>' +
-        pick +
+      return '<div class="conn-card">' +
         '<div class="cc-body"><div class="cc-name">' + c.name + '</div><div class="cc-ean">' + fullEan + '</div>' +
         '<div class="cc-foot">' + foot + '</div></div></div>';
     }).join("");
-    var toolbar = locked ? "" :
-      '<div class="conn-toolbar">' +
-        '<button type="button" class="btn-select-all" onclick="PP.selectAllWizardConnections()">✓ Select all</button>' +
-        '<button type="button" class="btn-clear-all" onclick="PP.clearWizardConnections()">✕ Clear all</button>' +
-      '</div>';
+
     // One account-level cover line, from the real blocks, for the period the
     // wizard currently has selected.
     var coverMw = accountCoverMw(period.start, period.end);
@@ -3874,11 +3701,11 @@
     var coverLine = '<div class="cc-account-cover"><span class="cc-pill ' + (coverMw === 0 ? "none" : "covered") + '">Current cover</span>' +
       '<span>' + esc(coverText) + '</span></div>';
 
-    var grid = coverLine + toolbar + '<div class="conn-grid">' + cards + '</div>';
+    var grid = coverLine + '<div class="conn-grid">' + cards + '</div>';
 
     var invalid = !wizardVolumeValid();
     var atMin = (state.wizard.volumeMw || 0) <= MIN_VOLUME_MW;
-    var volField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Volume (MW) — for all selected connections</div>' +
+    var volField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Volume (MW) — for the whole account</div>' +
       '<div class="volume-stepper">' +
         '<button type="button" class="volume-step-btn" id="wizard-vol-dec"' + (atMin ? " disabled" : "") +
           ' aria-label="Decrease volume" onclick="PP.stepWizardVolume(-1)">−</button>' +
@@ -3899,11 +3726,10 @@
       '</div>' +
       '<div class="fg-hint">Minimum 0,01 MW · steps of 0,01 MW</div></div>';
 
-    // See refreshWizardVolumeUi()'s matching comment: wizardAllocationNote()
-    // can be "" now (2+ connections selected), and the box hides rather than
-    // sitting there empty — both places compute visibility from the same
-    // text so they can't disagree with each other.
-    var noteText = invalid ? wizardVolumeHint() : wizardAllocationNote();
+    // The note's text and its visibility come from the same string here and
+    // in refreshWizardVolumeUi() — change one and you must change the other,
+    // or an empty note renders as a blank coloured rectangle.
+    var noteText = invalid ? VOLUME_HINT : wizardAllocationNote();
     var noteBox = '<div id="wizard-volume-note" class="banner ' + (invalid ? "banner-amber" : "banner-teal") +
       '" style="margin-top:8px' + (noteText ? "" : ";display:none") + '">' + noteText + '</div>';
     var noteField = '<div class="field-group" style="margin-top:14px"><div class="fg-label">Note (optional)</div>' +
@@ -4002,8 +3828,8 @@
         '<button type="button" class="btn-secondary" onclick="PP.cancelWizard()">Cancel</button></div>');
     } else if (state.wizardStep === 1) {
       bodyHtml = '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">' +
-        '<div>' + cardHtml("Connection & volume",
-          state.wizard.lockedConn ? "Requested from this connection" : "Pick one or more connections this block is traded for",
+        '<div>' + cardHtml("Volume",
+          "A block is bought for the whole account — it covers every connection below",
           buildWizardVolumeTable()) + '</div>' +
         '<div>' + cardHtml("Summary", "", '<div id="wizard-summary-body">' +
           buildWizardSummaryBody(period, totalMW, hours, priceVal, estimatedValue) + '</div>') + '</div>' +
@@ -5291,10 +5117,9 @@
     liveTradeRecords().forEach(function (r) {
       if (PortalTradeLink.effectiveStatus(r, now) !== PortalTradeLink.STATUS_CONFIRMED) { return; }
       if (!coversRange(r, from, to)) { return; }
-      // One block per connection the trade was allocated across — a trade
-      // spread over three connections is three lines of the same position,
-      // and the portfolio holds all of them.
-      (r.connections || []).forEach(function (c) { blocks.push(blockForOffer(r, c)); });
+      // One block per trade. A trade is one position held for the account —
+      // it is not allocated per connection, so there is nothing to split.
+      blocks.push(blockForOffer(r));
     });
     return blocks;
   }
@@ -5314,7 +5139,7 @@
   }
 
   /**
-   * One offer record + its line for this site, as a hedge-shaped block.
+   * One offer record as a hedge-shaped block for the account.
    *
    * Signed by direction: a sale reduces the hedged position, so its powerKw
    * goes negative here — negative, not a second flag or a separate "sold"
@@ -5328,16 +5153,13 @@
    * and cost is a feature of reusing this function unchanged, not a
    * coincidence to double-check away.
    */
-  function blockForOffer(req, line) {
+  function blockForOffer(req) {
     var sign = String(req.direction).toLowerCase() === "sell" ? -1 : 1;
     return {
         shape: String(req.shape || "").toLowerCase(),
-        // Which connection this line belongs to, so the per-connection reader
-        // can pick its own lines back out of a trade spread across several.
-        siteId: line && line.id,
         periodStart: req.periodStart,
         periodEnd: req.periodEnd,
-        powerKw: sign * ((line && line.powerMw || 0) * 1000),
+        powerKw: sign * ((req.powerMw || 0) * 1000),
         // No firm price until "Offer received" or later — until then, price
         // the volume at the request's own indicative quote (the same
         // WIZARD_PERIODS forward curve indicativeEpexFor() below

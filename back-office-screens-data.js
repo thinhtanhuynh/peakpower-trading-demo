@@ -46,7 +46,7 @@
   var ATTENTION_ITEMS = [
     { tag: "04:12", tone: "critical", title: "Offer expiring", sub: "Vandersteen Koeling · TRD-1051 · Peak Q1-27 · € 72.768", tradeId: "TRD-1051" },
     { tag: "22 min", tone: "critical", title: "Accepted, not confirmed", sub: "Kramer Logistics · TRD-1049 · € 41.200", tradeId: "TRD-1049" },
-    { tag: "06 min", tone: "warning", title: "New request", sub: "Van Dijk Glastuinbouw · Base Cal-27 · 2,0 MW", tradeId: "TRD-1058" },
+    { tag: "06 min", tone: "warning", title: "New request", sub: "Van Dijk Glastuinbouw · Base Cal-27 · 2,00 MW", tradeId: "TRD-1058" },
     { tag: "1h 42", tone: "warning", title: "Montel feed stale", sub: "NL_POWER_PEAK_Y1 · last observed 12:40", tradeId: null },
     { tag: "2 days", tone: "warning", title: "No metering data", sub: "Vandersteen Koeling · Almere office (…0059)", tradeId: null }
   ];

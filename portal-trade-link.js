@@ -38,8 +38,16 @@
     return sign + intPart + (pieces.length > 1 ? "," + pieces[1] : "");
   }
 
-  /** "1,000 MW" — the Back Office desk's power format (3 decimals, NL comma). */
-  function formatMw(mw) { return formatNL(mw, 3) + " MW"; }
+  /**
+   * "1,00 MW" — the one power format, 2 decimals, NL comma.
+   *
+   * Power is quoted to 0,01 MW (MIN_VOLUME_MW / VOLUME_STEP_MW is the grid the
+   * wizard snaps to), so a third decimal only ever showed a rounding artefact.
+   * The minus is U+2212, not the ASCII hyphen formatNL emits: a sold block
+   * reads "−0,09 MW" everywhere, including next to the seeded rows that have
+   * always written it that way.
+   */
+  function formatMw(mw) { return formatNL(mw, 2).replace("-", "\u2212") + " MW"; }
 
   /** "768,00 MWh" — the Customer Portal's volume format. */
   function formatMwh(mwh) { return formatNL(mwh, 2) + " MWh"; }
@@ -95,21 +103,23 @@
    * Turns the wizard's own state into a portable request record.
    *
    * `wizard` is the Customer Portal's state.wizard:
-   *   { direction, shape, periodType, monthIdx, quarterIdx, yearIdx, volumes:{id:mw}, note }
+   *   { direction, shape, periodType, monthIdx, quarterIdx, yearIdx, note }
    * `opts` supplies what the wizard doesn't own:
-   *   { id, customer, connections:[{id,name,sub}], periods:{month:[],quarter:[],year:[]},
-   *     submittedAt }
+   *   { id, customer, powerMw, connections:[{id,name,sub}],
+   *     periods:{month:[],quarter:[],year:[]}, submittedAt }
+   *
+   * `connections` is an UNWEIGHTED roster: a block is bought for the whole
+   * account, so no line carries a power. The desk still needs the metering
+   * points a block covers — it is the only place they are named — but the
+   * size of the trade is one number, `opts.powerMw`, not a sum of invented
+   * per-connection allocations.
    */
   function buildRequest(wizard, opts) {
     opts = opts || {};
     var period = resolvePeriod(wizard, opts);
-    var lines = [];
-    var totalMw = 0;
-    (opts.connections || []).forEach(function (c) {
-      var mw = (wizard.volumes && wizard.volumes[c.id]) || 0;
-      if (mw <= 0) { return; }
-      totalMw += mw;
-      lines.push({ id: c.id, name: c.name, sub: c.sub, powerMw: mw });
+    var totalMw = opts.powerMw || 0;
+    var lines = (opts.connections || []).map(function (c) {
+      return { id: c.id, name: c.name, sub: c.sub };
     });
     var mwh = volumeMwh(totalMw, period.start, period.end, wizard.shape);
     return {
@@ -564,7 +574,7 @@
       ts: req.submittedAt ? formatStamp(req.submittedAt) : "just now",
       body: req.note ? 'Comment: "' + req.note + '"'
         : req.direction + " " + req.shape + " " + req.period + " · " + power +
-          " across " + req.connections.length + " connection" + (req.connections.length === 1 ? "" : "s") + ".",
+          " for the whole account.",
       tone: "submit"
     }];
     var facts = [["Reference", req.id], ["Requested by", "J. de Vries"], ["State", status],
@@ -655,11 +665,10 @@
     return {
       id: req.id, shape: req.shape, period: req.period, direction: req.direction,
       // Carried through so the portal can frame its Consumption chart on this
-      // trade's own period and connection. The display strings above are
-      // formatted for reading and are not parseable back into dates.
+      // trade's own period. The display strings above are formatted for
+      // reading and are not parseable back into dates.
       periodStart: req.periodStart || null,
       periodEnd: req.periodEnd || null,
-      connections: req.connections || [],
       power: power, volume: volume,
       price: priced ? "€ " + formatNL(req.offer.priceMwh, 4) : null,
       value: priced ? "€ " + formatNL(req.offer.valueEur, 2) : null,

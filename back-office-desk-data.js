@@ -15,16 +15,16 @@
   var USER_LINE = "M. Bakker · Trading";
 
   var TRADES = [
-    { id: "TRD-1058", column: "toPrice", urgent: false, tag: "6 min", tagTone: "warning", customer: "Van Dijk Glastuinbouw", shape: "Base", period: "Cal-27", power: "2,000 MW", valueLabel: "17.520 MWh", meta: "Base · Cal-27 · 2,000 MW", actionLabel: "open to price →" },
-    { id: "TRD-1057", column: "toPrice", urgent: false, tag: "14 min", tagTone: "warning", customer: "Kramer Logistics", shape: "Peak", period: "Q4-26", power: "0,500 MW", valueLabel: "396 MWh", meta: "Peak · Q4-26 · 0,500 MW", actionLabel: "open to price →" },
-    { id: "TRD-1056", column: "toPrice", urgent: true, tag: "31 min", tagTone: "critical", customer: "Meijer Koelhuizen", shape: "Base", period: "Sep-26", power: "0,250 MW", valueLabel: "180 MWh", meta: "Base · Sep-26 · 0,250 MW", actionLabel: "open to price →" },
-    { id: "TRD-1051", column: "awaiting", urgent: true, tag: "04:12", tagTone: "critical", customer: "Vandersteen Koeling", shape: "Peak", period: "Q1-27", power: "1,000 MW", valueLabel: "€ 72.768", meta: "Peak · Q1-27 · 1,000 MW", actionLabel: "view offer →" },
-    { id: "TRD-1053", column: "awaiting", urgent: false, tag: "11:48", tagTone: "warning", customer: "Hoekstra Staal", shape: "Base", period: "Q4-26", power: "0,750 MW", valueLabel: "€ 61.220", meta: "Base · Q4-26 · 0,750 MW", actionLabel: "view offer →" },
-    { id: "TRD-1054", column: "awaiting", urgent: false, tag: "19:05", tagTone: "neutral", customer: "De Groot Papier", shape: "Peak", period: "Nov-26", power: "0,300 MW", valueLabel: "€ 22.150", meta: "Peak · Nov-26 · 0,300 MW", actionLabel: "view offer →" },
-    { id: "TRD-1055", column: "awaiting", urgent: false, tag: "24:33", tagTone: "neutral", customer: "Nolte Chemie", shape: "Base", period: "Cal-27", power: "1,500 MW", valueLabel: "€ 21.045", meta: "Base · Cal-27 · 1,500 MW", actionLabel: "view offer →" },
-    { id: "TRD-1050", column: "awaiting", urgent: false, tag: "27:51", tagTone: "neutral", customer: "Bosman Tuinbouw", shape: "Peak", period: "Dec-26", power: "0,100 MW", valueLabel: "€ 7.117", meta: "Peak · Dec-26 · 0,100 MW", actionLabel: "view offer →" },
-    { id: "TRD-1049", column: "confirm", urgent: true, tag: "22 min", tagTone: "critical", customer: "Kramer Logistics", shape: "Base", period: "Q4-26", power: "0,500 MW", valueLabel: "€ 41.200", meta: "Base · Q4-26 · 0,500 MW", actionLabel: "confirm or fail →" },
-    { id: "TRD-1052", column: "confirm", urgent: false, tag: "8 min", tagTone: "warning", customer: "Hoekstra Staal", shape: "Peak", period: "Sep-26", power: "0,800 MW", valueLabel: "€ 72.768", meta: "Peak · Sep-26 · 0,800 MW", actionLabel: "confirm or fail →" }
+    { id: "TRD-1058", column: "toPrice", urgent: false, tag: "6 min", tagTone: "warning", customer: "Van Dijk Glastuinbouw", shape: "Base", period: "Cal-27", power: "2,00 MW", valueLabel: "17.520 MWh", meta: "Base · Cal-27 · 2,00 MW", actionLabel: "open to price →" },
+    { id: "TRD-1057", column: "toPrice", urgent: false, tag: "14 min", tagTone: "warning", customer: "Kramer Logistics", shape: "Peak", period: "Q4-26", power: "0,50 MW", valueLabel: "396 MWh", meta: "Peak · Q4-26 · 0,50 MW", actionLabel: "open to price →" },
+    { id: "TRD-1056", column: "toPrice", urgent: true, tag: "31 min", tagTone: "critical", customer: "Meijer Koelhuizen", shape: "Base", period: "Sep-26", power: "0,25 MW", valueLabel: "180 MWh", meta: "Base · Sep-26 · 0,25 MW", actionLabel: "open to price →" },
+    { id: "TRD-1051", column: "awaiting", urgent: true, tag: "04:12", tagTone: "critical", customer: "Vandersteen Koeling", shape: "Peak", period: "Q1-27", power: "1,00 MW", valueLabel: "€ 72.768", meta: "Peak · Q1-27 · 1,00 MW", actionLabel: "view offer →" },
+    { id: "TRD-1053", column: "awaiting", urgent: false, tag: "11:48", tagTone: "warning", customer: "Hoekstra Staal", shape: "Base", period: "Q4-26", power: "0,75 MW", valueLabel: "€ 61.220", meta: "Base · Q4-26 · 0,75 MW", actionLabel: "view offer →" },
+    { id: "TRD-1054", column: "awaiting", urgent: false, tag: "19:05", tagTone: "neutral", customer: "De Groot Papier", shape: "Peak", period: "Nov-26", power: "0,30 MW", valueLabel: "€ 22.150", meta: "Peak · Nov-26 · 0,30 MW", actionLabel: "view offer →" },
+    { id: "TRD-1055", column: "awaiting", urgent: false, tag: "24:33", tagTone: "neutral", customer: "Nolte Chemie", shape: "Base", period: "Cal-27", power: "1,50 MW", valueLabel: "€ 21.045", meta: "Base · Cal-27 · 1,50 MW", actionLabel: "view offer →" },
+    { id: "TRD-1050", column: "awaiting", urgent: false, tag: "27:51", tagTone: "neutral", customer: "Bosman Tuinbouw", shape: "Peak", period: "Dec-26", power: "0,10 MW", valueLabel: "€ 7.117", meta: "Peak · Dec-26 · 0,10 MW", actionLabel: "view offer →" },
+    { id: "TRD-1049", column: "confirm", urgent: true, tag: "22 min", tagTone: "critical", customer: "Kramer Logistics", shape: "Base", period: "Q4-26", power: "0,50 MW", valueLabel: "€ 41.200", meta: "Base · Q4-26 · 0,50 MW", actionLabel: "confirm or fail →" },
+    { id: "TRD-1052", column: "confirm", urgent: false, tag: "8 min", tagTone: "warning", customer: "Hoekstra Staal", shape: "Peak", period: "Sep-26", power: "0,80 MW", valueLabel: "€ 72.768", meta: "Peak · Sep-26 · 0,80 MW", actionLabel: "confirm or fail →" }
   ];
 
   var QUEUE_ORDER = ["toPrice", "awaiting", "confirm"];
@@ -132,12 +132,12 @@
       requestSubtitle: "Buy · Base · Cal 2027 · submitted by K. van Dijk",
       requestedBy: "K. van Dijk · Admin · +31 77 396 2210",
       customerName: "Van Dijk Glastuinbouw",
-      totalRequested: "2,000 MW · 17.520,00 MWh",
+      totalRequested: "2,00 MW · 17.520,00 MWh",
       customerNote: "Customer note: “Locking in most of next year before the winter curve moves.”",
       connRows: [
-        { name: "Kas Noord 1", ean: "…0114", forecast: "6.820 MWh", cover: "0,20 MW", coverColor: "var(--pp-text-heading)", requested: "0,800" },
-        { name: "Kas Noord 2", ean: "…0122", forecast: "5.410 MWh", cover: "0,20 MW", coverColor: "var(--pp-text-heading)", requested: "0,700" },
-        { name: "WKK-installatie", ean: "…0139", forecast: "4.180 MWh", cover: "—", coverColor: "var(--pp-text-faint)", requested: "0,500" }
+        { name: "Kas Noord 1", ean: "…0114", forecast: "6.820 MWh", cover: "0,20 MW", coverColor: "var(--pp-text-heading)", requested: "0,80" },
+        { name: "Kas Noord 2", ean: "…0122", forecast: "5.410 MWh", cover: "0,20 MW", coverColor: "var(--pp-text-heading)", requested: "0,70" },
+        { name: "WKK-installatie", ean: "…0139", forecast: "4.180 MWh", cover: "—", coverColor: "var(--pp-text-faint)", requested: "0,50" }
       ],
       marketRows: withBorderTop([
         { label: "Indication at submission (14:22)", value: "€ 79,9000", color: "var(--pp-text-heading)" },

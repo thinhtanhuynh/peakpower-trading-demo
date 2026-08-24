@@ -241,12 +241,12 @@ top-ups stacked on them:
 
 | Period | Rows | Portfolio power | Result |
 |---|---|---|---|
-| `Q1 2026` | 2 | base 3,760 MW + peak 0,939 MW | Jan and Mar read mixed |
-| `Feb 2026` | 2 | base 2,265 + peak 0,563, stacked on Q1 | February is long all month |
+| `Q1 2026` | 2 | base 3,76 MW + peak 0,94 MW | Jan and Mar read mixed |
+| `Feb 2026` | 2 | base 2,27 + peak 0,56, stacked on Q1 | February is long all month |
 | *April* | **none** | — | April is genuinely unhedged |
-| `May 2026` | 2 | base 3,768 + peak 0,917 | mixed |
-| `Jun 2026` | 2 | base 2,419 + peak 0,546 | June is short all month |
-| `Q3 2026` | 2 | base 3,991 + peak 0,897 | Jul and Aug read mixed |
+| `May 2026` | 2 | base 3,77 + peak 0,92 | mixed |
+| `Jun 2026` | 2 | base 2,42 + peak 0,55 | June is short all month |
+| `Q3 2026` | 2 | base 3,99 + peak 0,90 | Jul and Aug read mixed |
 
 Across the 217 measured days that gives **131 mixed, 26 long-only, 30
 short-only and 30 unhedged** — the distribution to re-check after touching
@@ -413,7 +413,7 @@ from real data; that was reverted on explicit product direction.
 | **Connections** | `portal-seed-data.js` (`CONNECTIONS`) | **list** / **detail** (`state.connId`) |
 | **Consumption** | Real, calculated — see below | Single view, arbitrary From/To range |
 | **Prices** | `portal-seed-data.js` (`PRICES`) | Single view. Six indicative cards, each jumping into the wizard via `startWizardFromPrice`, plus a synthetic 90-day trend chart |
-| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_CONNECTIONS`, `WIZARD_PERIODS`) + `state.trades`, which includes the contracted blocks from `DATA.hedge` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView` |
+| **Trading** | `portal-seed-data.js` (`TRADES_SEED`, `WIZARD_PERIODS`) + `state.trades`, which includes the contracted blocks from `DATA.hedge` | **list** / **detail** (`state.tradeId`) / **wizard** (`state.wizardStep` 0–2), via `state.tradingView` |
 | **Wallet** | `portal-seed-data.js` (`WALLET_LEDGER`, `BANK_DETAILS`, `PAYOUT_ACCOUNT`) + in-memory balances | **ledger** / **topup** / **withdraw** (+ their success states), via `state.walletView`. Interactive but not persisted across reload |
 | **Settlements** | `portal-seed-data.js` (`SETTLEMENTS`) | **list** / **detail** (`state.settlementId`) |
 
@@ -548,7 +548,7 @@ claiming a split that no longer exists:
 | Where | Was | Now |
 |---|---|---|
 | Trading list | a separate "Contracted blocks" table below the trades | the blocks **are** trades — `blockAsTrade()` folds them into `state.trades`, with the full request→offer→confirm→paid history |
-| Wizard step 2 | a CURRENT COVER pill per connection card | one `accountCoverMw()` line above the grid |
+| Wizard step 2 | a per-connection picker with checkboxes, Select all / Clear all, and a CURRENT COVER pill per card | a read-only roster plus one `accountCoverMw()` line above the grid — nothing is selectable |
 | Connection detail | a "Block positions on this connection" table from seeded `CONNECTIONS[].blocks` | a line saying blocks are held at account level, linking to Trading |
 | Dashboard mini chart | Rotterdam DC's own day under a hedge line | the whole portfolio, like Consumption |
 
@@ -563,7 +563,7 @@ its own row on the detail. The shape column carried a `(sell)` suffix for a
 while — on the seeded `TRD-1867` and in `blockAsTrade()` — which made one
 product look like two and meant a Sell could never be grouped with a Buy of
 the same shape. `shape` is now only ever `Base` or `Peak`; the sign lives on
-the power (`−0,090 MW`) and the direction on its own field.
+the power (`−0,09 MW`) and the direction on its own field.
 
 ### A finished trade says it was paid
 
@@ -622,7 +622,7 @@ Two things this depends on:
 
 ### Trading wizard
 
-Three steps: product & period → connection & volume → review & submit.
+Three steps: product & period → volume → review & submit.
 `state.wizardStep` is 0–2.
 
 **Entry points** — four buttons, three functions, all landing on step 1:
@@ -631,7 +631,7 @@ Three steps: product & period → connection & volume → review & submit.
 |---|---|---|
 | Trading list "Request a trade", Dashboard hero "Request a trade" | `startWizard()` | Base / next month, first eligible connection |
 | Prices card "Request a price →" | `startWizardFromPrice(shape, periodType)` | that card's shape and period type |
-| Connection detail "Request a trade" | `startWizardFromConnection(id)` | that connection, locked |
+| Connection detail "Request a trade" | `startWizardFromConnection(id)` | nothing — a block covers the account whichever page it started from |
 
 `startWizardFromPrice()` must **not** apply the default — honouring the card
 the customer clicked is its whole reason to exist.
@@ -770,25 +770,22 @@ The Back Office's market-reference cards read `WIZARD_PERIODS` directly by
 label and are not in this path — the desk's indicative figure stays at the
 flat quoted price on purpose.
 
-#### Step 2 — connection & volume
+#### Step 2 — volume
 
-A card grid (`.conn-grid` / `.conn-card`), not a `.grid-table` — bespoke
-classes used nowhere else, so this layout has no effect on any other list.
-Selection is a real `<input type=checkbox>`, which already shows checked
-state unambiguously, so there is no extra badge on top of it.
+**Nothing is selected here.** A block is bought for the whole account, so the
+card grid (`.conn-grid` / `.conn-card`) is a **read-only roster**: it names the
+connections the block will cover and says why the one ineligible connection is
+not among them. No checkbox, no `Select all` / `Clear all`, no click handler,
+no hover or selected state — and no `cursor:pointer`, because there is nothing
+to click. It lists `tradableConnections()` — every connection except the gas
+one, which a power block cannot cover.
 
-`state.wizard` carries `connIds` (array) and `volumeMw`.
+`state.wizard` carries `volumeMw` and nothing about connections.
 
-- **The volume input is the total**, however many connections it is spread
-  across. `wizardTotalMW()` returns `state.wizard.volumeMw` with no
-  arithmetic; `wizardSettlement()` and the review step read that function
-  rather than the raw input, so they follow automatically.
-- **`wizardVolumes()` splits that total** evenly across `connIds`, with the
-  last id absorbing the rounding remainder, so the map sums back to exactly
-  the input (0,30 across two connections publishes 0,15 + 0,15, not
-  0,29999999999999996). `buildRequest()` has always just summed this map and
-  has never needed changing. The same last-absorbs-remainder technique is
-  used by `deriveConnRows()` in the back office.
+- **The volume input is the block's power for the account** — one number, and
+  it is not divided by anything. `wizardTotalMW()` returns
+  `state.wizard.volumeMw` with no arithmetic, and `submitWizard()` hands it to
+  `buildRequest()` as `opts.powerMw`.
 - **Minimum and step are both 0,01 MW** (`MIN_VOLUME_MW`, `VOLUME_STEP_MW`,
   and the `<input min step>` attributes). `commitWizardVolume()` snaps to the
   grid on blur; `wizardVolumeValid()` gates Continue.
@@ -796,10 +793,10 @@ state unambiguously, so there is no extra badge on top of it.
   shape, with flanking `−`/`+` buttons (`stepWizardVolume(dir)`) that snap the
   same way so repeated clicks can't drift off the grid. Native spin arrows are
   hidden. The decrement button disables itself at the floor.
-- **Each card shows the full EAN**, read live from
-  `PortalSeedData.CONNECTIONS` by id — not duplicated onto
-  `WIZARD_CONNECTIONS`, which would be a second copy free to drift. Only
-  Breda carries an extra `note` ("ends 31 Dec 2026").
+- **Each card shows the full EAN**, straight off the `CONNECTIONS` record the
+  roster is built from — one list, so there is nothing to drift. A connection
+  whose `status` is not `Active` shows it (Breda: "Ending 31 Dec"), as a date
+  worth knowing rather than a reason it is excluded.
 - **Cover is stated once, above the grid, not per card.** `accountCoverMw(
   periodStart, periodEnd)` sums every block from `hedgeBlocksFor()` whose
   period overlaps the **currently selected** delivery period and renders it in
@@ -810,42 +807,42 @@ state unambiguously, so there is no extra badge on top of it.
   is this function's job. A negative figure (a sold block reducing net cover)
   is shown as negative, not clamped. A card's `.cc-pill` now carries only a
   reason it cannot be picked.
-- `Select all` / `Clear all` sit above the grid, styled as opposites —
-  `.btn-select-all` tinted blue, `.btn-clear-all` neutral outlined. Select
-  all's hover inverts to a solid blue-700 fill with white text; the previous
-  blue-050 → blue-100 hover was three RGB units of change and invisible.
+**Continue has exactly one reason to be disabled**, so `VOLUME_HINT` is the
+only message the field can show. `NO_CONNECTION_HINT` and `wizardVolumeHint()`
+are gone with the selection they described — and `wizardVolumeValid()` no
+longer checks a connection list, which is the line that would otherwise have
+returned `false` forever and left Continue and Submit as dead buttons.
 
-**Two reasons Continue can be disabled need two messages.** `VOLUME_HINT`
-covers an invalid volume, `NO_CONNECTION_HINT` covers an empty selection
-(only reachable via `Clear all`); `wizardVolumeHint()` picks between them.
-
-**`wizardAllocationNote()` says what happens next, never which connection** —
-the checked cards already name those. One connection reads "allocated **to**
-Rotterdam DC", two or more "allocated **across** all selected connections":
-*across*, because `wizardVolumes()` divides the total between them, where *to
-all* would read as each one receiving the whole block.
+**`wizardAllocationNote()` is one unconditional sentence** — "This block will
+be held for the whole account once the trade is confirmed." There is no
+"which connections" left to answer.
 
 **The banner's text and its visibility are computed from the same string**, in
-**both** `buildWizardVolumeTable()` (full re-render path, e.g. toggling a
-connection) and `refreshWizardVolumeUi()` (live-patch path, e.g. typing a
-volume) — an empty note must hide rather than render as a blank coloured
-rectangle. Neither branch returns `""` today, but keep the pairing: it was
-added for a real bug (clear the field with 2 connections selected to show the
-amber hint, then type a valid volume, and the banner stayed visible and empty),
-and it only stays fixed while both paths derive visibility from the text.
+**both** `buildWizardVolumeTable()` (full re-render path — entering the step,
+or changing the period) and `refreshWizardVolumeUi()` (live-patch path, e.g.
+typing a volume) — an empty note must hide rather than render as a blank
+coloured rectangle. Neither branch returns `""` today, but keep the pairing:
+it was added for a real bug where the banner stayed visible and empty after a
+hint was cleared, and it only stays fixed while both paths derive visibility
+from the same text.
 
-**Ineligible connections get no checkbox**, and `toggleWizardConnection()`
-refuses them — the guard is in the handler, not only in the markup. Same for
-`selectAllWizardConnections()` and `clearWizardConnections()` while locked.
+**The roster is every connection a power block can cover — all six.**
+`tradableConnections()` is the one list: `CONNECTIONS` minus the gas
+connection, which is exactly the set the Consumption screen sums and
+`hedgeBlocksFor()` prices against. Nothing is filtered beyond that, because
+the hedge is measured against all six connections' summed load and a shorter
+roster would understate what was bought.
 
-**Only the row carries a click handler.** The checkbox has none of its own: a
-click on it bubbles to the row, so two handlers would toggle twice and a
-direct checkbox click would appear to do nothing.
+That list replaced a separate `WIZARD_CONNECTIONS` array, and the reason is
+worth keeping: it was a second copy that had **already drifted** — it omitted
+the greenhouse, so a published block claimed to cover four connections while
+the maths behind it covered six. One list, derived, not two maintained.
 
-**Locked mode** (`state.wizard.lockedConn`) renders only that connection, its
-checkbox checked and disabled, with a `.locked` class at full opacity —
-unlike `.not-eligible`'s dimmed 0.55, because this row *is* the trade. The
-toolbar is omitted entirely.
+**An expiring contract is no longer a reason to refuse a request.** Breda's
+card still shows its end date, because that is a date worth knowing, but the
+block is not bought against Breda — it is bought for the account. The only
+thing `tradableConnection()` refuses is the gas connection, which a power
+block cannot cover at all.
 
 **Why the volume field does not call `renderApp()`:** it used to, and the
 field could not be typed into — a full re-render rebuilds the `<input>`
@@ -888,10 +885,9 @@ number and typing inserted there — clicking "0.20" and typing 5 produced
 "0.520". You always replace this value, never edit into it. `onfocus` alone is
 enough; no `onmouseup` guard is needed, and adding one would break drag-select.
 
-`joinWithAnd()` (Oxford "A, B and C") is the single helper for naming the
-selected connections — used by `wizardAllocationNote()`,
-`wizardSummaryRows()` and `submitWizard()`'s timeline text, facts and
-`connName`, so four call sites can't drift in style.
+`joinWithAnd()` is gone: nothing names a list of connections any more. The
+Summary card, the review step and the published timeline all say *Applies to:
+All connections on the account* instead.
 
 **Testing focus-dependent CSS on this page: use `page.click()`, not
 `page.focus()`.** Playwright's `.focus()` bypasses the normal event pipeline
@@ -1981,14 +1977,25 @@ Accepted is deliberately **amber**, not green: reserved but not yet executed.
 Green is reserved for `Confirmed`.
 
 **What flows.** `submitWizard()` publishes the wizard's real selections —
-direction, shape, the selected period with its start/end dates, per-connection
-power lines (zero-volume connections dropped), the note, and the indicative
-price for that shape. Total volume is **computed**, not carried: `powerMw ×
-hoursInPeriod(start, end, shape)`, base counting every hour and peak counting
-Mon–Fri 08:00–20:00 only (DST not adjusted for, matching
-`hedge_blocks_2026.json`). That formula independently reproduces the mockup's
-own hardcoded `1,000 MW → 768,00 MWh` for Peak Q1 2027, which is what
-validates it.
+direction, shape, the selected period with its start/end dates, the block's
+power for the account (`opts.powerMw`), an **unweighted roster** of the
+eligible connections it covers, the note, and the indicative price for that
+shape. Total volume is **computed**, not carried: `powerMw × hoursInPeriod(
+start, end, shape)`, base counting every hour and peak counting Mon–Fri
+08:00–20:00 only (DST not adjusted for, matching `hedge_blocks_2026.json`).
+That formula independently reproduces the mockup's own hardcoded
+`1,00 MW → 768,00 MWh` for Peak Q1 2027, which is what validates it.
+
+**A roster line carries `{id, name, sub}` and no power.** The desk needs the
+metering points — it is the only place they are named — but nobody chose a
+per-connection allocation, so inventing one would be the "derived detail must
+not out-claim its source" failure this file already records for the seeded
+Pricing card. `buildRequest()` therefore takes the size as `opts.powerMw`
+rather than summing lines. Deleting `connections` outright was the other
+option and is worse: the desk's request card renders it, and
+`confirmedBlocksForRange()` reads it guarded, so it would have yielded **zero
+hedge blocks** — every confirmed trade silently dropping out of the
+Consumption hedge line — with nothing logged.
 
 Ids continue the `TRD-1079+` sequence, which can't collide with the Back
 Office's seeded `TRD-1049…1058`.
@@ -2044,14 +2051,13 @@ Columns are `CONNECTION` and `EAN`; the totals sit in a footer built in
 TRD-1058's own format — a 2px `--pp-border-strong` rule, "Total requested"
 at 12.5px/700 with a direction+shape badge beside it, and
 `formatMw(powerMw) + " · " + formatMwh(volumeMwh)` right-aligned at 14px/700.
-The desk prices the whole request, so the per-connection split is not a
-pricing input; everything else about the request stays in the **Request
-details** card in the side column. The split is still on the record — it is
-just not shown.
+The desk prices the whole request, and there is no per-connection split to
+show: a roster line carries `{id, name, sub}` and no power, because nobody
+chose a per-connection allocation. Everything else about the request stays in
+the **Request details** card in the side column.
 
 **The EAN on a published request comes from the record, not a lookup.**
-`WIZARD_CONNECTIONS` carries no EAN (deliberately — see the wizard's step 2),
-so `submitWizard()` maps `connectionEan(id)` onto each connection's `sub`
+`submitWizard()` maps `connectionEan(id)` onto each roster line's `sub`
 before `buildRequest()` sees it. Without that the desk's EAN column renders
 blank, which is what it did for as long as the column was a small grey
 sub-line nobody looked at. `connectionEan()` is the single lookup, shared with
@@ -2282,6 +2288,22 @@ them does not have.
 
 ## Conventions
 
+- **Power is MW at exactly 2 decimals**, through the single formatter
+  `PortalTradeLink.formatMw()` — `"1,00 MW"`, `"−0,09 MW"`. Two decimals
+  because 0,01 MW is the grid the wizard trades on (`MIN_VOLUME_MW` /
+  `VOLUME_STEP_MW`), so a third decimal only ever showed a rounding artefact.
+  The minus is **U+2212**, not `formatNL`'s ASCII hyphen, so a sold position
+  reads the same as the seeded rows that always wrote it that way. Volume
+  (MWh) stays 2 decimals, prices 4. `hedge_blocks_2026.json` stores its
+  powers at 2 decimals too, so the stored figure and the screen agree rather
+  than the screen rounding a number the maths does not use.
+- **A grep for `formatMw` does not find them all.** Seeded display strings
+  (`portal-seed-data.js`, `back-office-desk-data.js`,
+  `back-office-screens-data.js`) and hand-built `formatNL(x, N) + " MW"` are
+  invisible to it, and nothing tests them — miss one and the desk renders two
+  precisions side by side with a green suite. `deriveConnRows()` in the back
+  office rounds its *maths* to 2 decimals as well as its display: rounding
+  only the display prints 0,67 + 0,67 + 0,67 under a "2,00 MW" footer.
 - Timestamps are local Netherlands delivery time in `timestamp`, UTC in
   `utctime`; `is_dst` flags summer-time intervals.
 - All power values are **kW** (average over the 15-min interval), not kWh.
