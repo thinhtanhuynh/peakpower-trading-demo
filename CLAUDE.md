@@ -2451,6 +2451,20 @@ index. The layout used to read `cards[0] + cards[2]` / `cards[1] + cards[3]`,
 so adding a group meant editing that line too — and forgetting left the new
 card off the step with nothing on screen to say so.
 
+**The Prefill demo data toggle fills all three steps**, not just the first —
+company, connections and accounts — and sits in the wizard's own topbar chrome
+so it is reachable from every step. It replaces the draft rather than patching
+it, so switching it off is a real reset, and it clears the errors with it: a
+red flag pointing at a field that has just been refilled is worse than none.
+`topbarActions` grew an `html` action for it, because a switch is not a button.
+
+**Its KvK walks with the number of customers already created.** A fixed one is
+refused as "Already in use" the second time the toggle is used in a session,
+which reads as the toggle being broken rather than the validation working. Its
+accounts include an Admin for the same reason — `customerAccountsFormError`
+would otherwise refuse step 3, and a prefill that cannot be submitted is not a
+prefill.
+
 **Required is still only legal name, KvK and the contact's name and email.**
 Everything else is paperwork that arrives later and renders `—` until it does;
 the new selects all carry a default, so none of them adds a way to be refused. Formats checked: KvK (8 digits, unique), email, EAN (18 digits,

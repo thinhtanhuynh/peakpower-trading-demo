@@ -89,6 +89,16 @@
   .topbar .title { font-size:var(--text-lg); font-weight:700; color:var(--pp-text-heading); margin-top:2px; }
   .topbar .subtitle { font-size:11px; color:var(--pp-text-body); }
   .topbar-actions { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+  /* Demo chrome, so it reads as chrome: no fill, no border, and it sits before
+     the wizard's own Cancel/Next rather than among them. */
+  .prefill-toggle { display:flex; align-items:center; gap:8px; cursor:pointer; padding:4px 2px; user-select:none; }
+  .prefill-toggle .sw { width:32px; height:18px; border-radius:var(--radius-pill); background:var(--pp-border-strong); flex-shrink:0; position:relative; transition:background-color .15s ease; }
+  .prefill-toggle .sw::after { content:""; position:absolute; top:2px; left:2px; width:14px; height:14px; border-radius:50%; background:#fff; transition:transform .15s ease; }
+  .prefill-toggle.on .sw { background:var(--pp-mint); }
+  .prefill-toggle.on .sw::after { transform:translateX(14px); }
+  .prefill-toggle .t { font-size:12px; font-weight:600; color:var(--pp-text-body); white-space:nowrap; }
+  .prefill-toggle.on .t { color:var(--pp-text-heading); }
+  .prefill-toggle:focus-visible { outline:2px solid var(--pp-blue-300); outline-offset:2px; border-radius:var(--radius-sm); }
   /* Holds the demo clock beside the screen's own actions. #topbar-actions has
      its innerHTML replaced on every render, so the clock cannot live inside it. */
   .topbar-right { display:flex; align-items:center; gap:10px; flex-shrink:0; }
@@ -345,6 +355,8 @@
     newCustomers: [],
     // The new-customer wizard: {step, draft, errors}, or null when not in it.
     customerWizard: null,
+    // Demo chrome for the Add customer wizard — see toggleCustomerPrefill.
+    customerPrefill: false,
     // An inline row being added on a created customer's detail page:
     // {kind: "connections" | "accounts", row, err}, or null.
     detailRowDraft: null,
@@ -470,6 +482,9 @@
       ? '<span class="crumb-back" onclick="' + c.crumb.backFn + '">' + esc(c.crumb.backLabel) + "</span> › " + esc(c.crumb.rest)
       : "";
     topbarActions.innerHTML = (c.actions || []).map(function (a) {
+      // An action that is not a button carries its own markup — the wizard's
+      // prefill switch is the only one, and a switch is not a button.
+      if (a.html) { return a.html; }
       return '<button type="button" class="btn-' + (a.variant === "primary" ? "primary" : "secondary") +
         '" onclick="' + (a.onClick || "BO.noop()") + '">' + esc(a.label) + "</button>";
     }).join("");
@@ -1902,6 +1917,40 @@
       status:'Onboarding', connections:[], accounts:[]
     };
   }
+  /**
+   * Every field the wizard asks for, filled in — the desk's counterpart to the
+   * onboarding flow's own prefill, and the same promise: all three steps, not
+   * just the first.
+   *
+   * The KvK walks with the number of customers already created. A fixed one
+   * would be refused as "Already in use" the second time the toggle was used
+   * in a session, which reads as the toggle being broken rather than the
+   * validation working.
+   */
+  function prefilledCustomerDraft() {
+    var kvk = String(24398112 + (state.newCustomers ? state.newCustomers.length : 0));
+    return {
+      name: 'Bakker Vriesopslag B.V.', tradeName: 'Bakker Cold', kvk: kvk,
+      vat: 'NL' + kvk + 'B01', entityType: 'BV',
+      street: 'Ceresstraat 14', city: 'Venlo', postcode: '5928 LA',
+      industry: 'Agriculture & Food Processing', direction: 'Both', annualVolume: OF.VOLUMES[3],
+      iban: 'NL42 RABO 0318 4729 06', bic: 'RABONL2U', accountHolder: 'Bakker Vriesopslag B.V.',
+      billingAddress: 'Ceresstraat 14, Venlo', visitingAddress: 'Ceresstraat 14, Venlo',
+      contactName: 'S. Bakker', contactEmail: 's.bakker@bakkervries.nl', contactPhone: '+31 77 320 4410',
+      status: 'Onboarding',
+      connections: [
+        {ean:'871687100000000114', name:'Venlo cold store', commodity:'Electricity', validFrom: isoToday()},
+        {ean:'871687100000000122', name:'Venlo dock 3', commodity:'Electricity', validFrom: isoToday()}
+      ],
+      // An Admin among them, or customerAccountsFormError refuses step 3 — a
+      // prefill that cannot be submitted is not a prefill.
+      accounts: [
+        {name:'S. Bakker', email:'s.bakker@bakkervries.nl', role: S.ROLE_ADMIN},
+        {name:'T. Willems', email:'t.willems@bakkervries.nl', role: S.ROLE_TRADER}
+      ]
+    };
+  }
+
   function emptyConnectionRow() {
     return {ean:'', name:'', commodity:'Electricity', validFrom: isoToday()};
   }
@@ -2193,6 +2242,15 @@
 
   // --- entry points ---------------------------------------------------------
 
+  function prefillToggleHtml() {
+    var on = !!state.customerPrefill;
+    return '<span class="prefill-toggle' + (on ? ' on' : '') + '" role="switch" tabindex="0"' +
+      ' aria-checked="' + (on ? 'true' : 'false') + '"' +
+      ' onclick="BO.toggleCustomerPrefill()"' +
+      ' onkeydown="if(event.key===\' \'||event.key===\'Enter\'){event.preventDefault();BO.toggleCustomerPrefill();}">' +
+      '<span class="sw"></span><span class="t">Prefill demo data</span></span>';
+  }
+
   /** The screen body: the customer list, the new-customer form, or a detail. */
   function renderCustomers() {
     var c = state.customerId ? customersFind(state.customerId) : null;
@@ -2214,6 +2272,7 @@
           rest: 'step ' + (step + 1) + ' of ' + WIZARD_STEPS.length + ' · not created yet'
         },
         actions: [
+          { html: prefillToggleHtml() },
           { label: step ? 'Back' : 'Cancel', variant: 'secondary', onClick: 'BO.wizardBack()' },
           last
             ? { label: 'Create customer', variant: 'primary', onClick: 'BO.createCustomer()' }
@@ -2737,13 +2796,31 @@
     state.customerId = null;
     state.commercialEditing = false;
     state.customerWizard = { step: 0, draft: emptyCustomerDraft(), errors: emptyWizardErrors() };
+    state.customerPrefill = false;
     state.customerView = 'new';
+    render();
+  }
+
+  /**
+   * Fill or empty the whole draft, without leaving the step you are on.
+   *
+   * It replaces the draft rather than patching it, so switching it off is a
+   * real reset — and it clears the errors with it, since a red flag pointing
+   * at a field that has just been refilled is worse than none.
+   */
+  function toggleCustomerPrefill() {
+    var w = state.customerWizard;
+    if (!w) { return; }
+    state.customerPrefill = !state.customerPrefill;
+    w.draft = state.customerPrefill ? prefilledCustomerDraft() : emptyCustomerDraft();
+    w.errors = emptyWizardErrors();
     render();
   }
 
   function clearNewCustomerForm() {
     state.customerView = 'list';
     state.customerWizard = null;
+    state.customerPrefill = false;
   }
 
   function cancelNewCustomer() {
@@ -3129,6 +3206,7 @@
     confirmTrade: confirmTrade, failTrade: failTrade, parsePrice: parsePrice, noop: noop,
     selectCustomer: selectCustomer, closeCustomerDetail: closeCustomerDetail,
     startNewCustomer: startNewCustomer, cancelNewCustomer: cancelNewCustomer,
+    toggleCustomerPrefill: toggleCustomerPrefill,
     createCustomer: createCustomer, updateCustomerField: updateCustomerField,
     updateCustomerRow: updateCustomerRow, addCustomerRow: addCustomerRow,
     removeCustomerRow: removeCustomerRow, wizardBack: wizardBack, wizardNext: wizardNext,
