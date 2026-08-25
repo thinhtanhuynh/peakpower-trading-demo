@@ -20,17 +20,24 @@ function stateAt(step, patch) {
   s.volumeIndex = 3;
   s.authorityIndex = 0;
   s.signatories = [{ first: "Peter", last: "de Vries", email: "p.devries@vandersteen.nl", locked: true }];
+  s.signCode = Flow.SIGN_CODE;
+  s.agreedDocs = true;
   Object.keys(patch || {}).forEach(function (k) { s[k] = patch[k]; });
   return s;
 }
 
 // --- the flow's own shape ---------------------------------------------------
 (function () {
-  assert.strictEqual(Flow.STEPS.length, 9, "nine steps");
-  assert.strictEqual(Flow.LAST_STEP, 9);
+  assert.strictEqual(Flow.STEPS.length, 10, "ten steps");
+  assert.strictEqual(Flow.LAST_STEP, 10);
   Flow.STEPS.forEach(function (st, i) {
-    assert.strictEqual(st.n, i + 1, "step numbers are 1..9 in order");
+    assert.strictEqual(st.n, i + 1, "step numbers are 1..10 in order");
     assert.ok(st.group && st.label && st.title && st.intro, "every step is fully labelled");
+  });
+  // The footer reads the label off the step, so a step that renames the button
+  // must actually carry one — an empty string would silently fall back to "Next".
+  Flow.STEPS.forEach(function (st) {
+    if ("next" in st) { assert.ok(String(st.next).trim(), "step " + st.n + " has an empty next label"); }
   });
   // The rail groups steps, so a group must never reappear after another one
   // starts — the "show the heading when it changes" rule would print it twice.
@@ -145,7 +152,7 @@ function stateAt(step, patch) {
 
   assert.strictEqual(Flow.stepValid(stateAt(4, { industryIndex: 0 })), true, "industry is optional");
   assert.strictEqual(Flow.stepValid(stateAt(6, { bankVerified: false })), true, "the cent can arrive later");
-  assert.strictEqual(Flow.stepValid(stateAt(9)), true, "step 9 is a receipt, not a question");
+  assert.strictEqual(Flow.stepValid(stateAt(10)), true, "step 10 is a receipt, not a question");
 })();
 
 // --- steps 5 and 7: index 0 is a real answer --------------------------------
@@ -330,12 +337,68 @@ function stateAt(step, patch) {
   assert.strictEqual(Flow.clampStep(0), 1);
   assert.strictEqual(Flow.clampStep(-4), 1);
   assert.strictEqual(Flow.clampStep(1), 1);
-  assert.strictEqual(Flow.clampStep(9), 9);
-  assert.strictEqual(Flow.clampStep(12), 9);
+  assert.strictEqual(Flow.clampStep(10), 10);
+  assert.strictEqual(Flow.clampStep(12), Flow.LAST_STEP);
   assert.strictEqual(Flow.clampStep(4.6), 5);
   assert.strictEqual(Flow.clampStep("3"), 3);
   assert.strictEqual(Flow.clampStep("nonsense"), 1, "garbage lands on step 1, never on NaN");
   assert.strictEqual(Flow.clampStep(undefined), 1);
+})();
+
+// --- step 9: the code IS the signature --------------------------------------
+(function () {
+  var at9 = function (over) { return stateAt(9, over); };
+
+  assert.strictEqual(Flow.stepValid(at9()), true, "the prefill signs");
+  assert.strictEqual(Flow.stepValid(at9({ signCode: "" })), false, "no code, no signature");
+  assert.strictEqual(Flow.stepValid(at9({ signCode: "000000" })), false, "a wrong code does not sign");
+  assert.strictEqual(Flow.stepValid(at9({ agreedDocs: false })), false,
+    "a code without the agreement signs nothing");
+
+  // Read off an email and typed back, so the spacing a person adds must not
+  // be the reason it is refused.
+  assert.strictEqual(Flow.stepValid(at9({ signCode: "748 213" })), true, "a spaced code still matches");
+  assert.strictEqual(Flow.stepValid(at9({ signCode: " 748-213 " })), true, "punctuation is stripped");
+  assert.strictEqual(Flow.codeDigits("748 213"), "748213");
+  assert.strictEqual(Flow.SIGN_CODE.length, Flow.SIGN_CODE_DIGITS, "the code is as long as it says");
+  assert.ok(/^\d+$/.test(Flow.SIGN_CODE), "the code is digits, so inputmode=numeric is honest");
+
+  // Every refusal names the field, and none of them reads like the all-clear.
+  var ok = Flow.hint(at9());
+  [{ signCode: "" }, { signCode: "000000" }, { agreedDocs: false }].forEach(function (over) {
+    assert.notStrictEqual(Flow.hint(at9(over)), ok, "a refusal must not read as the all-clear");
+  });
+  assert.notStrictEqual(Flow.hint(at9({ signCode: "" })), Flow.hint(at9({ signCode: "000000" })),
+    "no code and a wrong code are different problems");
+})();
+
+// --- every email comes from a person, not a mailbox nobody reads ------------
+(function () {
+  assert.strictEqual(Flow.SUPPORT_EMAIL, "support@peakpower.nl");
+  assert.ok(Flow.SUPPORT_EMAIL.indexOf("no-reply") === -1 && Flow.SUPPORT_EMAIL.indexOf("noreply") === -1,
+    "the flow invites replies, so the sender has to accept them");
+})();
+
+// --- the last step must not print an outcome it did not reach ---------------
+(function () {
+  var active = stateAt(Flow.LAST_STEP, { bankVerified: true });
+  var held = stateAt(Flow.LAST_STEP, { bankVerified: false });
+
+  assert.strictEqual(Flow.stepTitle(active), "Welcome to PeakPower");
+  assert.notStrictEqual(Flow.stepTitle(held), Flow.stepTitle(active),
+    "an unverified bank account cannot be welcomed as active");
+  assert.notStrictEqual(Flow.stepIntro(held), Flow.stepIntro(active));
+  assert.notStrictEqual(Flow.hint(held), Flow.hint(active));
+  [Flow.stepTitle(held), Flow.stepIntro(held), Flow.hint(held)].forEach(function (line) {
+    assert.strictEqual(/\bactive\b/.test(line), false, "held-for-review copy must not claim active: " + line);
+  });
+
+  // Every other step's heading is still its own record's.
+  for (var n = 1; n < Flow.LAST_STEP; n++) {
+    var st = stateAt(n);
+    assert.strictEqual(Flow.stepTitle(st), Flow.STEPS[n - 1].title, "step " + n + " title");
+    assert.strictEqual(Flow.stepIntro(st), Flow.STEPS[n - 1].intro, "step " + n + " intro");
+  }
 })();
 
 console.log("onboarding-flow.test.js: all assertions passed");

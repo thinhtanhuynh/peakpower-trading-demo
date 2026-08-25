@@ -116,7 +116,7 @@ jsdom or Playwright smoke test after changing a page shell.
 | `portal-seed-data.js` | Static seed data for the customer screens with no live source |
 | `back-office-desk-data.js` | Back-office seeded trades/queues plus `buildQueues()` |
 | `back-office-screens-data.js` | Back-office seeded data for Home, Customers, Wallets, Settlements, Data & feeds. **The Customer Portal loads it too**, for the customer roster its sign-in directory is built from |
-| `onboarding-flow.js` | The onboarding flow's nine steps and the rules that gate them. Tested |
+| `onboarding-flow.js` | The onboarding flow's ten steps and the rules that gate them. Tested |
 | `customer-onboarding.html` | The nine-step onboarding flow a new customer signs up through |
 | `PeakPower_Funding_Instructions.docx` | The file step 6's **Download deposit instructions** link serves. Served straight from the repo root — see "Download deposit instructions is a real file" |
 | `index.html` | The landing page the demo is opened from — one card per page, onboarding leading |
@@ -2373,8 +2373,8 @@ them. A standalone page: it reads no seed data, writes no link, and knows
 nothing about the portals — a person on step 1 does not have an account yet,
 so there is nothing for it to join to.
 
-Nine steps in five groups — Account, Company (three), Profile, Verification,
-Agreement (three) — with the answers and the rules in `onboarding-flow.js` and
+Ten steps in six groups — Account, Company (three), Profile, Verification,
+Agreement (three), Done — with the answers and the rules in `onboarding-flow.js` and
 only the rendering in the page. Same split as every other calculating module
 here, for the same reason: `stepValid()` and `hint()` are what stand between a
 half-filled application and the desk, and they are worth testing.
@@ -2433,7 +2433,7 @@ actions. The two `<select>` handlers do neither — nothing on the page reads
 the entity type or the industry until step 9's summary, which is rebuilt on
 the way there.
 
-**Enter advances the flow.** There is no `<form>` — the nine steps are one
+**Enter advances the flow.** There is no `<form>` — the ten steps are one
 long-lived page, not nine submissions — so the browser has no
 implicit-submission path to inherit, and a keydown listener on the step body
 supplies it. Fields carry a real `<label for>` and an `autocomplete` token;
@@ -2495,6 +2495,83 @@ returns early when the option clicked is the one already chosen. Without that
 guard, going back and clicking the highlighted option wipes every colleague
 typed in on step 8 with nothing on screen having changed.
 
+### Signing with a code
+
+There is no drawn signature. Each signatory is emailed six digits, and typing
+them back with the agreement ticked **is** the signature — step 9, gated by
+`stepValid`:
+
+```js
+case 9:
+  return signCodeMatches(state.signCode) && state.agreedDocs === true;
+```
+
+**Both, and in that order.** A code without the agreement signs nothing, and the
+agreement without the code is nobody in particular ticking it. `hint()` tells
+the three refusals apart — no code, wrong code, unticked — because a disabled
+button with one message for three problems is the failure this flow exists to
+avoid.
+
+`SIGN_CODE` is `"748213"` and `codeDigits()` strips everything else, so a code
+read off an email and typed as `748 213` still matches. It is **not a
+credential**: a constant shipped to the browser, in a flow that submits nothing,
+and the email preview prints it because a code nobody can read is a demo nobody
+can finish.
+
+**Both step-9 fields patch, never re-render.** `setSignCode()` calls
+`refreshFooter()`, and `toggleAgreedDocs()` rewrites the box's own class and
+tick by id — `renderStep()` there would rebuild the code input sitting above it,
+and the tick is drawn by us rather than by a native checkbox, so it cannot be
+left to the browser either.
+
+### The two outcomes, and never the wrong one
+
+Step 10 is the end, and it is two different endings. The welcome email says
+every document was reviewed and the account is active — only true once the cent
+has cleared — so an unverified bank account gets `heldForReviewHtml()` instead
+and **no welcome email at all**.
+
+The heading has to follow it. `F.stepTitle(state)` / `F.stepIntro(state)` are
+what `renderStep()` reads, not `STEPS[i].title`, because "Welcome to PeakPower ·
+your account is active" printed over a badge reading "With the desk" is exactly
+the contradiction this splits. Every other step returns its own record's string,
+and a test asserts that plus the absence of the word "active" from all three
+held-for-review lines.
+
+**Anything that holds an account up is handled by a person.** That is the
+model: the desk writes to the customer from `support@peakpower.nl` for the
+document or the clarification it needs. The bank verification is the one such
+case this flow can reach on its own, and its banner says so in those words.
+
+### Every email comes from support@peakpower.nl, and names a person
+
+`F.SUPPORT_EMAIL` is the only sender, and it is **deliberately not a no-reply
+address** — every email here invites a reply, and the manual route above depends
+on the customer being able to answer one. A test asserts the string contains
+neither `no-reply` nor `noreply`.
+
+**The body names the person who applied, not the company.**
+`"Vandersteen Koeling B.V. has completed its onboarding"` reads as though a
+building filled in a form, and the recipient needs to know who to ask about it —
+so it is `F.fullName(state.f)`. The company still appears, in the facts block
+where it belongs.
+
+`codeMailHtml(recipientFirst, addressedToApplicant)` is the one email, rendered
+twice: step 8 previews the copy a colleague opens (greeting patched by id as the
+name is typed), step 9 shows the applicant their own. Two copies of one email is
+two bodies that drift.
+
+**The welcome copy was supplied and two names in it were not ours** — it
+referred to another company and another product. Those are the customer's own
+name and "PeakPower"; nothing else in it was reworded.
+
+### Next is a property of the step
+
+`STEPS[i].next` carries the button's label ("Create account", "Submit and send
+the codes", "Sign the agreement"), and the footer falls back to "Next". It used
+to be `state.step === LAST_STEP - 1 ? "Submit application" : …` — index
+arithmetic that a tenth step would have silently pointed at the wrong button.
+
 **A new page needs a card on `index.html`.** That landing page is how the demo
 is reached, and a page missing from it is a page nobody opens. Onboarding
 leads at full width because it is where the journey starts; the two portals
@@ -2508,7 +2585,7 @@ own pair.
 
 ### What this page does not share
 
-- **A 296px rail, not the portals' 236px.** Nine step labels, and "Authorised
+- **A 296px rail, not the portals' 236px.** Ten step labels, and "Authorised
   signatories" wraps at 236.
 - **Its rules read the ramps, not the `--pp-teal-*` aliases.** The portals'
   own `.banner-teal` and `.ds-banner.info` still use those — they were written
@@ -2540,7 +2617,7 @@ would be neither end.
 **`prefilledState()` answers every field, not only the gated ones.** The entity
 type and the bank verification are answers too, and leaving them at their
 defaults made "prefilled" quietly untrue — the industry likewise sat on "Not
-specified". The test that pins this is that **all nine steps validate** against
+specified". The test that pins this is that **all ten steps validate** against
 it and step 9's read-back contains no blank, which is a stronger statement than
 listing the fields and one that cannot go stale as fields are added.
 

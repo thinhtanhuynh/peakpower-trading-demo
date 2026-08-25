@@ -79,7 +79,7 @@
   .shell { display:flex; min-height:100vh; }
 
   /* --- the rail ---------------------------------------------------------
-     Wider than the portals' 236px on purpose: this one carries nine step
+     Wider than the portals' 236px on purpose: this one carries ten step
      labels rather than seven one-word nav entries, and "Authorised
      signatories" wraps at 236. */
   .rail { width:296px; min-width:296px; background:var(--pp-sidebar-bg); display:flex; flex-direction:column; position:relative; }
@@ -175,6 +175,15 @@
   .terms-box { width:16px; height:16px; border-radius:4px; flex-shrink:0; margin-top:1px; border:1px solid var(--pp-border-strong); background:#fff; color:#fff; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; }
   .terms.on .terms-box { border-color:var(--pp-blue-700); background:var(--pp-blue-700); }
   .terms-text { font-size:12px; color:var(--pp-text-body); line-height:1.5; }
+
+  /* Step 9: the code is read back off an email, so it is spaced and monospaced —
+     at body metrics a mistyped digit is a support call. */
+  .code-input { font-family:var(--font-mono); font-size:20px; letter-spacing:.24em; text-align:center; padding:12px 14px; }
+  .mail-code { margin-top:14px; padding:12px 14px; border:1px solid var(--pp-border-strong); border-radius:var(--radius-md); background:var(--pp-surface-alt); }
+  .mail-code .k { font-size:10px; font-weight:700; letter-spacing:.04em; color:var(--pp-text-faint); text-transform:uppercase; }
+  .mail-code .v { font-family:var(--font-mono); font-size:22px; font-weight:700; letter-spacing:.22em; color:var(--pp-text-heading); margin-top:4px; }
+  .mail-attach { display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:7px 12px; border:1px solid var(--pp-border); border-radius:var(--radius-sm); background:var(--pp-surface-alt); font-size:11.5px; color:var(--pp-text-body); }
+  .mail-attach .clip { font-size:12px; }
 
   .note-foot { margin-top:16px; padding-top:14px; border-top:1px solid var(--pp-border); font-size:11.5px; color:var(--pp-text-faint); line-height:1.5; }
 
@@ -301,7 +310,7 @@
     </div>
     <div class="rail-intro">
       <div class="t">Create your account</div>
-      <div class="d">Nine steps. You can leave a field blank where it says optional — the desk completes the rest.</div>
+      <div class="d">Ten steps. You can leave a field blank where it says optional — the desk completes the rest.</div>
     </div>
     <div class="rail-steps" id="rail-steps"></div>
     <div class="rail-foot">
@@ -623,7 +632,7 @@
                                    : "Everyone listed must sign before the agreement takes effect",
         table) +
       cardHtml("What each signatory receives",
-        "Sent the moment you submit — the link is personal and the email address is verified before signing",
+        "Sent the moment you submit — the code is personal and the email address is verified first",
         mailPreviewHtml());
   }
 
@@ -640,60 +649,180 @@
     return other ? other.first : ((state.signatories[0] && state.signatories[0].first) || "there");
   }
 
-  function mailPreviewHtml() {
+  /**
+   * The email every signatory gets, code and all.
+   *
+   * Two things it is careful about. It names the **person** who applied, not
+   * the company — "Vandersteen Koeling B.V. has completed its onboarding" reads
+   * as though a building filled in a form, and the recipient needs to know who
+   * to ask about it. And it comes from a real address: a code email that
+   * invites a reply and then bounces is worse than no reply address at all.
+   */
+  function codeMailHtml(recipientFirst, addressedToApplicant) {
     var org = orgName();
+    var applicant = F.fullName(state.f) || "The account manager";
+    var greetSpan = addressedToApplicant
+      ? esc(recipientFirst)
+      : '<span id="mail-greeting">' + esc(recipientFirst) + '</span>';
     return '<div class="mail">' +
-      '<div class="mail-head"><span><b>Subject</b> · Signature requested for ' + esc(org) + '</span>' +
-        '<span class="mail-from">no-reply@peakpower.nl</span></div>' +
+      '<div class="mail-head"><span><b>Subject</b> · Your PeakPower signing code</span>' +
+        '<span class="mail-from">' + esc(F.SUPPORT_EMAIL) + '</span></div>' +
       '<div class="mail-body">' +
-        '<div>Hi <span id="mail-greeting">' + esc(mailGreeting()) + '</span>,</div>' +
-        '<div style="margin-top:10px">' + esc(org) + ' has completed its onboarding with PeakPower and listed you as an ' +
-          'authorised signatory. Please review the company information and the agreement before you sign on behalf of the company.</div>' +
+        '<div>Hi ' + greetSpan + ',</div>' +
+        '<div style="margin-top:10px">' + esc(applicant) + ' has completed the onboarding for ' + esc(org) +
+          (addressedToApplicant
+            ? ' and you are the authorised signatory.'
+            : ' and listed you as an authorised signatory.') +
+          ' Review the company information and the agreement, then sign with the code below.</div>' +
+        '<div class="mail-code"><div class="k">Your signing code</div><div class="v">' + esc(F.SIGN_CODE) + '</div></div>' +
         '<div class="mail-facts">' +
           '<div><div class="k">Company</div><div class="v">' + esc(org) + '</div></div>' +
-          '<div><div class="k">Requested by</div><div class="v">' + esc(F.fullName(state.f) || "the account manager") + '</div></div>' +
+          '<div><div class="k">Requested by</div><div class="v">' + esc(applicant) + '</div></div>' +
         '</div>' +
-        '<div><span class="mail-cta">Review and sign</span></div>' +
-        '<div style="font-size:11px;color:var(--pp-text-faint);margin-top:14px;line-height:1.5">This link is personal and intended only for you. For security, we verify your email address before you can sign.</div>' +
-        '<div style="margin-top:12px">Kind regards,<br>PeakPower</div>' +
+        '<div style="font-size:11px;color:var(--pp-text-faint);margin-top:14px;line-height:1.5">' +
+          'This code is personal and intended only for you. Entering it, with the agreement ticked, is your signature.</div>' +
+        '<div style="margin-top:12px">Have a question? You can reply directly to this email.</div>' +
+        '<div style="margin-top:12px">The PeakPower Team</div>' +
       '</div></div>';
   }
+
+  function mailPreviewHtml() { return codeMailHtml(mailGreeting(), false); }
 
   var TIMELINE_TONE = { info: "var(--pp-blue-500)", warning: "var(--pp-amber)", neutral: "var(--pp-border-strong)" };
 
   function step9Html() {
-    var count = state.signatories.length;
-    var verified = state.bankVerified;
-    var timeline = [
-      { title: "Application submitted", sub: "by " + (F.fullName(state.f) || "you"), ts: "just now", tone: "info" },
-      { title: "Signature requests sent", sub: count + " authorised " + (count === 1 ? "signatory" : "signatories"), ts: "in progress", tone: "warning" },
-      { title: "PeakPower reviews the company", sub: "KvK, bank verification and signatures", ts: "within 1 business day", tone: "neutral" },
-      { title: "Account activated", sub: "Connections can then be registered and priced", ts: "after approval", tone: "neutral" }
-    ].map(function (t) {
+    var to = state.f.email || "your email address";
+    var boxed = '<div class="terms' + (state.agreedDocs ? " on" : "") + '" id="sign-terms" onclick="ONB.toggleAgreedDocs()">' +
+      '<div class="terms-box">' + (state.agreedDocs ? "&#10003;" : "") + '</div>' +
+      '<div class="terms-text">I agree to the <a href="#" onclick="return false">Terms of Use</a>, the ' +
+      '<a href="#" onclick="return false">key information documents</a> and the ' +
+      '<a href="#" onclick="return false">privacy statement</a>, and I sign the agreement on behalf of ' +
+      esc(orgName()) + '</div></div>';
+
+    return cardHtml("Enter your signing code", "Sent to " + esc(to) + " · six digits",
+      '<div class="field-group" style="max-width:260px;margin-bottom:0">' +
+        '<label class="fg-label" for="sign-code">Signing code</label>' +
+        '<input id="sign-code" class="code-input" type="text" inputmode="numeric" autocomplete="one-time-code" ' +
+          'maxlength="11" placeholder="000000" value="' + esc(state.signCode) + '" ' +
+          'oninput="ONB.setSignCode(this.value)">' +
+      '</div>' + boxed +
+      '<div class="note-foot">Entering the code is your signature — there is nothing to print or scan. ' +
+        'Did not receive it? Reply to ' + esc(F.SUPPORT_EMAIL) + ' and the desk will resend it.</div>') +
+    cardHtml("The email we sent you", "Your own copy of the signing code",
+      codeMailHtml(state.f.firstName || "there", true));
+  }
+
+  /**
+   * The outcome, and it is two different outcomes.
+   *
+   * The welcome email says every document was reviewed and the account is
+   * active. That is only true once the cent has arrived, so an unverified bank
+   * account gets the manual route instead — the desk writes to the customer for
+   * what is missing. Printing "everything is in order" over a verification that
+   * has not happened is the one thing this step must not do.
+   */
+  function step10Html() {
+    return state.bankVerified ? activeAccountHtml() : heldForReviewHtml();
+  }
+
+  function timelineHtml(items) {
+    return '<div class="timeline" style="margin-top:16px">' + items.map(function (t) {
       return '<div class="tl-item"><span class="tl-dot" style="background:' + TIMELINE_TONE[t.tone] + '"></span>' +
         '<div class="tl-title">' + esc(t.title) + '</div>' +
         '<div class="tl-sub">' + esc(t.sub) + '</div>' +
         '<div class="tl-ts">' + esc(t.ts) + '</div></div>';
-    }).join("");
+    }).join("") + '</div>';
+  }
 
-    var stats =
-      statCard("SIGNATURES REQUESTED", String(count), "", "none signed yet") +
-      statCard("BANK ACCOUNT", verified ? "Verified" : "Awaiting € 0,01", verified ? "success" : "warning",
-        verified ? "IBAN and holder confirmed" : "the agreement waits on this") +
-      statCard("ANNUAL VOLUME", state.volumeIndex >= 0 ? F.VOLUMES_SHORT[state.volumeIndex] : "—", "",
-        F.FLOWS[state.flowIndex].toLowerCase() + " · self-declared");
-
+  function summaryCardHtml() {
     var summary = F.summaryRows(state).map(function (r) {
       return '<div class="summary-row"><span class="k">' + esc(r.k) + '</span><span class="v">' + esc(r.v) + '</span></div>';
     }).join("");
-
-    return cardHtml(orgName(), "Application " + F.applicationRef() + " · submitted just now",
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' + badge("Pending approval", "warning") +
-        '<span style="font-size:11.5px;color:var(--pp-text-faint)">No action needed from you.</span></div>' +
-      '<div class="stat-row">' + stats + '</div>' +
-      '<div class="timeline" style="margin-top:16px">' + timeline + '</div>') +
-    cardHtml("What you submitted", "The desk can correct any of this during review",
+    return cardHtml("What you submitted", "The desk can correct any of this at any time",
       '<div class="summary">' + summary + '</div>');
+  }
+
+  /** The user-supplied welcome copy, with the company and the product named. */
+  function welcomeMailHtml() {
+    return '<div class="mail">' +
+      '<div class="mail-head"><span><b>Subject</b> · Welcome to PeakPower</span>' +
+        '<span class="mail-from">' + esc(F.SUPPORT_EMAIL) + '</span></div>' +
+      '<div class="mail-body">' +
+        '<div>Hi ' + esc(state.f.firstName || "there") + ',</div>' +
+        '<div style="margin-top:10px">Thank you for joining PeakPower.</div>' +
+        '<div style="margin-top:10px">We have reviewed the documents you submitted for ' + esc(orgName()) +
+          ', and everything is in order. Your account is now active and ready to use.</div>' +
+        '<div style="margin-top:10px">Please find attached our Terms of Use.</div>' +
+        '<div class="mail-attach"><span class="clip">&#128206;</span>PeakPower_Terms_of_Use.pdf</div>' +
+        '<div style="margin-top:10px">You can find the key information documents for our products ' +
+          '<a href="#" onclick="return false">here</a>. Other regulatory documents governing the use of PeakPower ' +
+          'are also available <a href="#" onclick="return false">here</a>.</div>' +
+        '<div style="margin-top:10px">If you have any questions, suggestions, or feedback about our application, ' +
+          'feel free to reach out.</div>' +
+        '<div style="margin-top:12px">Have a question? You can reply directly to this email.</div>' +
+        '<div style="margin-top:12px">The PeakPower Team</div>' +
+      '</div></div>';
+  }
+
+  function activeAccountHtml() {
+    // This flow collects the applicant's own signature. A colleague listed on
+    // step 8 signs from their own email with their own code, so saying "2
+    // signatures" here would count one that has not happened.
+    var others = state.signatories.length - 1;
+    var signedBy = F.fullName(state.f) || "you";
+    var outstanding = others > 0
+      ? " · " + others + " still to sign" : "";
+    var stats =
+      statCard("ACCOUNT", "Active", "success", "ready to register connections") +
+      statCard("AGREEMENT", "Signed", "success", "with code, by " + signedBy + outstanding) +
+      statCard("ANNUAL VOLUME", state.volumeIndex >= 0 ? F.VOLUMES_SHORT[state.volumeIndex] : "—", "",
+        F.FLOWS[state.flowIndex].toLowerCase() + " · self-declared");
+
+    return cardHtml(orgName(), "Application " + F.applicationRef() + " · signed just now",
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' + badge("Account active", "success") +
+        '<span style="font-size:11.5px;color:var(--pp-text-faint)">Nothing further is needed from you.</span></div>' +
+      '<div class="stat-row">' + stats + '</div>' +
+      timelineHtml([
+        { title: "Application submitted", sub: "by " + signedBy, ts: "just now", tone: "info" },
+        { title: "Agreement signed", sub: "with the code emailed to " + (state.f.email || "you"), ts: "just now", tone: "info" },
+        { title: "PeakPower reviewed the company", sub: "KvK, bank verification and your signature", ts: "complete", tone: "info" },
+        { title: "Account activated", sub: "Connections can now be registered and priced", ts: "now", tone: "info" }
+      ].concat(others > 0 ? [
+        { title: "Waiting on the other signatories", sub: others + " " + (others === 1 ? "person has" : "people have") + " their own code", ts: "outstanding", tone: "warning" }
+      ] : []))) +
+    cardHtml("The email we just sent you", "From " + F.SUPPORT_EMAIL + " — replies reach the desk, not a mailbox nobody reads",
+      welcomeMailHtml()) +
+    summaryCardHtml();
+  }
+
+  /**
+   * Everything that stops an account being validated is handled by hand: the
+   * desk writes to the customer for the document or the clarification it needs.
+   * The bank verification is the one such case this flow can reach on its own.
+   */
+  function heldForReviewHtml() {
+    var signedBy = F.fullName(state.f) || "you";
+    var stats =
+      statCard("AGREEMENT", "Signed", "success", "with code, by " + signedBy) +
+      statCard("BANK ACCOUNT", "Awaiting € 0,01", "warning", "the last thing outstanding") +
+      statCard("ANNUAL VOLUME", state.volumeIndex >= 0 ? F.VOLUMES_SHORT[state.volumeIndex] : "—", "",
+        F.FLOWS[state.flowIndex].toLowerCase() + " · self-declared");
+
+    return cardHtml(orgName(), "Application " + F.applicationRef() + " · signed just now",
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' + badge("With the desk", "warning") +
+        '<span style="font-size:11.5px;color:var(--pp-text-faint)">The agreement is signed; the account is not active yet.</span></div>' +
+      '<div class="stat-row">' + stats + '</div>' +
+      bannerHtml("info", "i", "We will email you from " + F.SUPPORT_EMAIL,
+        "The € 0,01 has not arrived yet, so we cannot confirm the bank account. Anything that holds an " +
+        "account up is handled by a person, not a form — the desk writes to you for the document or the " +
+        "clarification it needs, and you can reply to that email.") +
+      timelineHtml([
+        { title: "Application submitted", sub: "by " + signedBy, ts: "just now", tone: "info" },
+        { title: "Agreement signed", sub: "with the code emailed to " + (state.f.email || "you"), ts: "just now", tone: "info" },
+        { title: "Bank account verification", sub: "waiting for the € 0,01", ts: "outstanding", tone: "warning" },
+        { title: "Account activated", sub: "the welcome email follows once it clears", ts: "after review", tone: "neutral" }
+      ])) +
+    summaryCardHtml();
   }
 
   function statCard(label, value, tone, sublabel) {
@@ -705,7 +834,8 @@
 
   function orgName() { return state.f.orgName || "your company"; }
 
-  var STEP_BODY = [step1Html, step2Html, step3Html, step4Html, step5Html, step6Html, step7Html, step8Html, step9Html];
+  var STEP_BODY = [step1Html, step2Html, step3Html, step4Html, step5Html, step6Html, step7Html, step8Html,
+    step9Html, step10Html];
 
   // ------------------------------------------------------------- rendering
 
@@ -743,8 +873,9 @@
     el.back.style.display = (state.step > 1 && !last) ? "" : "none";
     el.next.style.display = last ? "none" : "";
     el.next.disabled = !valid;
-    el.next.textContent = state.step === 1 ? "Create account"
-      : state.step === F.LAST_STEP - 1 ? "Submit application" : "Next";
+    // The label rides on the step, so adding one does not mean fixing an
+    // off-by-one here as well — which is what LAST_STEP - 1 arithmetic asked for.
+    el.next.textContent = (F.STEPS[state.step - 1] && F.STEPS[state.step - 1].next) || "Next";
     // The two live readouts that sit inside a step body: patched here rather
     // than re-rendered, because both change while a field next to them has
     // the caret.
@@ -759,8 +890,10 @@
     el.counter.textContent = "Step " + state.step + " of " + F.LAST_STEP;
     el.group.textContent = st.group;
     el.progress.style.width = Math.round((state.step / F.LAST_STEP) * 100) + "%";
-    el.title.textContent = st.title;
-    el.intro.textContent = st.intro;
+    // Through the module, not off the step record: the last step's heading
+    // depends on whether the account could actually be activated.
+    el.title.textContent = F.stepTitle(state);
+    el.intro.textContent = F.stepIntro(state);
     el.body.innerHTML = STEP_BODY[state.step - 1]();
     renderRail();
     refreshFooter();
@@ -783,6 +916,20 @@
     setEntity: function (value) { state.entityIndex = Number(value) || 0; },
     setIndustry: function (value) { state.industryIndex = Number(value) || 0; },
     toggleTerms: function () { state.agreed = !state.agreed; renderStep(); },
+    setSignCode: function (v) { state.signCode = v; refreshFooter(); },
+    // Patched, not re-rendered: renderStep() here would rebuild the code input
+    // sitting above this box, and the tick is ours to draw rather than a native
+    // checkbox's, so it cannot simply be left to the browser.
+    toggleAgreedDocs: function () {
+      state.agreedDocs = !state.agreedDocs;
+      var box = document.getElementById("sign-terms");
+      if (box) {
+        box.className = "terms" + (state.agreedDocs ? " on" : "");
+        var tick = box.querySelector(".terms-box");
+        if (tick) { tick.innerHTML = state.agreedDocs ? "&#10003;" : ""; }
+      }
+      refreshFooter();
+    },
     pickFlow: function (i) { state.flowIndex = i; renderStep(); },
     pickVolume: function (i) { state.volumeIndex = i; renderStep(); },
     /**

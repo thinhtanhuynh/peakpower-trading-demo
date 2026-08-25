@@ -5,7 +5,8 @@
 
   var STEPS = [
     { n: 1, group: "Account", label: "Personal information", title: "Personal information",
-      intro: "Start with the person who will manage the account. You can invite colleagues once the account is active." },
+      intro: "Start with the person who will manage the account. You can invite colleagues once the account is active.",
+      next: "Create account" },
     { n: 2, group: "Company", label: "Company", title: "Company or organization information",
       intro: "PeakPower contracts with the legal entity, so this must match the KvK register." },
     { n: 3, group: "Company", label: "Registered address", title: "Registered address",
@@ -19,9 +20,13 @@
     { n: 7, group: "Agreement", label: "Signing authority", title: "Signing authority",
       intro: "Who may bind the company decides where the agreement goes next." },
     { n: 8, group: "Agreement", label: "Authorised signatories", title: "Who needs to sign the agreement?",
-      intro: "Add every person required to sign on behalf of the company. Each receives a personal signing link." },
-    { n: 9, group: "Agreement", label: "Pending approval", title: "Pending approval",
-      intro: "Your application is with the PeakPower desk. Nothing further is needed from you right now." }
+      intro: "Add every person required to sign on behalf of the company. Each is emailed their own signing code.",
+      next: "Submit and send the codes" },
+    { n: 9, group: "Agreement", label: "Sign the agreement", title: "Sign the agreement",
+      intro: "We emailed you a six-digit code. Entering it, with the box below ticked, is your signature.",
+      next: "Sign the agreement" },
+    { n: 10, group: "Done", label: "Welcome", title: "Welcome to PeakPower",
+      intro: "The agreement is signed and your account is active." }
   ];
 
   var LAST_STEP = STEPS.length;
@@ -53,6 +58,27 @@
   var MIN_PASSWORD = 12;
   var KVK_DIGITS = 8;
 
+  /**
+   * The one address PeakPower writes from, and the one a customer can answer.
+   *
+   * Deliberately not a no-reply: every email this flow sends invites a reply,
+   * and the desk handles by hand anything that stops an account being
+   * validated — a missing document, a name that does not match the register —
+   * by writing to the customer from here.
+   */
+  var SUPPORT_EMAIL = "support@peakpower.nl";
+
+  /**
+   * A signature is a code, not a drawn squiggle: the customer is emailed six
+   * digits and typing them back — with the agreement ticked — is what signs.
+   *
+   * This is NOT a credential. It is a constant shipped to the browser, in a
+   * flow that submits nothing, and the demo prints it in the email preview
+   * because a code nobody can read is a demo nobody can finish.
+   */
+  var SIGN_CODE = "748213";
+  var SIGN_CODE_DIGITS = 6;
+
   function blankSignatory() { return { first: "", last: "", email: "", locked: false }; }
 
   function defaultState() {
@@ -67,6 +93,8 @@
       // -1, not 0: index 0 is a real answer in both lists.
       volumeIndex: -1,
       authorityIndex: -1,
+      signCode: "",
+      agreedDocs: false,
       f: { firstName: "", lastName: "", email: "", password: "", orgName: "", kvk: "", street: "", city: "", postcode: "" },
       signatories: [blankSignatory()]
     };
@@ -98,6 +126,8 @@
     s.authorityIndex = 1;
     s.signatories = signatoriesForAuthority(1, s.f);
     s.signatories[1] = { first: "Marieke", last: "Vandersteen", email: "m.vandersteen@vandersteen.nl", locked: false };
+    s.signCode = SIGN_CODE;
+    s.agreedDocs = true;
     return s;
   }
 
@@ -106,6 +136,11 @@
 
   /** Index > 0, not >= 0: "@company.nl" has no local part. */
   function looksLikeEmail(value) { return String(value || "").indexOf("@") > 0; }
+
+  /** Digits only, so a code pasted as "748 213" still matches. */
+  function codeDigits(value) { return String(value || "").replace(/\D/g, ""); }
+
+  function signCodeMatches(value) { return codeDigits(value) === SIGN_CODE; }
 
   function signatoryComplete(s) {
     return !!(s && String(s.first).trim() && String(s.last).trim() && looksLikeEmail(s.email));
@@ -127,6 +162,10 @@
       case 8:
         return state.signatories.length >= minSignatories(state.authorityIndex) &&
           state.signatories.every(signatoryComplete);
+      case 9:
+        // Both, and in this order: a code without the agreement signs nothing,
+        // and the agreement without the code is nobody in particular ticking it.
+        return signCodeMatches(state.signCode) && state.agreedDocs === true;
       default:
         return true;
     }
@@ -167,10 +206,17 @@
           return "You answered that two people sign — add the second signatory.";
         }
         return stepValid(state)
-          ? "Each signatory receives a personal link; we verify their email before signing."
+          ? "Each signatory is emailed their own code; we verify their email address first."
           : "Every signatory needs a first name, last name and email address.";
+      case 9:
+        if (!codeDigits(state.signCode)) { return "Enter the " + SIGN_CODE_DIGITS + "-digit code from the email."; }
+        if (!signCodeMatches(state.signCode)) { return "That code does not match the one we emailed you."; }
+        if (!state.agreedDocs) { return "Tick the box to confirm you agree to the documents."; }
+        return "Entering the code is your signature. It is recorded against " + (fullName(state.f) || "your name") + ".";
       default:
-        return "The desk reviews within one business day. You will be emailed as soon as the account is active.";
+        return state.bankVerified
+          ? "Your account is active. Anything still outstanding, the desk emails you about from " + SUPPORT_EMAIL + "."
+          : "The desk will email you from " + SUPPORT_EMAIL + " for whatever it still needs. You can reply to that email.";
     }
   }
 
@@ -209,6 +255,30 @@
     ];
   }
 
+  /**
+   * The last step has two outcomes and must not print the wrong one.
+   *
+   * "Welcome to PeakPower · your account is active" over a badge reading "With
+   * the desk" is the contradiction this exists to stop: the agreement is signed
+   * either way, but the account is only active once the cent has cleared.
+   * Every other step's heading is its own static string.
+   */
+  function stepTitle(state) {
+    var st = STEPS[state.step - 1];
+    if (!st) { return ""; }
+    if (state.step === LAST_STEP && !state.bankVerified) { return "Agreement signed"; }
+    return st.title;
+  }
+
+  function stepIntro(state) {
+    var st = STEPS[state.step - 1];
+    if (!st) { return ""; }
+    if (state.step === LAST_STEP && !state.bankVerified) {
+      return "Your signature is recorded. One thing is still outstanding before the account can be activated.";
+    }
+    return st.intro;
+  }
+
   /** Clamped to the flow's own length, so a bad deep link lands on a real step. */
   function clampStep(n) { return Math.max(1, Math.min(LAST_STEP, Math.round(Number(n) || 1))); }
 
@@ -223,6 +293,11 @@
     AUTHORITY: AUTHORITY,
     MIN_PASSWORD: MIN_PASSWORD,
     KVK_DIGITS: KVK_DIGITS,
+    SUPPORT_EMAIL: SUPPORT_EMAIL,
+    SIGN_CODE: SIGN_CODE,
+    SIGN_CODE_DIGITS: SIGN_CODE_DIGITS,
+    codeDigits: codeDigits,
+    signCodeMatches: signCodeMatches,
     blankSignatory: blankSignatory,
     defaultState: defaultState,
     prefilledState: prefilledState,
@@ -232,6 +307,8 @@
     minSignatories: minSignatories,
     stepValid: stepValid,
     hint: hint,
+    stepTitle: stepTitle,
+    stepIntro: stepIntro,
     signatoriesForAuthority: signatoriesForAuthority,
     applicationRef: applicationRef,
     fullName: fullName,
