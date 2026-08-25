@@ -1464,11 +1464,17 @@ were not edited. **Don't "fix" a live page's colour back to a mockup value.**
 
 ### Palette (SB-2026)
 
-Identical `:root` in `customer-portal.html`, `back-office-portal.html` and
-`customer-onboarding.html` — copied, not shared, because there is no build
-step to share it with. The onboarding page inherits the `--pp-chart-*` roles
-it has no charts for; that is the cost of keeping one block byte-identical
-across three files rather than three that drift.
+Identical `:root` in all four pages — `customer-portal.html`,
+`back-office-portal.html`, `customer-onboarding.html` and `index.html` —
+copied, not shared, because there is no build step to share it with. Three
+pages inherit the `--pp-chart-*` roles they have no charts for; that is the
+cost of one byte-identical block over four files that drift.
+
+**It really is byte-identical, and that is checkable.** The claim was false
+once: `back-office-portal.html` kept the pre-recolour chart hues (Short coral,
+Long teal, Hedge blue) long after the customer portal moved to amber/indigo/
+violet. It reads none of them, so nothing showed — which is exactly why it sat
+there. Compare the blocks, do not assume them.
 
 | Role | Value |
 |---|---|
@@ -2259,9 +2265,13 @@ typed in on step 8 with nothing on screen having changed.
 **A new page needs a card on `index.html`.** That landing page is how the demo
 is reached, and a page missing from it is a page nobody opens. Onboarding
 leads at full width because it is where the journey starts; the two portals
-share the row below. Note `index.html` is still on the **pre-SB-2026 teal
-palette** — it was never re-tokenised with the three portal pages, so a card
-added there matches that page rather than the design system.
+share the row below.
+
+**One hue per destination on that page**, each the one the destination itself
+wears: blue-050/blue-700 for the customer portal, violet for the desk, mint
+for the way in. Two cards sharing a tag background read as one category split
+in two, which is what happened when onboarding's tag was added on the portal's
+own pair.
 
 ### What this page does not share
 

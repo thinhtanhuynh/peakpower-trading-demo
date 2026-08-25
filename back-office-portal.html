@@ -27,7 +27,7 @@
     --pp-teal:#0FA69D; --pp-teal-text:#0A7A74; --pp-teal-deep:#028183;
     --pp-cyan:#00D4C6;
     --pp-violet:#9151B8; --pp-violet-text:#6F3A91; --pp-violet-bg:#f3eaf9; --pp-violet-border:#d6b7e8;
-    --pp-coral:#FF8F5C; --pp-coral-text:#B4531F; --pp-coral-bg:#fff0e8; --pp-coral-border:#ffc6a8;
+    --pp-coral:#FF8F5C; --pp-coral-text:#B4531F; --pp-coral-bg:#fff0e8; --pp-coral-border:#ffc6a8; --pp-coral-value:#c77048;
     --pp-pink:#FF57B0; --pp-pink-text:#A62E76; --pp-pink-bg:#ffeaf5; --pp-pink-border:#ffb8dc;
     --pp-grass:#73CC80; --pp-grass-text:#1B7A4F;
     --pp-amber:#EEB72B; --pp-amber-bg:#fdf5e0; --pp-amber-border:#eed591; --pp-amber-text:#8A6710;
@@ -37,10 +37,21 @@
     /* Named chart-series roles, straight from the design system — the JS
        chart builders below keep their own literal-hex constants (SVG string
        templates can't read a CSS var), kept byte-identical to these. */
-    --pp-chart-usage:#006ECF; --pp-chart-hedge:#004C94;
-    --pp-chart-short:#FF8F5C; --pp-chart-short-stroke:#F24F4F;
-    --pp-chart-long:#0FA69D; --pp-chart-long-fill:#00D4C6;
+    --pp-chart-usage:#006ECF; --pp-chart-hedge:#9151B8;
+    --pp-chart-short:#E09B2D; --pp-chart-short-stroke:#E09B2D;
+    --pp-chart-covered:#C6CBD4;
+    --pp-chart-long:#4A3AA7; --pp-chart-long-fill:#4A3AA7;
     --pp-chart-peak:#3C93FA;
+    /* Text tiers for the two roles that also print as numbers. Short's fill is
+       2,3:1 on white, so the table column and the stat values read the amber
+       ramp's own text step; Long's fill is 8,6:1 and needs no pair. The chart
+       roles carry their own tiers rather than borrowing the red/teal status
+       ones, which is what let the table drift from the bars before. */
+    --pp-chart-short-text:#8A6710; --pp-chart-long-text:#4A3AA7;
+    /* Ink for a label sitting inside a composition-bar segment. White is 2,4:1
+       on Short and 1,6:1 on Covered; the heading ink is 4,6:1 and 6,6:1, the
+       only one of the three that clears AA on both. Long keeps white at 8,6:1. */
+    --pp-chart-ink-on-light:#2D3F54;
     /* legacy aliases — every var() written against these names keeps
        working; write new code against the ramps above. */
     --pp-teal-900:#2D3F54; --pp-teal-700:#004C94; --pp-teal-600:#004C94;
