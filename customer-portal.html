@@ -58,7 +58,6 @@
     --pp-teal-500:#1DBD8E; --pp-teal-300:#43d3a6; --pp-teal-100:#e6f8f2;
     --pp-indigo:#9151B8; --pp-indigo-bg:#f3eaf9;
     --pp-orange:#FF8F5C; --pp-orange-text:#B4531F;
-    --certainty-provisional-opacity:0.55;
     --font-sans:'Inter','Segoe UI',-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;
     --font-mono:'SF Mono',Menlo,Consolas,monospace;
     --text-2xs:10px; --text-xs:11px; --text-sm:12.5px; --text-base:13.5px; --text-md:15px; --text-lg:17px; --text-xl:23px; --text-hero:32px; --text-display:44px;
@@ -329,20 +328,6 @@
      two signals (which figure is the answer / good vs. bad news) stay
      orthogonal rather than fighting over one rule. */
   .stat-card.result .value { font-size:clamp(12px, 14cqw, var(--text-hero)); }
-  /* .projected — this card's figure is (partly) forecast, not measured, for
-     a date range past the live dataset. Structural-only cue (dashed border +
-     alt surface, both existing neutral tokens) so it never fights the tone
-     colors (.export/.short/.negative/.success) still coloring the value
-     itself — per the certainty-layer vocabulary in CLAUDE.md, this cue is
-     never carried by the border alone, so it always pairs with the
-     "Projected" badge in .stat-card-head and, for a mixed card, the faint
-     breakdown line below the value. */
-  .stat-card.projected { border-style:dashed; border-color:var(--pp-border-strong); background:var(--pp-surface-alt); }
-  /* .all-projected — the degenerate case of a mixed card: zero measured
-     portion, so there's no confirmed value to anchor a bold primary against
-     and no breakdown line to add. The value itself takes the certainty
-     opacity instead (CLAUDE.md "Resolving the bold-value question"). */
-  .stat-card.all-projected .value { opacity:var(--certainty-provisional-opacity); }
   /* min-width:0 on the label is load-bearing: a flex item's default
      min-width is its own intrinsic content size, which silently defeats
      the label's overflow:hidden/ellipsis (rendering showed "DELT…"
@@ -351,22 +336,8 @@
      label just wasn't allowed to shrink below "DELTA COST"'s own natural
      width in the first place). flex:1 then lets it claim whatever the
      fixed-size badge doesn't need, rather than splitting evenly. */
-  /* flex-wrap here is what actually fixes the truncation rendering caught
-     ("DELT…"/"ACTU…") — a fixed-size "Projected" badge plus a label like
-     "DELTA COST" genuinely don't both fit on one line at the clamp()'d
-     minimum card width (measured: ~126px content, badge alone ~75px of
-     it), no matter how small the label's own font gets. Letting the badge
-     drop to its own line below the label, rather than fighting it for
-     horizontal space, is what "auto scale" has to mean once two elements
-     with very different shrink limits share one row — the badge has a
-     legibility floor of its own and shouldn't be squeezed past it either. */
   .stat-card-head { display:flex; flex-wrap:wrap; align-items:flex-start; gap:4px 8px; }
   .stat-card-head .label { flex:1; min-width:max-content; }
-  /* The measured/projected breakdown clause on a mixed card — reuses
-     .sublabel's own faint color rather than a new token. Clamped to 1 line
-     (the fixed card height above has no room for 2) with an ellipsis
-     rather than growing the card or clipping mid-character. */
-  .stat-card .sublabel.breakdown { margin-top:2px; }
   .stat-card.result .label { font-weight:700; }
   /* DS tone names: critical is ORANGE in the design system (Dashboard's
      "Uncovered volume"). Consumption's cost cards use .negative for red,
@@ -402,11 +373,6 @@
      right — confirmed by measuring panelWidth vs statRowWidth at several
      widths, not just eyeballing one screenshot. */
   .position-panel { display:grid; grid-template-columns:1fr 1fr; gap:24px; background:#fff; border:1px solid var(--pp-border); border-radius:12px; box-shadow:var(--pp-shadow-card); padding:22px 24px; flex:1; min-width:0; }
-  /* Whole-panel certainty marker (mixed or fully-projected range) — the
-     card-level equivalent of .stat-card.projected above, applied once to
-     the panel rather than per component card, since cost and position now
-     share one container instead of six independent ones. */
-  .position-panel.projected { border:1px dashed var(--pp-border-strong); background:var(--pp-surface-alt); box-shadow:none; }
   .position-eyebrow { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--pp-text-faint); }
   .position-figure { font-size:36px; font-weight:700; letter-spacing:-.02em; line-height:1; margin-top:10px; color:var(--pp-text-heading); }
   .position-figure.negative { color:var(--pp-red-text); }
@@ -485,32 +451,23 @@
      FRAGILE ON PURPOSE, READ BEFORE TOUCHING THE COLUMN LIST: these indices
      are positional, not named, and nothing will fail if they drift — no
      test catches a group rule landing mid-group, it will just silently
-     group the wrong columns. They encode this exact order (17 columns,
+     group the wrong columns. They encode this exact order (16 columns,
      <thead> in the markup above and CSV_COLUMNS/renderTable in the JS below
      must all agree on it — same class of hazard CLAUDE.md already flags for
      CSV_COLUMNS vs <thead>):
-       1 Date · 2 Time · 3 Data                                    [identity, ends at 3]
-       4 Consumption · 5 Production · 6 EPEX · 7 Usage Cost · 8 Actual Usage   [metered, ends at 8]
-       9 Base Volume · 10 Peak Volume · 11 Hedge Volume · 12 Uncovered · 13 Long · 14 Short  [position, ends at 14]
-       15 Delta Cost · 16 Hedge Cost · 17 Total Cost                [money, no rule needed after — last group]
+       1 Date · 2 Time                                            [identity, ends at 2]
+       3 Consumption · 4 Production · 5 EPEX · 6 Usage Cost · 7 Actual Usage   [metered, ends at 7]
+       8 Base Volume · 9 Peak Volume · 10 Hedge Volume · 11 Uncovered · 12 Long · 13 Short  [position, ends at 13]
+       14 Delta Cost · 15 Hedge Cost · 16 Total Cost                [money, no rule needed after — last group]
      Adding, removing, or reordering a column shifts every boundary after it
      — update the three indices below (and this comment) in the same change. */
-  thead th:nth-child(3), tbody td:nth-child(3),
-  thead th:nth-child(8), tbody td:nth-child(8),
-  thead th:nth-child(14), tbody td:nth-child(14) {
+  thead th:nth-child(2), tbody td:nth-child(2),
+  thead th:nth-child(7), tbody td:nth-child(7),
+  thead th:nth-child(13), tbody td:nth-child(13) {
     border-right:1px solid var(--pp-border-strong);
     padding-right:var(--space-5);
   }
   td.net-export { color:var(--pp-chart-long-text); font-weight:600; }
-  /* Certainty-layer text treatment for the table (see customer-portal.html's
-     renderTable) — a projected row's numbers are real (historical-profile
-     estimate) but must never read like a measurement. Placeholder-neutral
-     (reuses existing muted/italic text tokens, no new colour) pending
-     design's pass over the exact visual language. */
-  td.provenance { font-size:10.5px; color:var(--pp-text-faint); }
-  td.provenance.projected { font-style:italic; }
-  tr.row-projected td { color:var(--pp-text-body); }
-  tr.row-projected td.provenance.projected { color:var(--pp-text-faint); }
   tbody tr.hovered { background:var(--pp-teal-100) !important; }
   .chart-tabs { display:flex; gap:4px; background:var(--pp-surface-alt); border-radius:8px; padding:3px; }
   .chart-tab { border:none; background:transparent; padding:6px 14px; border-radius:6px; font-size:12.5px; font-weight:600; color:var(--pp-text-body); cursor:pointer; font-family:var(--font-sans); transition:background-color .15s ease, color .15s ease, box-shadow .15s ease; }
@@ -1171,7 +1128,6 @@
           <div class="legend">
             <div><span class="swatch" style="background:var(--pp-chart-usage)"></span>Actual usage (kWh)</div>
             <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px solid #c77048"></span>Day-ahead price (€/MWh)</div>
-            <div><span class="swatch" style="background:var(--pp-surface-alt);border:1px dashed var(--pp-border-strong)"></span>Projected — hatched and dimmed</div>
           </div>
         </div>
         <div class="card" data-consumption-chrome>
@@ -1194,7 +1150,7 @@
               <div class="table-wrap">
                 <table>
                   <thead>
-                    <tr><th>Date</th><th>Time</th><th>Data</th><th class="num">Consumption (kWh)</th><th class="num">Production (kWh)</th><th class="num">EPEX (€/kWh)</th><th class="num">Usage Cost (€)</th><th class="num">Actual Usage (kWh)</th><th class="num">Base Volume (kWh)</th><th class="num">Peak Volume (kWh)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Uncovered (kWh)</th><th class="num">Long (kWh)</th><th class="num">Short (kWh)</th><th class="num">Delta Cost (€)</th><th class="num">Hedge Cost (€)</th><th class="num">Total Cost (€)</th></tr>
+                    <tr><th>Date</th><th>Time</th><th class="num">Consumption (kWh)</th><th class="num">Production (kWh)</th><th class="num">EPEX (€/kWh)</th><th class="num">Usage Cost (€)</th><th class="num">Actual Usage (kWh)</th><th class="num">Base Volume (kWh)</th><th class="num">Peak Volume (kWh)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Uncovered (kWh)</th><th class="num">Long (kWh)</th><th class="num">Short (kWh)</th><th class="num">Delta Cost (€)</th><th class="num">Hedge Cost (€)</th><th class="num">Total Cost (€)</th></tr>
                   </thead>
                   <tbody id="table-body"></tbody>
                 </table>
@@ -1240,7 +1196,6 @@
 
 <script src="consumption-calc.js"></script>
 <script src="consumption-data-loader.js"></script>
-<script src="usage-projection.js"></script>
 <script src="portal-seed-data.js"></script>
 <!-- The customer roster the desk owns, read here rather than kept a second
      time: two lists of the same companies is one list that drifts. -->
@@ -1254,31 +1209,6 @@
 (function () {
   "use strict";
   var DATA = null;
-  // Lazily-built, cached per site: UsageProjection.buildUsageProfile() is a
-  // full scan of that site's real history (217 dates x 96 intervals), so it's
-  // built once on first use per site rather than on every render().
-  var usageProfiles = {};
-  function getUsageProfile(siteId) {
-    if (!usageProfiles[siteId]) {
-      usageProfiles[siteId] = UsageProjection.buildUsageProfile(DATA.byDate, DATA.bySite[siteId] || {});
-    }
-    return usageProfiles[siteId];
-  }
-
-  /**
-   * A projected interval for the whole portfolio: each site projected from its
-   * own history, then summed. Not one profile built from summed history —
-   * every site keeps its own weekday/weekend and time-of-day shape, and
-   * summing the projections is the same arithmetic the measured path does.
-   */
-  function projectPortfolioInterval(dateStr, timeStr, siteIds) {
-    var c = 0, g = 0;
-    (siteIds || allSiteIds()).forEach(function (id) {
-      var one = UsageProjection.projectInterval(getUsageProfile(id), dateStr, timeStr);
-      c += one.consumption; g += one.production;
-    });
-    return { consumption: c, production: g };
-  }
   // All six electricity connections at once — see "Consumption is the whole
   // portfolio" in CLAUDE.md. `tilburg-gas` has no usage rows, so DATA.sites
   // already excludes it.
@@ -1875,9 +1805,8 @@
     state.chartZoom = 1; state.hoverBar = null;
     state.accountMenuOpen = false; state.loginForm = null;
 
-    // Two caches keyed by site id, not by account — left alone, one account
-    // would render the other's projections.
-    usageProfiles = {};
+    // Keyed by site id, not by account — left alone, one account would render
+    // the other's last chart.
     lastRender = null;
 
     applyAccountData();
@@ -3352,7 +3281,7 @@
       '<div>' +
         '<div style="font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--pp-text-faint)">August position</div>' +
         '<div style="font-size:44px;font-weight:700;letter-spacing:-.03em;line-height:1;margin-top:10px;color:#004C94">78,4 %</div>' +
-        '<div style="font-size:12px;color:var(--pp-text-body);margin-top:8px;line-height:1.5">of forecast volume covered by blocks.<br>1.291,4 MWh forecast across 6 connections.</div>' +
+        '<div style="font-size:12px;color:var(--pp-text-body);margin-top:8px;line-height:1.5">of metered volume covered by blocks.<br>1.291,4 MWh across 6 connections.</div>' +
         '<div style="margin-top:16px">' +
           (hasFutureTrading()
             ? '<button type="button" class="btn-primary" onclick="PP.startWizard()">Request a trade</button>'
@@ -3454,7 +3383,7 @@
         ? statCardHtml("Available balance", "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2), "",
             "settled € " + ConsumptionCalc.formatNL(state.walletSettled, 0) + " · reserved € " + ConsumptionCalc.formatNL(state.walletReserved, 0))
         : "") +
-      statCardHtml("Coverage — August", "78,4 %", "brand", "of forecast volume hedged") +
+      statCardHtml("Coverage — August", "78,4 %", "brand", "of metered volume hedged") +
       statCardHtml("Uncovered volume", "214,4 MWh", "critical", "≈ € 18.953 at day-ahead") +
       (traded ? statCardHtml("Open trades", "2", "warning", "1 awaiting your response") : "") +
       // Only when there is one — an always-present "€ 0,00 outstanding" card
@@ -4239,7 +4168,7 @@
    * fixing it once here is what keeps a Sell's lower price consistent
    * everywhere it's used. Returns a new object rather than the seed row
    * itself — mutating WIZARD_PERIODS in place would corrupt it for every
-   * other reader (the Prices screen, indicativeEpexFor, the Back Office). */
+   * other reader (the Prices screen, the Back Office). */
   function getSelectedWizardPeriod() {
     var w = state.wizard;
     var list = PortalSeedData.WIZARD_PERIODS[w.periodType];
@@ -5129,15 +5058,6 @@
   }
 
   /**
-   * opts: { result: bool, projected: bool, breakdown: html }.
-   * `projected` (whole card is, or partly is, a forecast — see the
-   * certainty-layer vocabulary in CLAUDE.md) is a structural cue only
-   * (dashed border + alt surface, see .stat-card.projected) plus the
-   * "Projected" badge below — never the border alone, per that vocabulary's
-   * no-single-cue rule. `breakdown` is the faint measured/projected split
-   * line for a card whose headline figure is a mix of the two.
-   */
-  /**
    * `value` is either a plain string (rendered as-is — the shape Dashboard/
    * Wallet/Settlements' own statCardHtml calls always use, so they're
    * untouched by any of this) or a { full, abbr } pair from dualEurValue/
@@ -5153,18 +5073,15 @@
     // The tone rides on the outer card too, not just .value — that is what
     // the accent-cap rule (see .stat-card::before) keys off, so a card's top
     // edge names its domain colour before a reader gets to the number.
-    var cardClass = "stat-card" + toneClass + (opts.result ? " result" : "") + (opts.projected ? " projected" : "") +
-      (opts.projected && !opts.breakdown ? " all-projected" : "");
-    var headHtml = opts.projected
-      ? '<div class="stat-card-head"><div class="label">' + label + '</div>' + badge("Projected", "neutral") + '</div>'
-      : '<div class="label">' + label + '</div>';
-    var breakdownHtml = opts.breakdown ? '<div class="sublabel breakdown">' + opts.breakdown + '</div>' : "";
+    var cardClass = "stat-card" + toneClass + (opts.result ? " result" : "");
+    var headHtml = '<div class="label">' + label + '</div>';
+
     var valueInner = (value && typeof value === "object")
       ? '<span class="value-full">' + value.full + '</span><span class="value-abbr">' + value.abbr + '</span>'
       : value;
     return '<div class="' + cardClass + '">' + headHtml +
       '<div class="value' + toneClass + '">' + valueInner + '</div>' +
-      '<div class="sublabel">' + sublabel + '</div>' + breakdownHtml + '</div>';
+      '<div class="sublabel">' + sublabel + '</div></div>';
   }
 
   /** Loading/no-data/error placeholders only (see statusCardHtml) — the
@@ -5180,42 +5097,20 @@
    * Certainty opts for a COST card (Delta cost, Total cost) on a range that
    * runs past the measured data.
    *
-   * Forward days are priced from the portal's own quoted forward curve (see
-   * indicativeEpexFor) rather than left blank: withholding them would empty
-   * the headline figure on exactly the ranges this view exists to show, and
-   * these are the same prices the user is quoted on the Prices and Trading
-   * screens. That is an assumption worth stating rather than hiding — a
-   * forward curve is the market's expectation of spot but embeds a risk
-   * premium — so the number is shown and labelled *indicative*.
-   *
-   * `unavailable` survives for the one genuinely unknowable case: a date no
-   * period row covers, where indicativeEpexFor returns null and the summed
-   * cost is therefore null. Never a fabricated total.
+   * Every interval on this screen is measured and priced at realised spot, so
+   * the only thing left to say is when a range has no cost at all — which
+   * `computeDayStats` reports as zero priced intervals. Never a fabricated
+   * total, and never a forecast.
    */
-  function costCertaintyOpts(stats, costValue, realDayCount, totalDayCount) {
+  function costCertaintyOpts(stats, costValue) {
     var total = stats.intervalsTotal, priced = stats.intervalsWithCost;
-    // NB `intervalsWithUsage` counts PROJECTED usage too — it means "has usage
-    // numbers", not "was measured". Measured-ness has to come from the day
-    // counts; only priced-ness comes from the interval counters.
-    var allMeasured = realDayCount != null && realDayCount === totalDayCount;
-    if (total == null) { return {}; }                    // older call site
-    if (priced === total && allMeasured) { return {}; }  // wholly measured and priced
+    if (total == null) { return {}; }
+    if (priced === total) { return {}; }
     if (priced === 0 || costValue == null || isNaN(costValue)) {
-      return { unavailable: true, sublabel: "no forward price quoted for this period" };
+      return { unavailable: true, sublabel: "no day-ahead price for this period" };
     }
-    // Say what actually happened, not what was intended. Three things can be
-    // true at once: some intervals are measured, some are priced off the
-    // forward curve, and some have no quote at all and are simply absent from
-    // this figure. The label that matters most is the last one — a total that
-    // silently omits part of its own range is the one that misleads.
     var unpriced = total - priced;
-    // Priced intervals that were not measured are the indicative ones.
-    var measuredIntervals = totalDayCount ? Math.round(total * (realDayCount / totalDayCount)) : 0;
-    var indicative = Math.max(0, priced - measuredIntervals);
-    var parts = [];
-    if (indicative > 0) { parts.push("indicative for " + intervalDayish(indicative, total) + " of the range"); }
-    if (unpriced > 0) { parts.push("excludes " + intervalDayish(unpriced, total) + " with no quoted price"); }
-    return { unavailable: false, projected: indicative > 0, sublabel: parts.join(" · ") };
+    return { unavailable: false, sublabel: "excludes " + intervalDayish(unpriced, total) + " with no price" };
   }
 
   /** "12 days" / "38 %" — whichever reads more honestly at this granularity. */
@@ -5246,21 +5141,10 @@
    * way — clamping the display is the least-wrong option, not a claim
    * that the true figure isn't negative.
    *
-   * `range` is optional: { measuredStats, projectedStats, realDayCount,
-   * totalDayCount } from a date range that can now extend past the
-   * measured dataset — same shape the old cards read. Cost certainty is
-   * byte-identical to before (costCertaintyOpts, unchanged): withheld when
-   * genuinely unpriced, marked *indicative* when it leans on the forward
-   * curve, never withheld for Hedge cost itself (locked-in contract
-   * price, not spot). Position gets the same realDayCount !== totalDayCount
-   * check the old volume cards used, now marking the whole panel rather
-   * than one card at a time.
+   * Cost is withheld only when the range genuinely has no price behind it,
+   * and never for Hedge cost itself — that is a contract price, not spot.
    */
-  function renderPositionPanel(stats, range) {
-    range = range || {};
-    var realDayCount = range.realDayCount;
-    var totalDayCount = range.totalDayCount;
-
+  function renderPositionPanel(stats) {
     function eurValue(v) { return "€ " + ConsumptionCalc.formatNL(Math.abs(v), 2); }
     function kwhValue(v) { return ConsumptionCalc.formatNL(v, 1) + " kWh"; }
     function signedEur(v) { return (v >= 0 ? "+ " : "− ") + eurValue(v); }
@@ -5268,11 +5152,9 @@
     // --- cost --------------------------------------------------------------
     // Same literal-addition rule the old costEquation used: Total is always
     // hedgeCostEur + deltaCostEur, the two numbers actually shown, not a
-    // separately-summed field that could silently drop a projected day's
-    // hedge cost and stop adding up on screen.
+    // separately-summed field that could stop adding up on screen.
     var totalCostEur = stats.hedgeCostEur + stats.deltaCostEur;
-    var totalCostOpts = costCertaintyOpts(stats,
-      stats.deltaCostEur == null ? null : totalCostEur, realDayCount, totalDayCount);
+    var totalCostOpts = costCertaintyOpts(stats, stats.deltaCostEur == null ? null : totalCostEur);
     var costTone = totalCostEur > 0 ? "negative" : (totalCostEur < 0 ? "success" : "");
 
     var costFigureHtml, costSubHtml;
@@ -5285,7 +5167,7 @@
         (stats.deltaCostEur >= 0 ? ' + delta ' : ' − delta ') + eurValue(stats.deltaCostEur) + '</div>' +
         (totalCostOpts.sublabel ? '<div class="position-note">' + totalCostOpts.sublabel + '</div>' : '');
     }
-    var costBadge = totalCostOpts.projected ? badge("Projected", "neutral") : "";
+    var costBadge = "";
 
     // --- position (Covered / Short / Long) ----------------------------------
     var coveredKwh = Math.max(0, stats.actualUsageKwh - stats.shortKwh);
@@ -5293,12 +5175,7 @@
     var longKwh = Math.max(0, stats.longKwh);
     var totalKwh = coveredKwh + shortKwh + longKwh;
 
-    var isRangeProjected = realDayCount != null && realDayCount !== totalDayCount;
-    var posBadge = isRangeProjected ? badge("Projected", "neutral") : "";
-    var posNote = isRangeProjected
-      ? '<div class="position-note">' + (totalDayCount - realDayCount) + ' of ' + totalDayCount +
-        (totalDayCount === 1 ? ' day' : ' days') + ' projected from history, not measured</div>'
-      : "";
+    var posBadge = "", posNote = "";
 
     // Segment text is dropped below 8% (unreadable in the space) and the
     // percentage suffix below 20% (room for the name alone but not both) —
@@ -5325,7 +5202,7 @@
       legendItem("Short — bought at day-ahead", shortKwh, "var(--pp-chart-short)", "var(--pp-chart-short-text)") +
       legendItem("Long — sold at day-ahead", longKwh, "var(--pp-chart-long)", "var(--pp-chart-long-text)");
 
-    var panelClass = "position-panel" + ((totalCostOpts.projected || isRangeProjected) ? " projected" : "");
+    var panelClass = "position-panel";
 
     statRow.innerHTML =
       '<div class="' + panelClass + '">' +
@@ -5357,20 +5234,15 @@
     return value == null ? "—" : ConsumptionCalc.formatNL(value, decimals);
   }
 
-  // Per design's certainty-layer spec: a projected number must be labelled
-  // as such everywhere it feeds a figure — the table gets its own "Data"
-  // column rather than relying on the dashed chart line or a stat-card note
-  // alone, since a table row can be read (and exported) independent of the
-  // chart above it. `hasUsage` is optional so a caller with a purely
-  // measured range (or an older call site) renders identically to before.
-  function renderTable(dates, times, prices, series, hasUsage) {
+  // Every row is measured — the screen shows nothing else — so there is no
+  // provenance column to carry. It used to have one, back when a range could
+  // run past the meters on a forecast.
+  function renderTable(dates, times, prices, series) {
     var rows = "";
     for (var i = 0; i < times.length; i++) {
       var dateStr = resolveDate(dates, i);
-      var measured = !hasUsage || hasUsage[i];
-      var provenanceHtml = measured ? '<td class="provenance">Measured</td>' : '<td class="provenance projected">Projected</td>';
-      rows += '<tr data-idx="' + i + '"' + (measured ? "" : ' class="row-projected"') + '>' +
-        '<td>' + formatDateShort(dateStr) + "</td><td class=\"mono\">" + ConsumptionCalc.intervalEndLabel(times[i]) + "</td>" + provenanceHtml +
+      rows += '<tr data-idx="' + i + '">' +
+        '<td>' + formatDateShort(dateStr) + "</td><td class=\"mono\">" + ConsumptionCalc.intervalEndLabel(times[i]) + "</td>" +
         '<td class="num">' + formatNLOrDash(series.consumptionKwh[i], 1) + "</td>" +
         '<td class="num">' + formatNLOrDash(series.productionKwh[i], 1) + "</td>" +
         '<td class="num mono">' + formatNLOrDash(prices[i], 4) + "</td>" +
@@ -5406,134 +5278,10 @@
     return Math.max(pitch - gap, 0.5);
   }
 
-  // --- Certainty layer (Actual vs Provisional) -------------------------------
-  // See CLAUDE.md "Certainty layer — provisional offers & projected data" for
-  // the full vocabulary. What remains in use here is the projected-data half:
-  // the offer overlay it also covered is gone from this chart. Shared by all
-  // four chart variants so the future-date boundary looks and behaves
-  // identically everywhere.
-
-  var CERTAINTY_PROVISIONAL_OPACITY = 0.55;
-  var CERTAINTY_HATCH_DARKEN = 0.22; // "one step darker" — see hatchDefs below
-
-  function darkenHex(hex, amt) {
-    var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-    r = Math.max(0, Math.round(r * (1 - amt)));
-    g = Math.max(0, Math.round(g * (1 - amt)));
-    b = Math.max(0, Math.round(b * (1 - amt)));
-    function hx(v) { var s = v.toString(16); return s.length < 2 ? "0" + s : s; }
-    return "#" + hx(r) + hx(g) + hx(b);
-  }
-
-  /**
-   * A fixed 6px hatch pitch reads fine on the single-day chart's ~9-10px
-   * bars, but on the multi-day range chart (pxPerInterval=4, rendered bar
-   * width often 3-4px, see barWidthFor) it never completes even one full
-   * diagonal cycle and disappears into a flat wash under antialiasing —
-   * confirmed by actually rendering it (Playwright + pixel-level crop), not
-   * just by reasoning about it. Scaling the pitch down to the bar's own
-   * rendered width (floored at 2px, the practical minimum for a visible
-   * diagonal in SVG) keeps at least ~1 stripe cycle inside every bar,
-   * however narrow, while leaving the wider single-day case (already
-   * legible) at its original 6px.
-   */
-  function hatchPitchFor(barWidthPx) {
-    return Math.max(2, Math.min(6, barWidthPx));
-  }
-
-  // Below this, even a pitch scaled to the bar's own width antialiases into
-  // a flat wash rather than a legible diagonal — confirmed by actually
-  // rendering the multi-day range chart's ~3px projected bars
-  // (Playwright screenshot, pixel-level crop) and finding no stripe visible
-  // at all, not just "faint." There's no smaller pitch that fixes this: the
-  // tile itself becomes sub-resolution. Below the threshold, fall back to a
-  // plain flat fill at the provisional opacity only — texture is one of
-  // several redundant certainty cues (with opacity, the mandatory boundary
-  // marker, and the tooltip's "Projected" wording), not
-  // the only one, so dropping it here still leaves the mark legible as
-  // "not yet real" via the other three.
-  var HATCH_MIN_BAR_WIDTH = 5;
-
-  /** A hatch fill url for this hue/width, or null if the bar is too narrow to render one legibly (see HATCH_MIN_BAR_WIDTH). */
-  function provisionalFillUrl(hue, barWidthPx) {
-    if (barWidthPx < HATCH_MIN_BAR_WIDTH) { return null; }
-    return "url(#" + hatchId(hue, hatchPitchFor(barWidthPx)) + ")";
-  }
-
-  function hatchId(hue, pitch) { return "hatch-" + hue.replace("#", "") + "-" + pitch; }
-
-  /**
-   * One <pattern> per distinct hue+pitch pair used this render — 45°
-   * hairline hatch, inked in the fill's own hue one step darker (never a
-   * new hue). This is the dataviz "Lines" texture spec, triggered
-   * unconditionally here (primary channel for "not yet real", not opt-in
-   * redundant decoration).
-   */
-  function hatchDefs(entries) {
-    var seen = {}, defs = "";
-    entries.forEach(function (e) {
-      var id = hatchId(e.hue, e.pitch);
-      if (seen[id]) { return; }
-      seen[id] = true;
-      defs += '<pattern id="' + id + '" width="' + e.pitch + '" height="' + e.pitch + '" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
-        '<rect width="' + e.pitch + '" height="' + e.pitch + '" fill="' + e.hue + '"></rect>' +
-        '<line x1="0" y1="0" x2="0" y2="' + e.pitch + '" stroke="' + darkenHex(e.hue, CERTAINTY_HATCH_DARKEN) + '" stroke-width="1"></line>' +
-        '</pattern>';
-    });
-    return defs;
-  }
-
-  /** The 3 hues the covered/short/long bars hatch with, all at the one pitch this chart's bars actually render at. */
-  function usageChartHatchEntries(rbw) {
-    var pitch = hatchPitchFor(rbw);
-    return ["#E09B2D", "#4A3AA7", "#C6CBD4"].map(function (hue) { return { hue: hue, pitch: pitch }; });
-  }
-
-  /**
-   * Mandatory boundary marker (CLAUDE.md certainty-layer #4) — a solid
-   * vertical rule spanning the plot, with a label pair directly above it.
-   * `x` is the bar's left edge in the chart's own coordinate system.
-   */
-  function boundaryMarkerMarkup(x, padTop, plotH, labelLeft, labelRight) {
-    var xr = x.toFixed(1);
-    return '<line x1="' + xr + '" y1="' + padTop + '" x2="' + xr + '" y2="' + (padTop + plotH) +
-      '" stroke="#8b98aa" stroke-width="1"></line>' +
-      '<text x="' + (x - 4).toFixed(1) + '" y="' + (padTop - 2) + '" font-size="10" fill="#8b98aa" text-anchor="end">' + labelLeft + '</text>' +
-      '<text x="' + (x + 4).toFixed(1) + '" y="' + (padTop - 2) + '" font-size="10" fill="#8b98aa" text-anchor="start">' + labelRight + '</text>';
-  }
-
-  /**
-   * A bar's fill attributes for a given certainty state — Actual draws in
-   * the plain hue at its normal opacity; Provisional (projected) gets
-   * the hatch texture AND drops to 55% of that opacity (certainty-layer #1
-   * + #2 together, never just one).
-   */
-  function barFillAttrs(hue, baseOpacity, measured, barWidthPx) {
-    if (measured) { return { fill: hue, opacity: String(baseOpacity) }; }
-    var url = provisionalFillUrl(hue, barWidthPx);
-    return { fill: url || hue, opacity: String(baseOpacity * CERTAINTY_PROVISIONAL_OPACITY) };
-  }
-
-  /**
-   * The one boundary this chart still marks: the Measured/Projected data-
-   * coverage edge (from `hasUsage`). `barX(i)` is each chart's own
-   * left-edge-of-bar-i formula — day and multi-day charts anchor differently.
-   */
-  function certaintyBoundaries(hasUsage, barX) {
-    var marks = [], i;
-    if (hasUsage) {
-      for (i = 1; i < hasUsage.length; i++) {
-        if (hasUsage[i - 1] && !hasUsage[i]) { marks.push({ x: barX(i), left: "Measured", right: "Projected" }); break; }
-      }
-    }
-    return marks;
-  }
-
   function buildChartSvg(times, actualUsage, hedgeVolume, uncovered, width, opts) {
     var n = times.length;
     width = width || 960;
     opts = opts || {};
-    var hasUsage = opts.hasUsage || null;
     var height = 260, padLeft = 40, padBottom = 24, padTop = 10;
     var plotW = width - padLeft - 10;
     var plotH = height - padTop - padBottom;
@@ -5554,58 +5302,37 @@
     var zeroY = yFor(0);
     var barW = plotW / n;
     function barX(idx) { return padLeft + idx * barW; }
-    var rbw = barWidthFor(barW); // rendered bar width — also the hatch's own pitch basis, see hatchPitchFor
+    var rbw = barWidthFor(barW);   // the rendered bar, gapped inside its slot
     var coveredBars = "", bars = "";
     for (i = 0; i < n; i++) {
       var bx = barX(i);
-      var measured = !hasUsage || hasUsage[i];
       var yNet = yFor(actualUsage[i]);
       var yHedge = yFor(hedgeVolume[i]);
       var barTop = Math.min(yNet, yHedge);
       var barH = Math.abs(yNet - yHedge);
-      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#E09B2D" : "#4A3AA7", 1, measured, rbw);
+      var slFill = uncovered[i] >= 0 ? "#E09B2D" : "#4A3AA7";
 
       var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      var covAttrs = barFillAttrs("#C6CBD4", 1, measured, rbw);
+
       coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
-        '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
+        '" height="' + covH.toFixed(1) + '" fill="#C6CBD4"></rect>';
 
       bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
-        '" height="' + barH.toFixed(1) + '" fill="' + slAttrs.fill + '" opacity="' + slAttrs.opacity + '"></rect>';
+        '" height="' + barH.toFixed(1) + '" fill="' + slFill + '"></rect>';
 
     }
-    // The Actual-Usage line is drawn through its whole range now that
-    // projected values are real forecasts, not gaps — solid while measured,
-    // switching to a fine dot (certainty-layer #3) once projected. Segments
-    // share their boundary point with the neighbour so the style change
-    // reads as one continuous line, not a break.
-    var netSegments = [], seg = null, segMeasured = null;
+    // One continuous line: every interval on this chart is measured, so there
+    // is nothing to split it on.
     var hedgePoints = stepPoints(n, function (k) { return padLeft + k * barW + barW / 2; }, barW / 2,
       function (k) { return yFor(hedgeVolume[k]); });
+    var netPts = [];
     for (i = 0; i < n; i++) {
-      var px = padLeft + i * barW + barW / 2;
-      var measured2 = !hasUsage || hasUsage[i];
-      var ptStr = px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1);
-      if (seg === null) {
-        segMeasured = measured2;
-        seg = [ptStr];
-        netSegments.push({ measured: measured2, pts: seg });
-      } else if (measured2 !== segMeasured) {
-        seg.push(ptStr);
-        segMeasured = measured2;
-        seg = [ptStr];
-        netSegments.push({ measured: measured2, pts: seg });
-      } else {
-        seg.push(ptStr);
-      }
+      netPts.push((padLeft + i * barW + barW / 2).toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1));
     }
-    var netLines = netSegments.map(function (s) {
-      return '<polyline points="' + s.pts.join(" ") + '" fill="none" stroke="#006ECF" stroke-width="2"' +
-        (s.measured ? "" : ' stroke-dasharray="1,3"') + '></polyline>';
-    }).join("");
+    var netLines = '<polyline points="' + netPts.join(" ") + '" fill="none" stroke="#006ECF" stroke-width="2"></polyline>';
     // Ticks name the instant an interval ENDS (see intervalEndLabel), so the
     // tick is placed at that interval's RIGHT edge and selected by its end
     // time — the "08:00" tick belongs to the interval starting 07:45, and
@@ -5619,19 +5346,14 @@
           '" font-size="10" fill="#52647A">' + endLabel + '</text>';
       }
     }
-    var boundaries = certaintyBoundaries(hasUsage, barX).map(function (m) {
-      return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
-    }).join("");
     lastChartGeom = { padLeft: padLeft, spacing: barW, offset: barW / 2, n: n };
-    return '<defs>' + hatchDefs(usageChartHatchEntries(rbw)) + '</defs>' +
-      '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
+    return '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
       '" y2="' + zeroY.toFixed(1) + '" stroke="#dde4ed"></line>' +
       coveredBars +
       bars +
       netLines +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#9151B8" stroke-width="2" stroke-dasharray="5,3"></polyline>' +
       axisLabels +
-      boundaries +
       '<line id="chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
       '" stroke="#2D3F54" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
   }
@@ -5667,7 +5389,6 @@
   function buildTooltipHtml(context, i) {
     var dateStr = resolveDate(context.dates, i);
     var s = context.series;
-    var hasUsage = !context.hasUsage || context.hasUsage[i];
     // Each chart's tooltip covers only what that chart plots: the usage chart
     // shows volumes, the cost chart shows money.
     var rows;
@@ -5678,7 +5399,6 @@
       rows.push(["Day-ahead", context.price[i] == null
         ? "no quoted price"
         : ConsumptionCalc.formatNL(context.price[i], 2) + " €/MWh"]);
-      if (!hasUsage) { rows.push(["Status", "Projected — historical-profile forecast"]); }
       var head = '<div class="tt-head">' + weekdayShort(dateStr) + " " + formatDateShort(dateStr) + " · " +
         ConsumptionCalc.intervalRangeLabel(context.times[i]) +
         (isWeekendDate(dateStr) ? '<span class="tt-weekend">weekend</span>' : "") + "</div>";
@@ -5687,19 +5407,16 @@
       }).join("");
     }
     if (context.kind === "cost") {
-      rows = [["Hedge", ConsumptionCalc.formatNL(s.hedgeCost[i], 2) + " €"]];
-      if (hasUsage) {
-        // Delta Cost is what the uncovered gap costs at spot: a positive
-        // figure is volume bought, a negative one is surplus hedge sold.
-        var delta = s.deltaCost[i];
-        var deltaLabel = delta > 0 ? "Buy" : (delta < 0 ? "Sell" : "Buy / Sell");
-        rows.push([deltaLabel, ConsumptionCalc.formatNL(delta, 2) + " €"]);
-        rows.push(["Total", ConsumptionCalc.formatNL(s.totalCost[i], 2) + " €"]);
-      }
+      // Delta Cost is what the uncovered gap costs at spot: a positive
+      // figure is volume bought, a negative one is surplus hedge sold.
+      var delta = s.deltaCost[i];
+      var deltaLabel = delta > 0 ? "Buy" : (delta < 0 ? "Sell" : "Buy / Sell");
+      rows = [
+        ["Hedge", ConsumptionCalc.formatNL(s.hedgeCost[i], 2) + " €"],
+        [deltaLabel, ConsumptionCalc.formatNL(delta, 2) + " €"],
+        ["Total", ConsumptionCalc.formatNL(s.totalCost[i], 2) + " €"]
+      ];
     } else {
-      // Usage/Short/Long are real numbers on both sides of the boundary now
-      // (measured, or forward's own historical-profile projection) — always
-      // shown; only the "Status" row below distinguishes the two.
       rows = [
         ["Hedge", ConsumptionCalc.formatNL(s.hedgeVolume[i], 1) + " kWh"],
         ["Usage", ConsumptionCalc.formatNL(s.actualUsage[i], 1) + " kWh"]
@@ -5709,12 +5426,6 @@
       // a permanently-empty row.
       if (s.short[i] !== 0) { rows.push(["Short", ConsumptionCalc.formatNL(s.short[i], 1) + " kWh"]); }
       if (s.long[i] !== 0) { rows.push(["Long", ConsumptionCalc.formatNL(s.long[i], 1) + " kWh"]); }
-    }
-    // Certainty layer #6: state it in words, never rely on the visual alone.
-    // Cost stays genuinely unknown past the boundary (see consumption-calc.js
-    // computeIntervalRow); volume is a stated forecast, not an absence.
-    if (!hasUsage) {
-      rows.push(["Status", context.kind === "cost" ? "Cost unknown — forward price not available" : "Projected — historical-profile forecast"]);
     }
     // The weekday is not decoration here: peak blocks are Mon-Fri only, so
     // whether an interval is a Saturday is exactly what explains a hedge
@@ -5868,14 +5579,14 @@
     chart.setAttribute("viewBox", "0 0 " + width + " 260");
     chart.style.width = width + "px";
     chart.innerHTML = buildChartSvg(range.times, series.actualUsage, series.hedgeVolume, series.uncovered, width,
-      { hasUsage: range.hasUsage });
+      );
     // Cost chart is deliberately shorter (190 vs. usage's 260, design's
     // subordinate-not-peer treatment) — only the viewBox HEIGHT differs;
     // width tracks the usage chart's exactly, same as every other x-value.
     costChart.setAttribute("viewBox", "0 0 " + width + " 190");
     costChart.style.width = width + "px";
     costChart.innerHTML = buildCostChartSvg(range.times, series.hedgeCost, series.deltaCost, series.totalCost, width,
-      { hasUsage: range.hasUsage });
+      );
   }
 
   // Re-draw the day charts when the wrap's width actually changes (window
@@ -5919,17 +5630,6 @@
    *  past the real dataset (no per-date grid to borrow from DATA.byDate). The
    *  one real DST-short day (2026-03-29, 92 slots) never needs this — it's
    *  always inside MIN_DATE..MAX_DATE and has its own real grid. */
-  var SYNTHETIC_TIMES = null;
-  function syntheticDayTimes() {
-    if (SYNTHETIC_TIMES) { return SYNTHETIC_TIMES; }
-    var t = [];
-    for (var h = 0; h < 24; h++) {
-      for (var m = 0; m < 60; m += 15) { t.push(pad2(h) + ":" + pad2(m)); }
-    }
-    SYNTHETIC_TIMES = t;
-    return t;
-  }
-
   /** Start/end of the day, month, or quarter containing `anchor` (a YYYY-MM-DD). */
   function periodRange(period, anchor) {
     var year = parseInt(anchor.slice(0, 4), 10);
@@ -5947,20 +5647,6 @@
   /** Every date in the dataset falling within [from, to] inclusive. */
   function datesInRange(from, to) {
     return allDates.filter(function (d) { return d >= from && d <= to; });
-  }
-
-  /** Every calendar date in [from, to] inclusive, real or not — used to walk a
-   *  selected range that may extend past the dataset's own coverage. */
-  function allCalendarDatesInRange(from, to) {
-    var out = [];
-    var d = from;
-    while (d <= to) {
-      out.push(d);
-      var p = d.split("-").map(Number);
-      var next = new Date(Date.UTC(p[0], p[1] - 1, p[2] + 1));
-      d = next.getUTCFullYear() + "-" + pad2(next.getUTCMonth() + 1) + "-" + pad2(next.getUTCDate());
-    }
-    return out;
   }
 
   /**
@@ -6087,68 +5773,13 @@
   }
 
   /**
-   * Walks every calendar date in [from, to] — real or future — and returns
-   * one row per interval. Real dates (within the dataset, MIN_DATE..MAX_DATE)
-   * carry actual consumption/production/EPEX, exactly as before — byte-
-   * identical to pre-projection behaviour (see consumption-calc.test.js).
+   * One row per measured 15-minute interval in [from, to].
    *
-   * Dates past the dataset carry `hasUsage:false` (kept as this name/boolean
-   * so the chart code that already reads it doesn't need to change shape —
-   * `true` = measured, `false` = projected) plus a PROJECTED consumption/
-   * production from this site's own historical time-of-day profile
-   * (UsageProjection — see that module for the method and its documented
-   * simplifications) rather than null. EPEX stays null for those dates —
-   * forward spot price is genuinely unknown, and consumption-calc.js's
-   * per-field null propagation means Actual Usage/Uncovered/Long/Short still
-   * compute from the projected volumes (they don't need EPEX), while
-   * usageCost/deltaCost/totalCost correctly stay null (withheld, not
-   * guessed) — only hedgeCost, priced at the hedge's own contract rate,
-   * keeps a real number regardless.
+   * Dates the meters have not delivered are **skipped entirely** — no row, no
+   * placeholder. This screen shows what was measured and nothing else; there
+   * is no forecast of usage and no forward price standing in for spot, so a
+   * date past the metering window has nothing to say and says nothing.
    *
-   * The real hedge position (base + peak blocks) needs no separate array
-   * here — `ConsumptionCalc.computeIntervalRow`'s hedge computation runs
-   * regardless of usage, so `series.hedgeVolume`/`series.hedgeCost` (computed
-   * below in render(), over these same times/dates) already extend correctly
-   * into the future.
-   */
-  /**
-   * The indicative forward price (EUR/kWh) for an interval with no metered
-   * EPEX, taken from the portal's OWN quoted forward curve — the same
-   * WIZARD_PERIODS rows (month, quarter and year alike) that back the Prices
-   * screen and the trading wizard. Peak vs base is decided by ConsumptionCalc's
-   * own rule, not a second copy of it.
-   *
-   * This is an assumption, and worth naming: a forward curve is the market's
-   * expectation of spot for that delivery period, but it embeds a risk premium,
-   * so it is NOT the same claim as realised spot. It is used here because the
-   * alternative — leaving forward cost blank — hides the headline figure on
-   * exactly the ranges this view exists to show, and because these are the very
-   * prices the user is quoted elsewhere in this app. Everything priced this way
-   * is labelled indicative; see the certainty layer in CLAUDE.md.
-   *
-   * Returns null when no period row covers the date, which is a genuine
-   * unknowable rather than something to paper over.
-   */
-  function indicativeEpexFor(dateStr, timeStr) {
-    var P = PortalSeedData.WIZARD_PERIODS || {};
-    // Month, then quarter, then year — most specific quote wins when ranges
-    // overlap (October falls inside both "Oct 2026" and "Q4 2026"; every
-    // month/quarter row here also falls inside one of the two year rows).
-    // Year folded into this same scan on 2026-08-18 (see "Three period rows,
-    // one selection" in CLAUDE.md) — it used to be a single standalone
-    // WIZARD_YEAR object needing its own fallback branch below the loop;
-    // now it's just a third array checked last, no special case needed.
-    var rows = (P.month || []).concat(P.quarter || []).concat(P.year || []);
-    var row = null, i;
-    for (i = 0; i < rows.length; i++) {
-      if (dateStr >= rows[i].start && dateStr <= rows[i].end) { row = rows[i]; break; }
-    }
-    if (!row) { return null; }
-    var perMwh = ConsumptionCalc.isPeakInterval(dateStr, timeStr) ? row.peak : row.base;
-    return perMwh == null ? null : perMwh / 1000;
-  }
-
-  /**
    * `siteIds` defaults to every connection — Consumption's own charts are the
    * whole portfolio, and that is deliberate (see CLAUDE.md). The per-EAN chart
    * passes a single id: raw metered usage against the day-ahead price is a
@@ -6156,8 +5787,10 @@
    * account and has no per-connection split to show.
    */
   function concatRangeData(from, to, forSiteIds) {
-    var dates = allCalendarDatesInRange(from, to);
-    var allTimes = [], allDatesPerIndex = [], allPrices = [], allC = [], allG = [], hasUsage = [];
+    // The dataset's own dates, not every calendar date — the rest would only
+    // be skipped below.
+    var dates = datesInRange(from, to);
+    var allTimes = [], allDatesPerIndex = [], allPrices = [], allC = [], allG = [];
     var siteIds = forSiteIds || allSiteIds();
     dates.forEach(function (d) {
       var ds = DATA.byDate[d];
@@ -6165,33 +5798,19 @@
       // the portfolio or for none of it — but this checks rather than assumes,
       // since a half-measured sum would silently understate the total.
       var series = siteIds.map(function (id) { return DATA.bySite[id] && DATA.bySite[id][d]; });
-      var real = !!ds && series.length > 0 && series.every(function (x) { return !!x; });
-      var times = real ? ds.t : syntheticDayTimes();
-      for (var i = 0; i < times.length; i++) {
-        var t = times[i];
-        allTimes.push(t);
+      if (!ds || !series.length || !series.every(function (x) { return !!x; })) { return; }
+      for (var i = 0; i < ds.t.length; i++) {
+        var sumC = 0, sumG = 0;
+        for (var k = 0; k < series.length; k++) { sumC += series[k].c[i]; sumG += series[k].g[i]; }
+        allTimes.push(ds.t[i]);
         allDatesPerIndex.push(d);
-        hasUsage.push(real);
-        if (real) {
-          var sumC = 0, sumG = 0;
-          for (var k = 0; k < series.length; k++) { sumC += series[k].c[i]; sumG += series[k].g[i]; }
-          allPrices.push(ds.p[i]);
-          allC.push(sumC);
-          allG.push(sumG);
-        } else {
-          var projected = projectPortfolioInterval(d, t, siteIds);
-          // Forward spot is unknown, so this is the quoted forward curve for
-          // the delivery period, not a guess and not a measurement — see
-          // indicativeEpexFor(). Null where no period covers the date.
-          allPrices.push(indicativeEpexFor(d, t));
-          allC.push(projected.consumption);
-          allG.push(projected.production);
-        }
+        allPrices.push(ds.p[i]);
+        allC.push(sumC);
+        allG.push(sumG);
       }
     });
     return {
-      dates: allDatesPerIndex, times: allTimes, prices: allPrices, consumption: allC, production: allG,
-      hasUsage: hasUsage
+      dates: allDatesPerIndex, times: allTimes, prices: allPrices, consumption: allC, production: allG
     };
   }
 
@@ -6245,7 +5864,6 @@
   // them fails loudly instead of silently drawing at the wrong width.
   function buildMonthChartSvg(dates, times, actualUsage, hedgeVolume, uncovered, opts) {
     var n = times.length;
-    var hasUsage = opts.hasUsage || null;
     var pxPerInterval = opts.pxPerInterval;
     var width = opts.width;
     var height = 260, padLeft = RANGE_PAD_LEFT, padBottom = 24, padTop = 10;
@@ -6266,55 +5884,37 @@
     var stepX = rangeStepX(width, n);
     var barW = n > 1 ? stepX : plotW;
     function barX(idx) { return padLeft + idx * stepX - barW / 2; }
+    var rbw = barWidthFor(barW);   // the rendered bar, gapped inside its slot
 
-    var rbw = barWidthFor(barW); // rendered bar width — also the hatch's own pitch basis, see hatchPitchFor
     var coveredBars = "", bars = "";
     for (i = 0; i < n; i++) {
       var bx = barX(i);
-      var measured = !hasUsage || hasUsage[i];
       var yNet = yFor(actualUsage[i]);
       var yHedge = yFor(hedgeVolume[i]);
       var barTop = Math.min(yNet, yHedge);
       var barH = Math.abs(yNet - yHedge);
-      var slAttrs = barFillAttrs(uncovered[i] >= 0 ? "#E09B2D" : "#4A3AA7", 1, measured, rbw);
+      var slFill = uncovered[i] >= 0 ? "#E09B2D" : "#4A3AA7";
 
       var coveredVal = Math.min(actualUsage[i], hedgeVolume[i]);
       var yCovered = yFor(coveredVal);
       var covTop = Math.min(zeroY, yCovered);
       var covH = Math.abs(zeroY - yCovered);
-      var covAttrs = barFillAttrs("#C6CBD4", 1, measured, rbw);
+
       coveredBars += '<rect x="' + bx.toFixed(1) + '" y="' + covTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
-        '" height="' + covH.toFixed(1) + '" fill="' + covAttrs.fill + '" opacity="' + covAttrs.opacity + '"></rect>';
+        '" height="' + covH.toFixed(1) + '" fill="#C6CBD4"></rect>';
 
       bars += '<rect x="' + bx.toFixed(1) + '" y="' + barTop.toFixed(1) + '" width="' + rbw.toFixed(1) +
-        '" height="' + barH.toFixed(1) + '" fill="' + slAttrs.fill + '" opacity="' + slAttrs.opacity + '"></rect>';
+        '" height="' + barH.toFixed(1) + '" fill="' + slFill + '"></rect>';
 
     }
 
-    var netSegments = [], seg = null, segMeasured = null;
     var hedgePoints = stepPoints(n, function (k) { return padLeft + k * stepX; }, barW / 2,
       function (k) { return yFor(hedgeVolume[k]); });
+    var netPts = [];
     for (i = 0; i < n; i++) {
-      var px = padLeft + i * stepX;
-      var measured2 = !hasUsage || hasUsage[i];
-      var ptStr = px.toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1);
-      if (seg === null) {
-        segMeasured = measured2;
-        seg = [ptStr];
-        netSegments.push({ measured: measured2, pts: seg });
-      } else if (measured2 !== segMeasured) {
-        seg.push(ptStr);
-        segMeasured = measured2;
-        seg = [ptStr];
-        netSegments.push({ measured: measured2, pts: seg });
-      } else {
-        seg.push(ptStr);
-      }
+      netPts.push((padLeft + i * stepX).toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1));
     }
-    var netLines = netSegments.map(function (s) {
-      return '<polyline points="' + s.pts.join(" ") + '" fill="none" stroke="#006ECF" stroke-width="1.5"' +
-        (s.measured ? "" : ' stroke-dasharray="1,3"') + '></polyline>';
-    }).join("");
+    var netLines = '<polyline points="' + netPts.join(" ") + '" fill="none" stroke="#006ECF" stroke-width="1.5"></polyline>';
 
     var dayGridlines = "";
     var dayLabels = "";
@@ -6328,21 +5928,16 @@
       }
     }
 
-    var boundaries = certaintyBoundaries(hasUsage, barX).map(function (m) {
-      return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
-    }).join("");
 
     lastMonthChartGeom = { padLeft: padLeft, spacing: stepX, offset: 0, n: n, width: width };
 
-    return '<defs>' + hatchDefs(usageChartHatchEntries(rbw)) + '</defs>' +
-      dayGridlines +
+    return dayGridlines +
       '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) + '" y2="' + zeroY.toFixed(1) + '" stroke="#dde4ed"></line>' +
       coveredBars +
       bars +
       netLines +
       '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="#9151B8" stroke-width="1.5" stroke-dasharray="5,3"></polyline>' +
       dayLabels +
-      boundaries +
       '<line id="month-chart-crosshair" x1="0" y1="' + padTop + '" x2="0" y2="' + (padTop + plotH) +
       '" stroke="#2D3F54" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>';
   }
@@ -6384,13 +5979,10 @@
    */
   function costChartBody(n, hedgeCost, deltaCost, totalCost, padLeft, padTop, plotW, plotH, stepX, barW, anchorOffset, lineWidth, opts) {
     opts = opts || {};
-    var hasUsage = opts.hasUsage || null;
     var minVal = 0, maxVal = 0, i;
     for (i = 0; i < n; i++) {
-      if (!hasUsage || hasUsage[i]) {
-        minVal = Math.min(minVal, totalCost[i]);
-        maxVal = Math.max(maxVal, totalCost[i]);
-      }
+      minVal = Math.min(minVal, totalCost[i]);
+      maxVal = Math.max(maxVal, totalCost[i]);
       minVal = Math.min(minVal, hedgeCost[i]);
       maxVal = Math.max(maxVal, hedgeCost[i]);
     }
@@ -6412,27 +6004,20 @@
       var anchor = padLeft + i * stepX + anchorOffset;
       var x = anchor - barW / 2;
       var yH = yFor(hedgeCost[i]);
-      if (!hasUsage || hasUsage[i]) {
-        var yT = yFor(totalCost[i]);
-        // Delta cost spans the gap between the two lines; its sign is encoded
-        // by colour AND by which side of the hedge line it sits on, so the
-        // orange/cyan pair is never the only cue.
-        var buy = deltaCost[i] >= 0;
-        deltaBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yH, yT).toFixed(1) +
-          '" width="' + w.toFixed(1) + '" height="' + Math.abs(yH - yT).toFixed(1) +
-          '" fill="' + (buy ? COST_BUY_FILL : COST_SELL_FILL) + '" opacity="1"></rect>';
-        if (!seg) { seg = []; totalSegments.push(seg); }
-        seg.push(anchor.toFixed(1) + "," + yT.toFixed(1));
-      } else {
-        seg = null;
-      }
+      var yT = yFor(totalCost[i]);
+      // Delta cost spans the gap between the two lines; its sign is encoded
+      // by colour AND by which side of the hedge line it sits on, so the
+      // orange/cyan pair is never the only cue.
+      var buy = deltaCost[i] >= 0;
+      deltaBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yH, yT).toFixed(1) +
+        '" width="' + w.toFixed(1) + '" height="' + Math.abs(yH - yT).toFixed(1) +
+        '" fill="' + (buy ? COST_BUY_FILL : COST_SELL_FILL) + '"></rect>';
+      if (!seg) { seg = []; totalSegments.push(seg); }
+      seg.push(anchor.toFixed(1) + "," + yT.toFixed(1));
     }
     var totalLines = totalSegments.map(function (pts) {
       return '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + COST_TOTAL_LINE +
         '" stroke-width="' + lineWidth + '" stroke-linejoin="round" stroke-linecap="round"></polyline>';
-    }).join("");
-    var boundaries = certaintyBoundaries(hasUsage, barX).map(function (m) {
-      return boundaryMarkerMarkup(m.x, padTop, plotH, m.left, m.right);
     }).join("");
     return {
       zeroY: zeroY,
@@ -6441,8 +6026,7 @@
         deltaBars +
         totalLines +
         '<polyline points="' + hedgePoints.trim() + '" fill="none" stroke="' + COST_HEDGE_LINE +
-        '" stroke-width="' + lineWidth + '" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"></polyline>' +
-        boundaries
+        '" stroke-width="' + lineWidth + '" stroke-dasharray="5,3" stroke-linejoin="round" stroke-linecap="round"></polyline>'
     };
   }
 
@@ -6533,12 +6117,12 @@
    */
   function drawMonthCharts(range, series) {
     var geom = rangeChartGeometry(range.times.length);
-    var monthOpts = { hasUsage: range.hasUsage, width: geom.width, pxPerInterval: geom.pxPerInterval };
+    var monthOpts = { width: geom.width, pxPerInterval: geom.pxPerInterval };
     monthChart.setAttribute("viewBox", "0 0 " + geom.width + " 260");
     monthChart.style.width = geom.width + "px";
     monthChart.innerHTML = buildMonthChartSvg(range.dates, range.times, series.actualUsage, series.hedgeVolume, series.uncovered, monthOpts);
 
-    var costMonthOpts = { hasUsage: range.hasUsage, width: geom.width, pxPerInterval: geom.pxPerInterval };
+    var costMonthOpts = { width: geom.width, pxPerInterval: geom.pxPerInterval };
     costMonthChart.setAttribute("viewBox", "0 0 " + geom.width + " 190");
     costMonthChart.style.width = geom.width + "px";
     costMonthChart.innerHTML = buildMonthCostChartSvg(range.dates, range.times, series.hedgeCost, series.deltaCost, series.totalCost, costMonthOpts);
@@ -6803,37 +6387,12 @@
       return;
     }
 
-    // Forward dates carry a PROJECTED consumption/production (historical
-    // profile, see UsageProjection) but a null EPEX — handled inside
-    // consumption-calc.js's per-field null propagation: Actual Usage/
-    // Uncovered/Long/Short compute from the projected volumes, while
-    // usageCost/deltaCost/totalCost stay null (forward price unknown) and
-    // hedgeVolume/hedgeCost — knowable without usage or spot price — total
-    // the full range regardless. See computeIntervalRow in consumption-calc.js.
     var stats = ConsumptionCalc.computeDayStats(range.times, range.prices, range.consumption, range.production, range.dates, hedgeBlocks);
     var series = ConsumptionCalc.computeIntervalSeries(range.times, range.prices, range.consumption, range.production, range.dates, hedgeBlocks);
 
-    // Measured/projected provenance must survive as far as cards and CSV, not
-    // collapse into one blended number — so the same computeDayStats is
-    // called again over each half of the SAME arrays (range.hasUsage marks
-    // which index belongs to which half), giving cards both the headline sum
-    // (stats, above) and the two components to disclose in-card.
-    function filterRangeByUsage(wantMeasured) {
-      var times = [], prices = [], consumption = [], production = [], dates = [];
-      for (var i = 0; i < range.times.length; i++) {
-        if (range.hasUsage[i] !== wantMeasured) { continue; }
-        times.push(range.times[i]); prices.push(range.prices[i]);
-        consumption.push(range.consumption[i]); production.push(range.production[i]);
-        dates.push(range.dates[i]);
-      }
-      return ConsumptionCalc.computeDayStats(times, prices, consumption, production, dates, hedgeBlocks);
-    }
-    var realDayCount = datesInRange(from, to).length;
-    var totalDayCount = allCalendarDatesInRange(from, to).length;
-    var measuredStats = realDayCount === totalDayCount ? stats : filterRangeByUsage(true);
-    var projectedStats = realDayCount === totalDayCount ? null : filterRangeByUsage(false);
-
-    var dayCount = totalDayCount;
+    // Every date in the range is measured — concatRangeData skips the rest —
+    // so the day count is simply how many of them there are.
+    var dayCount = datesInRange(from, to).length;
     // From/To sit in the chart-card toolbar, so a crumb restating the range
     // here would duplicate controls sitting right next to it. The
     // assignment itself must stay (not just deleted): crumb is one shared
@@ -6842,19 +6401,10 @@
     // this write would leave whatever crumb another screen last set (e.g. a
     // connection's EAN) showing above Consumption's own content.
     crumb.textContent = "";
-    // Honest about what part of the range is real: usage data currently ends
-    // at MAX_DATE, so a range reaching past it is labelled as projected
-    // (each connection from its own historical profile) rather than implying
-    // measured coverage. Cost stays withheld there regardless (see above).
-    var futureNote = to > MAX_DATE
-      ? (from > MAX_DATE
-        ? " · projected — no measured usage yet"
-        : " · measured usage ends " + formatDateShort(MAX_DATE) + ", projected after that")
-      : "";
     chartSubtitle.textContent = portfolioLabel() + " · " + range.times.length + " intervals · " +
-      dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam" + futureNote;
+      dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam";
 
-    renderPositionPanel(stats, { realDayCount: realDayCount, totalDayCount: totalDayCount, measuredStats: measuredStats, projectedStats: projectedStats });
+    renderPositionPanel(stats);
 
     // A single day gets the fixed-width chart with time-of-day labels; any
     // multi-day range gets the horizontally-scrollable one labelled per day.
@@ -6870,43 +6420,32 @@
     // Frames the cost chart as derived FROM the usage chart above it, not an
     // equal peer — the "Same intervals" phrasing points back at that card
     // rather than restating its own interval/day count.
-    costChartSubtitle.textContent = "Same intervals, valued in €" + futureNote;
+    costChartSubtitle.textContent = "Same intervals, valued in €";
     tableSummarySub.textContent = range.times.length + " intervals · " + rangeLabel(from, to);
 
-    // hasUsage rides along on the context so the tooltip (buildTooltipHtml)
-    // can say "Projected" in words per the certainty-layer spec, not just
-    // draw the visual treatment.
     var ctx = {
-      dates: range.dates, times: range.times, prices: range.prices, series: series,
-      hasUsage: range.hasUsage
+      dates: range.dates, times: range.times, prices: range.prices, series: series
     };
     if (singleDay) {
       lastDayContext = ctx;
-      lastCostDayContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost",
-        hasUsage: range.hasUsage };
+      lastCostDayContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost" };
       lastMonthContext = null;
       lastCostMonthContext = null;
       drawDayCharts(range, series, dayChartWidth());
     } else {
       lastMonthContext = ctx;
-      lastCostMonthContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost",
-        hasUsage: range.hasUsage };
+      lastCostMonthContext = { dates: ctx.dates, times: ctx.times, prices: ctx.prices, series: series, kind: "cost" };
       lastDayContext = null;
       lastCostDayContext = null;
       drawMonthCharts(range, series);
     }
 
-    drawEanChartFor(from, to, singleDay, futureNote);
+    drawEanChartFor(from, to, singleDay);
 
-    renderTable(range.dates, range.times, range.prices, series, range.hasUsage);
+    renderTable(range.dates, range.times, range.prices, series);
 
     lastRender = {
-      from: from, to: to, range: range, series: series, stats: stats,
-      measuredStats: measuredStats, projectedStats: projectedStats,
-      // "N of M days have data" — for cards/any other screen that wants to
-      // say a range is partly or wholly forward-looking without redoing this
-      // date math itself.
-      realDayCount: realDayCount, totalDayCount: totalDayCount
+      from: from, to: to, range: range, series: series, stats: stats, dayCount: dayCount
     };
     exportBtn.disabled = false;
   }
@@ -7017,21 +6556,19 @@
     var zeroLine = '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
       '" y2="' + zeroY.toFixed(1) + '" stroke="#C6CBD4" stroke-width="1"></line>';
 
-    var bars = "", i, measured;
+    var bars = "", i;
     for (i = 0; i < n; i++) {
       var v = usageKwh[i];
       if (v == null || !isFinite(v)) { continue; }
-      measured = !opts.hasUsage || opts.hasUsage[i];
       var top = Math.min(yU(v), zeroY), h = Math.abs(yU(v) - zeroY);
-      var attrs = barFillAttrs(EAN_BAR_HUE, 1, measured, barW);
+
       bars += '<rect x="' + (centreOf(i) - barW / 2).toFixed(2) + '" y="' + top.toFixed(2) +
         '" width="' + barW.toFixed(2) + '" height="' + Math.max(h, 0.5).toFixed(2) +
-        '" fill="' + attrs.fill + '" opacity="' + attrs.opacity + '"></rect>';
+        '" fill="' + EAN_BAR_HUE + '"></rect>';
     }
 
-    // The price line is broken wherever the price is unknown rather than
-    // bridged across the gap — August 2026 has projected usage and no quoted
-    // forward price, and a straight run through it would invent one.
+    // Broken wherever the price is missing rather than bridged across the
+    // gap: a straight run through a gap invents a price that was never quoted.
     var segments = [], current = [];
     for (i = 0; i < n; i++) {
       if (priceMwh[i] == null || !isFinite(priceMwh[i])) {
@@ -7043,23 +6580,9 @@
     if (current.length) { segments.push(current); }
 
     var priceLine = segments.map(function (seg) {
-      if (seg.length === 1) { return ""; }
-      // Measured and projected halves of one segment get different strokes,
-      // so split it at the boundary rather than drawing one flat line.
-      var runs = [], run = [seg[0]];
-      for (var k = 1; k < seg.length; k++) {
-        var wasReal = !opts.hasUsage || opts.hasUsage[seg[k - 1].i];
-        var isReal = !opts.hasUsage || opts.hasUsage[seg[k].i];
-        run.push(seg[k]);
-        if (wasReal !== isReal) { runs.push({ pts: run.slice(0, -1).concat([seg[k]]), real: wasReal }); run = [seg[k]]; }
-      }
-      runs.push({ pts: run, real: !opts.hasUsage || opts.hasUsage[run[0].i] });
-      return runs.map(function (r) {
-        if (r.pts.length < 2) { return ""; }
-        return '<polyline points="' + r.pts.map(function (q) { return q.x.toFixed(1) + "," + q.y.toFixed(1); }).join(" ") +
-          '" fill="none" stroke="' + EAN_PRICE_HUE + '" stroke-width="2"' +
-          (r.real ? "" : ' stroke-dasharray="1,3" opacity="' + CERTAINTY_PROVISIONAL_OPACITY + '"') + '></polyline>';
-      }).join("");
+      if (seg.length < 2) { return ""; }
+      return '<polyline points="' + seg.map(function (q) { return q.x.toFixed(1) + "," + q.y.toFixed(1); }).join(" ") +
+        '" fill="none" stroke="' + EAN_PRICE_HUE + '" stroke-width="2"></polyline>';
     }).join("");
 
     // "Connected by multiple dots" — one per interval, but only while a dot is
@@ -7069,23 +6592,18 @@
     if (pitch >= EAN_DOT_MIN_PITCH) {
       segments.forEach(function (seg) {
         seg.forEach(function (q) {
-          var real = !opts.hasUsage || opts.hasUsage[q.i];
           // A white ring, or the dot disappears into the 2px line it sits on
           // and the marks stop being marks.
           dots += '<circle cx="' + q.x.toFixed(1) + '" cy="' + q.y.toFixed(1) + '" r="' +
             (pitch >= 14 ? 3.2 : 2.5) + '" fill="' + EAN_PRICE_HUE +
-            '" stroke="#fff" stroke-width="1.2"' +
-            (real ? "" : ' opacity="' + CERTAINTY_PROVISIONAL_OPACITY + '"') + '></circle>';
+            '" stroke="#fff" stroke-width="1.2"></circle>';
         });
       });
     }
 
-    var boundaries = certaintyBoundaries(opts.hasUsage, function (idx) { return centreOf(idx) - pitch / 2; })
-      .map(function (m) { return boundaryMarkerMarkup(m.x, EAN_PAD_TOP, plotH, m.left, m.right); }).join("");
 
     var xLabels = opts.xLabels(centreOf, pitch, EAN_PAD_TOP + plotH);
 
-    var defs = '<defs>' + hatchDefs([{ hue: EAN_BAR_HUE, pitch: hatchPitchFor(barW) }]) + '</defs>';
     var axisTitles =
       '<text x="' + (padLeft - 6) + '" y="10" font-size="9" fill="#8b98aa" text-anchor="end">kWh</text>' +
       '<text x="' + (priceLeft ? padLeft - 44 : padLeft + plotW + 6) + '" y="10" font-size="9" fill="' + EAN_PRICE_HUE +
@@ -7094,8 +6612,8 @@
     return {
       // Axis labels last: a tall bar reaches the top of the plot, and drawn
       // before the data they end up painted over by it.
-      svg: defs + gridlines + zeroLine + bars + priceLine + dots +
-        boundaries + xLabels + leftLabels + rightLabels + axisTitles +
+      svg: gridlines + zeroLine + bars + priceLine + dots +
+        xLabels + leftLabels + rightLabels + axisTitles +
         '<line id="' + opts.crosshairId + '" x1="0" y1="' + EAN_PAD_TOP + '" x2="0" y2="' + (EAN_PAD_TOP + plotH) +
         '" stroke="#8b98aa" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>',
       width: width,
@@ -7150,7 +6668,7 @@
     if (singleDay) {
       var dayWidth = Math.max(eanChart.parentNode.clientWidth || 0, 480);
       built = buildEanChartSvg(range.dates, range.times, usageKwh, priceMwh, {
-        width: dayWidth, hasUsage: range.hasUsage, crosshairId: "ean-crosshair",
+        width: dayWidth, crosshairId: "ean-crosshair",
         xLabels: eanDayLabels
       });
       eanChart.setAttribute("viewBox", "0 0 " + built.width + " " + EAN_CHART_HEIGHT);
@@ -7158,13 +6676,13 @@
       eanChart.innerHTML = built.svg;
       lastEanGeom = built.geom;
       lastEanContext = { dates: range.dates, times: range.times, usage: usageKwh, price: priceMwh,
-        hasUsage: range.hasUsage, kind: "ean" };
+        kind: "ean" };
       lastEanMonthGeom = null; lastEanMonthContext = null;
     } else {
       var wrapWidth = Math.max(eanMonthChartWrap.clientWidth || 0, 480);
       var px = Math.max(RANGE_PX_PER_INTERVAL_MIN, n > 0 ? wrapWidth / n : RANGE_PX_PER_INTERVAL_MIN) * state.chartZoom;
       built = buildEanChartSvg(range.dates, range.times, usageKwh, priceMwh, {
-        width: Math.max(wrapWidth, n * px), hasUsage: range.hasUsage, crosshairId: "ean-month-crosshair",
+        width: Math.max(wrapWidth, n * px), crosshairId: "ean-month-crosshair",
         priceAxisLeft: true, xLabels: eanRangeLabels(range.dates)
       });
       eanMonthChart.setAttribute("viewBox", "0 0 " + built.width + " " + EAN_CHART_HEIGHT);
@@ -7172,7 +6690,7 @@
       eanMonthChart.innerHTML = built.svg;
       lastEanMonthGeom = built.geom;
       lastEanMonthContext = { dates: range.dates, times: range.times, usage: usageKwh, price: priceMwh,
-        hasUsage: range.hasUsage, kind: "ean" };
+        kind: "ean" };
       lastEanGeom = null; lastEanContext = null;
     }
 
@@ -7202,7 +6720,7 @@
    * render() already has are summed across every connection, and the whole
    * point of this card is the one underneath that sum.
    */
-  function drawEanChartFor(from, to, singleDay, futureNote) {
+  function drawEanChartFor(from, to, singleDay) {
     renderEanChartSelect();
     var siteId = eanChartSite();
     if (!siteId) {
@@ -7219,7 +6737,7 @@
       priceMwh.push(one.prices[i] == null ? null : one.prices[i] * 1000);
     }
     eanChartSubtitle.textContent = siteName(siteId) + " · " + siteEan(siteId) + " · " +
-      one.times.length + " intervals" + futureNote;
+      one.times.length + " intervals";
     drawEanCharts(one, usageKwh, priceMwh, singleDay);
   }
 
@@ -7234,8 +6752,7 @@
    */
   function redrawEanChart() {
     if (!lastRender) { return; }
-    var singleDay = lastRender.totalDayCount === 1;
-    drawEanChartFor(lastRender.from, lastRender.to, singleDay, "");
+    drawEanChartFor(lastRender.from, lastRender.to, lastRender.dayCount === 1);
   }
 
   // Same one-redraw-per-frame shape as scheduleMonthChartResize, watching this
@@ -7273,10 +6790,6 @@
     // The end label, matching the table — a row the screen calls 08:15 must
     // not be 08:00 in the export.
     { header: "Time", get: function (r, i) { return ConsumptionCalc.intervalEndLabel(r.range.times[i]); } },
-    // Per design's certainty-layer spec, provenance must be labelled
-    // everywhere a number is fed — including the exported file, not just
-    // the on-screen table/chart.
-    { header: "Data", get: function (r, i) { return (r.range.hasUsage[i]) ? "Measured" : "Projected"; } },
     { header: "Consumption (kWh)", get: function (r, i) { return r.series.consumptionKwh[i]; } },
     { header: "Production (kWh)", get: function (r, i) { return r.series.productionKwh[i]; } },
     { header: "EPEX (EUR/kWh)", get: function (r, i) { return r.range.prices[i]; } },
@@ -7392,30 +6905,12 @@
       return;
     }
 
-    // The furthest date any hedge block still covers — the range inputs allow
-    // selecting all the way out there, even though there's no usage data past
-    // MAX_DATE, so a known future position can be seen ahead of the metering
-    // data existing for it.
+    // The range stops where the meters do. With no forecast of usage and no
+    // forward price standing in for spot, a date past MAX_DATE yields no
+    // intervals at all — offering it in the picker is offering a blank screen.
+    // A position running past it is still on the Trading screen, which is
+    // where a contracted block belongs.
     MAX_SELECTABLE_DATE = MAX_DATE;
-    (DATA.hedge || []).forEach(function (block) {
-      if (block.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = block.periodEnd; }
-    });
-    // The wizard's own furthest quoted year widens the range too:
-    // indicativeEpexFor() and usage-projection.js can price and project a date
-    // that far out on their own, with no hedge block or confirmed trade needed
-    // to reach it — see "Looking past the end of the data".
-    (PortalSeedData.WIZARD_PERIODS.year || []).forEach(function (row) {
-      if (row.end > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = row.end; }
-    });
-    // Confirmed trades extend that horizon too — a position for a period
-    // beyond every contracted block is exactly what the customer wants to look
-    // at, and would otherwise sit beyond the To input's max.
-    liveTradeRecords().forEach(function (r) {
-      var now = nowForLink();
-      if (!r.periodEnd) { return; }
-      if (PortalTradeLink.effectiveStatus(r, now) !== PortalTradeLink.STATUS_CONFIRMED) { return; }
-      if (r.periodEnd > MAX_SELECTABLE_DATE) { MAX_SELECTABLE_DATE = r.periodEnd; }
-    });
 
     controls.forEach(function (el) {
       el.min = MIN_DATE;

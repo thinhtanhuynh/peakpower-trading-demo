@@ -78,7 +78,6 @@ Tests need only Node:
 ```
 node consumption-calc.test.js
 node consumption-data-loader.test.js
-node usage-projection.test.js
 node portal-trade-link.test.js
 node portal-terms-link.test.js
 node portal-demo-clock.test.js
@@ -107,7 +106,6 @@ jsdom or Playwright smoke test after changing a page shell.
 | `PeakPowerTrading-CalculationSample.csv` | Reference calculation sample (one day, 96 rows) the formulas are validated against. Negative numbers use accounting parentheses; `-` means zero. Its blocks are unpriced, so Hedge Cost is 0 and Total Cost equals Delta Cost |
 | `consumption-calc.js` | Stat and formatting maths. Tested |
 | `consumption-data-loader.js` | Groups the source JSON into the page's shape, plus the `fetch()` loader. Tested |
-| `usage-projection.js` | Projects a site's usage past the dataset's coverage. Tested |
 | `portal-terms-link.js` | Deposit percentage and settlement maths, shared both ways. Tested |
 | `portal-trade-link.js` | Carries trades between the portals over `localStorage`. Tested |
 | `portal-demo-clock.js` | Shifts what both portals think "now" is, so a demo can reach a date-dependent state without waiting for it. Tested |
@@ -989,16 +987,11 @@ Every figure on the screen is the sum over all six electricity connections:
 contracted blocks with every confirmed trade's per-connection lines. Nothing
 else in the maths changes — `consumption-calc.js` sees one bigger site.
 
-Two things fall out of that and are worth keeping straight:
-
-- **A date is measured for the portfolio or for none of it.** All six sites
-  share one metering window, so `concatRangeData()` could assume it — it
-  checks anyway, because a half-measured sum would silently understate the
-  total rather than announce itself.
-- **Projection is per connection, then summed** (`projectPortfolioInterval`),
-  not one profile built from summed history. Each site keeps its own
-  weekday/weekend and time-of-day shape, which is the same arithmetic the
-  measured path does.
+One thing falls out of that and is worth keeping straight: **a date is measured
+for the portfolio or for none of it.** All six sites share one metering window,
+so `concatRangeData()` could assume it — it checks anyway, and skips the date
+entirely if any site is missing, because a half-measured sum would silently
+understate the total rather than announce itself.
 
 There is no per-connection variant of the hedge read, and there must not be
 one — see "Blocks belong to the account, not a connection".
@@ -1097,11 +1090,10 @@ baseline:
   ("Short — bought at day-ahead"), indigo `#4A3AA7` when Uncovered < 0
   ("Long — sold at day-ahead").
 
-All three render at **full opacity**. Opacity in this chart means one thing and
-one thing only — projected rather than measured (`CERTAINTY_PROVISIONAL_OPACITY`).
-The covered band used to be drawn at 45% to keep it subordinate; the grey does
-that job now, and reintroducing the 45% would put it at ~`#E5E8EC`, lighter than
-the page's own borders and effectively invisible.
+All three render at **full opacity**, and nothing on this chart varies opacity
+any more. The covered band used to be drawn at 45% to keep it subordinate; the
+grey does that job now, and reintroducing the 45% would put it at ~`#E5E8EC`,
+lighter than the page's own borders and effectively invisible.
 
 Consumption and production are not plotted. The y-axis is bipolar — a real
 zero baseline, so intervals where Actual Usage goes negative read correctly.
@@ -1163,21 +1155,15 @@ is an axis nobody can reach. That is why the legend names units and not sides.
 labels emitted before the data end up painted over by it. The right-hand ones
 also anchor `start`, not `end` — anchored `end` they run back across the bars.
 
-**The price line breaks where the price is unknown** rather than bridging the
-gap: August 2026 has projected usage and no quoted forward price (see "Known
-gap" above), and a straight run through it would invent one. Its measured and
-projected halves are separate strokes, so the certainty vocabulary still holds —
-hatch and 55% on the bars, `1,3` dots on the line, the boundary marker, and
-"Projected" in the tooltip.
+**The price line breaks where the price is missing** rather than bridging the
+gap — a straight run through a gap invents a price that was never quoted.
 
-**Dots below `EAN_DOT_MIN_PITCH` (7px) are dropped**, the same reasoning as
-`HATCH_MIN_BAR_WIDTH`: at a quarter's density they merge into a smear that hides
-the line instead of marking it. Above it they carry a white ring, or they
-disappear into the 2px line they sit on.
+**Dots below `EAN_DOT_MIN_PITCH` (7px) are dropped**: at a quarter's density
+they merge into a smear that hides the line instead of marking it. Above it
+they carry a white ring, or they disappear into the 2px line they sit on.
 
 **`concatRangeData(from, to, siteIds)` takes the site list** — it defaults to
-every connection, and this chart passes one id. `projectPortfolioInterval()`
-takes the same list, so a projected interval is projected for that site alone.
+every connection, and this chart passes one id.
 
 **Two paths deliberately never call `render()`** — zoom and resize — so the
 chart is redrawn from `redrawEanChart()` in both, or it sits at the previous
@@ -1335,10 +1321,11 @@ fill tier. Density is head `9px 12px` @10px, row `11px 12px`.
 
 **The column order is depended on in four places, and three fail silently:**
 `<thead>`, `renderTable()`, `CSV_COLUMNS`, and the group-boundary rule
-`thead th:nth-child(3)/(8)/(14)` that draws the identity / metered / position
+`thead th:nth-child(2)/(7)/(13)` that draws the identity / metered / position
 / money separators. Those indices are positional. Add, remove or reorder a
 column and every boundary after it shifts, the rules land mid-group, and
-**nothing fails** — no test asserts it. There are currently **17** columns.
+**nothing fails** — no test asserts it. There are currently **16** columns
+(it was 17 until the `Data` provenance column went with the forecast).
 Update `<thead>`, `CSV_COLUMNS`, the three indices and their comment in the
 same change.
 
@@ -1353,7 +1340,7 @@ The table is a collapsed `<details>` disclosure. Two rules around it:
   hiding** and reports `display:block` for closed content, so a
   computed-style check there passes vacuously.
 
-**CSV export** writes exactly the table's 17 columns in the table's order, and
+**CSV export** writes exactly the table's 16 columns in the table's order, and
 every row of the current range — the full filtered dataset, not just what's on
 screen — named `consumption_all-connections_<from>[_to_<to>].csv`. Values are
 **unformatted** (dot decimal, no thousands separators, 6 decimals) so the file
@@ -1372,12 +1359,10 @@ grounds undoes something measured.
 - **Cost chart 190px vs the usage chart's 260px.** Only the height differs —
   every horizontal value (`padLeft`, `width`, `plotW`, `stepX`, `barW`) is
   byte-identical, because the shared crosshair depends on x alone.
-- **`HATCH_MIN_BAR_WIDTH = 5`.** Below 5px the 45° hatch tile is
-  sub-resolution, so SVG renders it as a flat wash indistinguishable from a
-  solid fill — verified by screenshot and pixel crop, which is the only way it
-  surfaces. Drawing an illegible texture is worse than omitting it, because it
-  claims a distinction the pixels don't carry. Texture is one of four
-  redundant cues, so dropping the one that can't render loses no meaning.
+- **`EAN_DOT_MIN_PITCH = 7`.** Below it a price dot per interval merges into
+  a smear that hides the line it is marking — the same lesson the old hatch
+  threshold taught: an illegible mark is worse than no mark, because it claims
+  a distinction the pixels don't carry.
 
 **Consumption's own breakpoint is 760px.** The page has since grown two more
 (`767px` and `768–999px`, for the stat stack) and `customer-onboarding.html`
@@ -1389,148 +1374,39 @@ table summary row. Below 760px those stack. There is no small-screen layout
 and none is intended — this is a desktop trading tool. Known and accepted: the
 chart SVGs overflow the viewport below ~950px.
 
-### Looking past the end of the data
+### The screen shows measured intervals, and nothing else
 
-The From/To range extends to the furthest of three things — any hedge block's
-`periodEnd`, any confirmed live trade's `periodEnd`, or
-`PortalSeedData.WIZARD_PERIODS.year`'s furthest `end` — not the dataset's
-coverage. `MAX_SELECTABLE_DATE` is computed from those at load, so the inputs
-reach as far as `indicativeEpexFor()` and `usage-projection.js` can actually
-price and project.
+**There is no forecast of usage anywhere on this screen.** `concatRangeData()`
+walks `datesInRange()` — the dataset's own dates — and skips anything the
+meters have not delivered: no row, no placeholder, no estimate. What was
+removed with it, and why each piece had to go together:
 
-Three different things are known past 2026-08-05, and the design turns on
-keeping them apart rather than flattening them into one idea of "future":
+| Gone | Was |
+|---|---|
+| `usage-projection.js` and its suite | a historical time-of-day profile per site, projecting usage past coverage |
+| `indicativeEpexFor()` | the forward curve standing in for spot on those dates. With no usage to price, it had nothing left to value |
+| the certainty layer | hatch fills, 55 % opacity, dotted line segments, the Measured/Projected boundary marker, the legend swatch, the tooltip's Status row, `.stat-card.projected` / `.position-panel.projected`, the "Projected" badge |
+| the table's `Data` column and its CSV twin | every row is measured, so a column that always reads "Measured" says nothing |
+| `measuredStats` / `projectedStats` / `realDayCount` | the measured-vs-projected split behind the cards' "+ €X projected" sublabels |
 
-| | Source | Certainty |
-|---|---|---|
-| **Hedge volume & hedge cost** | the blocks + the calendar | **Real.** Never marked projected — they depend on the contract price, never on metering or spot. This is why a block's volume for any period falls out for free |
-| **Usage, Uncovered, Long/Short** | `usage-projection.js` | **Projected** from that site's own history. Marked everywhere |
-| **Delta & total cost** | `indicativeEpexFor()` | **Indicative** — priced off the portal's own quoted forward curve |
+**`MAX_SELECTABLE_DATE` is `MAX_DATE`.** The range picker stops where the
+meters do, because a date past it now yields zero intervals — offering it would
+offer a blank screen. The consequence is real and worth knowing: **a position
+running past the metered window is no longer visible on Consumption.** The
+Trading screen still lists it, which is where a contracted block belongs.
 
-`computeIntervalRow` nulls each field **independently**, not all-or-nothing:
-usage-derived columns compute whenever consumption/production are known
-(measured or projected), while cost columns stay null whenever EPEX is
-unknown. `computeDayStats` carries `intervalsWithUsage` / `intervalsWithCost`
-/ `intervalsTotal` to match.
+**What stayed real.** Hedge volume and hedge cost never depended on metering or
+spot — they come from the blocks and the calendar, priced at the block's own
+contract rate. They still total the full selected range. Nothing about them was
+a forecast, so nothing about them changed.
 
-**A trap in those counters:** `intervalsWithUsage` counts *projected* usage
-too — it means "has usage numbers", not "was measured". Measured-ness comes
-from the day counts (`realDayCount`/`totalDayCount`); only priced-ness can be
-read off the interval counters. Conflating them made a wholly-projected
-September look wholly measured.
+**`costCertaintyOpts()` still exists, with one job left:** saying so when a
+range has no day-ahead price behind it at all. It no longer distinguishes
+indicative from measured, because there is no longer an indicative case.
 
-`usage-projection.js` averages a site's own consumption/production per
-time-of-day, weekday vs weekend, across all 217 measured days. It is
-deliberately **not** seasonally adjusted — the data stops in August, so a
-November date has no same-month history. That limit is surfaced in the UI
-label, not just in a comment.
-
-**Forward pricing.** `indicativeEpexFor(date, time)` reads
-`PortalSeedData.WIZARD_PERIODS` — month rows, then quarter, then year
-(most-specific first, since a month and its containing quarter and year can
-all cover one date) — and picks base vs peak through
-`ConsumptionCalc.isPeakInterval()` rather than a second copy of the
-peak-window rule. A forward curve embeds a risk premium, so it is not the same
-claim as realised spot; every figure priced this way is labelled
-*indicative*. Withholding forward cost was tried and rejected — it emptied
-Total cost, the headline figure, on exactly the ranges this view exists to
-show.
-
-**Known gap: August 2026 has no quote.** The seeded month rows start at Sep
-2026 and the earliest year row is Cal 2027, so 2026-08-06..08-31 has projected
-usage but no forward price. Those intervals are excluded from cost and the
-card says so ("excludes 26 days with no quoted price"). This is missing demo
-data, not a code defect — adding an Aug 2026 row to `WIZARD_PERIODS` fixes it.
-**Do not** paper over it by extrapolating a neighbouring month's price.
-
-Cost labels must describe what the calculation *did*, not what was intended.
-An earlier version read "26 of 31 days indicative" for a range whose 26
-forward days were in fact unpriced and silently dropped — a figure that omits
-most of its own range while implying it covers it is worse than a blank.
-
-**The chart draws positions, and nothing but positions.** Only a `Confirmed`
-trade is drawn, as part of the hedge via `confirmedBlocksForRange()`, which
-uses `blockForOffer()` to turn a confirmed trade into a real hedge block. Every
-other stage — awaiting price, offer received, accepted, rejected, expired,
-failed — draws nothing. There is no provisional-offer overlay: a trade the
-desk has not executed is not a position, and its status is already legible on
-Trading and the Dashboard.
-
-Restoring an overlay means restoring all of it — the band, the boundary
-markers, the legend and the tooltip wording are one vocabulary, and shipping
-the line alone leaves an unexplained dotted stroke.
-
-**Read the hedge through `hedgeBlocksFor(from, to)`, never `DATA.hedge`
-directly.** That helper is the one place the contracted
-blocks and the confirmed live trades are joined; going around it silently
-drops confirmed trades out of the line, the cost and the coverage. A confirmed
-trade is signed by direction (a sold block is negative) and priced at its firm
-offer price, so `computeIntervalHedgeVolumes` sums it alongside the contracted
-blocks with no special case. `MAX_SELECTABLE_DATE` counts confirmed trades
-too, or a position past every contracted block would sit beyond the To input's
-max and be unreachable.
-
-**Testing this needs stated numbers, not pixels.** Two traps: several dashed
-polylines are in the DOM at once and the *dashboard mini chart* comes first,
-so "the first match" is a constant that never moves; and the y-axis is shared,
-so adding a line rescales it and every other line shifts in pixels while its
-value is unchanged. Assert on the Hedge volume figure instead — a confirmed
-BUY of 1 MW over Q4 2026 moves it by exactly 2.208 MWh, a SELL by −2.208.
-
-### Measured vs projected — how it's shown
-
-One vocabulary for "how sure are we this mark is real", applied on top of
-whatever category hue is already in play. It never replaces the hue.
-
-Dash is already spent on category (dashed violet = Hedge, solid = Actual
-Usage/Total Cost), so certainty can't also use dash on those lines. Texture is
-the primary channel here for a distinct meaning, so it renders by default
-rather than behind an accessibility toggle.
-
-**Projected marks carry all of these together**, never just one:
-
-1. **Opacity** — fills and strokes at 55% (`CERTAINTY_PROVISIONAL_OPACITY`).
-2. **Texture, fills only** — a 45° hairline hatch, 6px pitch, inked in the
-   fill's own hue one step darker, never a new hue. Computed as
-   `darkenHex(hex, CERTAINTY_HATCH_DARKEN)` (0.22, an RGB × (1 − 0.22)
-   multiply) rather than a second hardcoded table, so it tracks automatically
-   if a fill hex changes. Dropped entirely below `HATCH_MIN_BAR_WIDTH`.
-3. **Stroke pattern, lines only, and only where no category dash exists** —
-   the projected segment of the usage/total-cost line switches to a fine dot
-   (`stroke-dasharray: "1,3"`), distinct from the hedge line's `"5,3"`.
-4. **Boundary marker** — mandatory whenever a chart mixes states: a 1px solid
-   vertical rule (`var(--pp-border-strong)`) at the transition x, with
-   "Measured" / "Projected" labels above the plot in 10px
-   `var(--pp-text-faint)`.
-5. **Legend** — a solid "Measured" swatch beside a hatched-and-dotted
-   "Projected" one.
-6. **Tooltip** — says "Projected" in words, never relying on the visual alone.
-
-**Stat cards and the position panel** can't hatch text, so they translate the
-same idea using existing neutral tokens only — no new hex, and never a tone
-colour, so "projected + short" and "projected + negative" don't read as two
-different treatments:
-
-- **Whole-card or whole-panel marker** (`.stat-card.projected`,
-  `.position-panel.projected`): `border: 1px dashed
-  var(--pp-border-strong)` in place of the solid border, plus `background:
-  var(--pp-surface-alt)`.
-- **Inline split in a sublabel** (e.g. "€ 3.200,00 measured + € 1.588,62
-  projected"): the projected clause drops to `var(--pp-text-faint)`.
-- **Badge:** `.badge.neutral` reading **"Projected"**.
-- A component card in a mixed row that is itself fully measured gets none of
-  this — only a figure that actually mixes states is marked.
-
-**For a mixed range the bold value is the measured portion only**, never a
-measured+projected sum; the projected part is the sublabel's "+ €X projected".
-A summed headline would give a partly-guessed figure full-certainty
-typography. A **fully projected** range is the degenerate case: with no
-measured portion to anchor against, the value itself renders at the reduced
-opacity with the "Projected" badge attached directly.
-
-**Hedge volume is exempt everywhere** — chart and cards alike. It's a real
-booked position, not date-dependent, so it never gets the projected treatment
-regardless of the range in view.
+**If forecasting is ever wanted back**, it is one commit in the history rather
+than something to reconstruct — the module, the certainty vocabulary and every
+call site went in one change.
 
 ## Design system
 
