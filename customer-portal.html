@@ -1150,6 +1150,31 @@
           </div>
         </div>
         <div class="card" data-consumption-chrome>
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px">
+            <div>
+              <div class="card-title">Usage and day-ahead price — per connection</div>
+              <div class="card-subtitle" id="ean-chart-subtitle"></div>
+            </div>
+            <!-- The one control this card owns. From/To and the presets in the
+                 usage card's toolbar filter it too — one range, three charts. -->
+            <div class="field-group" style="margin-bottom:0;min-width:230px">
+              <label class="fg-label" for="ean-chart-select" style="letter-spacing:.03em">Connection</label>
+              <select id="ean-chart-select" onchange="PP.setEanChartSite(this.value)"></select>
+            </div>
+          </div>
+          <div id="ean-day-chart-wrap">
+            <svg id="ean-chart" viewBox="0 0 960 260" style="width:100%;height:260px;display:block"></svg>
+          </div>
+          <div id="ean-month-chart-wrap" class="chart-scroll" style="display:none">
+            <svg id="ean-month-chart" viewBox="0 0 960 260" height="260" style="display:block"></svg>
+          </div>
+          <div class="legend">
+            <div><span class="swatch" style="background:var(--pp-chart-usage)"></span>Actual usage (kWh)</div>
+            <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px solid #c77048"></span>Day-ahead price (€/MWh)</div>
+            <div><span class="swatch" style="background:var(--pp-surface-alt);border:1px dashed var(--pp-border-strong)"></span>Projected — hatched and dimmed</div>
+          </div>
+        </div>
+        <div class="card" data-consumption-chrome>
           <!-- CSS-only disclosure: rows stay in the DOM at all times (only
                visibility toggles), so highlightTableRow()'s querySelector +
                scrollIntoView keep working while collapsed. open persists
@@ -1211,6 +1236,7 @@
 <!-- One tooltip per chart, so hovering either can show both at once. -->
 <div id="chart-tooltip" class="chart-tooltip"></div>
 <div id="cost-chart-tooltip" class="chart-tooltip"></div>
+<div id="ean-chart-tooltip" class="chart-tooltip"></div>
 
 <script src="consumption-calc.js"></script>
 <script src="consumption-data-loader.js"></script>
@@ -1245,9 +1271,9 @@
    * every site keeps its own weekday/weekend and time-of-day shape, and
    * summing the projections is the same arithmetic the measured path does.
    */
-  function projectPortfolioInterval(dateStr, timeStr) {
+  function projectPortfolioInterval(dateStr, timeStr, siteIds) {
     var c = 0, g = 0;
-    allSiteIds().forEach(function (id) {
+    (siteIds || allSiteIds()).forEach(function (id) {
       var one = UsageProjection.projectInterval(getUsageProfile(id), dateStr, timeStr);
       c += one.consumption; g += one.production;
     });
@@ -1568,6 +1594,9 @@
     // click or a window resize, which redraw through drawMonthCharts()
     // instead of render() for exactly that reason.
     chartZoom: 1,
+    // Which connection the per-EAN chart is showing. Null falls back to the
+    // first one — see eanChartSite().
+    eanChartSite: null,
     // Deposits this session reserved, and those whose reservation the desk has
     // since settled or released. Both in-memory, like every wallet figure —
     // see reconcileDeposits().
@@ -2659,6 +2688,7 @@
 
   window.PP = {
     goTo: goTo, goToConsumption: goToConsumption, viewTradeOnChart: viewTradeOnChart,
+    setEanChartSite: setEanChartSite,
     openConnection: openConnection, closeConnection: closeConnection,
     startAddConnection: startAddConnection, cancelAddConnection: cancelAddConnection,
     onEanQueryInput: onEanQueryInput, addConnection: addConnection,
@@ -5632,6 +5662,7 @@
 
   var tooltip = document.getElementById("chart-tooltip");
   var costTooltip = document.getElementById("cost-chart-tooltip");
+  var eanTooltip = document.getElementById("ean-chart-tooltip");
 
   function buildTooltipHtml(context, i) {
     var dateStr = resolveDate(context.dates, i);
@@ -5640,6 +5671,21 @@
     // Each chart's tooltip covers only what that chart plots: the usage chart
     // shows volumes, the cost chart shows money.
     var rows;
+    if (context.kind === "ean") {
+      // This chart has no series object — it plots one connection's usage
+      // against the price, and nothing else.
+      rows = [["Usage", ConsumptionCalc.formatNL(context.usage[i], 1) + " kWh"]];
+      rows.push(["Day-ahead", context.price[i] == null
+        ? "no quoted price"
+        : ConsumptionCalc.formatNL(context.price[i], 2) + " €/MWh"]);
+      if (!hasUsage) { rows.push(["Status", "Projected — historical-profile forecast"]); }
+      var head = '<div class="tt-head">' + weekdayShort(dateStr) + " " + formatDateShort(dateStr) + " · " +
+        ConsumptionCalc.intervalRangeLabel(context.times[i]) +
+        (isWeekendDate(dateStr) ? '<span class="tt-weekend">weekend</span>' : "") + "</div>";
+      return head + rows.map(function (r) {
+        return '<div class="tt-row"><span>' + r[0] + '</span><span>' + r[1] + '</span></div>';
+      }).join("");
+    }
     if (context.kind === "cost") {
       rows = [["Hedge", ConsumptionCalc.formatNL(s.hedgeCost[i], 2) + " €"]];
       if (hasUsage) {
@@ -5688,8 +5734,19 @@
   // the hidden variant, which is exactly the test for "is this chart active".
   var CHARTS = [];
 
+  // Keyed by a context's `kind`, so a new chart is one entry rather than an
+  // ever-growing chain of "hide the other one" branches.
+  var TOOLTIPS = { usage: tooltip, cost: costTooltip, ean: eanTooltip };
+
   function chartTooltipFor(context) {
-    return context && context.kind === "cost" ? costTooltip : tooltip;
+    var kind = (context && context.kind) || "usage";
+    return TOOLTIPS[kind] || tooltip;
+  }
+
+  function hideTooltipsExcept(keep) {
+    Object.keys(TOOLTIPS).forEach(function (k) {
+      if (TOOLTIPS[k] !== keep) { TOOLTIPS[k].style.display = "none"; }
+    });
   }
 
   /**
@@ -5716,8 +5773,7 @@
       var otherCrosshair = c.svg.querySelector("#" + c.crosshairId);
       if (otherCrosshair) { otherCrosshair.setAttribute("visibility", "hidden"); }
     });
-    var otherTip = chartTooltipFor(context) === tooltip ? costTooltip : tooltip;
-    otherTip.style.display = "none";
+    hideTooltipsExcept(chartTooltipFor(context));
 
     var crosshair = sourceSvg.querySelector("#" + entry.crosshairId);
     if (crosshair) {
@@ -5740,8 +5796,7 @@
       var crosshair = c.svg.querySelector("#" + c.crosshairId);
       if (crosshair) { crosshair.setAttribute("visibility", "hidden"); }
     });
-    tooltip.style.display = "none";
-    costTooltip.style.display = "none";
+    hideTooltipsExcept(null);
   }
 
   function attachChartInteraction(svgEl, crosshairId, getGeom, getContext, onClickIndex) {
@@ -6093,10 +6148,17 @@
     return perMwh == null ? null : perMwh / 1000;
   }
 
-  function concatRangeData(from, to) {
+  /**
+   * `siteIds` defaults to every connection — Consumption's own charts are the
+   * whole portfolio, and that is deliberate (see CLAUDE.md). The per-EAN chart
+   * passes a single id: raw metered usage against the day-ahead price is a
+   * question about one metering point, unlike a hedge, which is held for the
+   * account and has no per-connection split to show.
+   */
+  function concatRangeData(from, to, forSiteIds) {
     var dates = allCalendarDatesInRange(from, to);
     var allTimes = [], allDatesPerIndex = [], allPrices = [], allC = [], allG = [], hasUsage = [];
-    var siteIds = allSiteIds();
+    var siteIds = forSiteIds || allSiteIds();
     dates.forEach(function (d) {
       var ds = DATA.byDate[d];
       // Every site is metered over the same window, so a date is measured for
@@ -6117,7 +6179,7 @@
           allC.push(sumC);
           allG.push(sumG);
         } else {
-          var projected = projectPortfolioInterval(d, t);
+          var projected = projectPortfolioInterval(d, t, siteIds);
           // Forward spot is unknown, so this is the quoted forward curve for
           // the delivery period, not a guess and not a measurement — see
           // indicativeEpexFor(). Null where no period covers the date.
@@ -6535,6 +6597,10 @@
     var anchor = rangeCentreInterval(n);
     state.chartZoom = z;
     drawMonthCharts(lastRender.range, lastRender.series);
+    // The per-EAN chart reads state.chartZoom for its own width too, and this
+    // path deliberately never calls render() — so it has to be redrawn here or
+    // it stays at the previous zoom while the two above it move.
+    redrawEanChart();
     scrollRangeToInterval(anchor, n);
   }
   function zoomChartIn() { setChartZoom(state.chartZoom * 2); }
@@ -6682,6 +6748,9 @@
       monthChart.innerHTML = "";
       costChart.innerHTML = "";
       costMonthChart.innerHTML = "";
+      eanChart.innerHTML = "";
+      eanMonthChart.innerHTML = "";
+      eanChartSubtitle.textContent = "";
       costChartSubtitle.textContent = "";
       tableSummarySub.textContent = "";
       tableBody.innerHTML = "";
@@ -6725,6 +6794,9 @@
       monthChart.innerHTML = "";
       costChart.innerHTML = "";
       costMonthChart.innerHTML = "";
+      eanChart.innerHTML = "";
+      eanMonthChart.innerHTML = "";
+      eanChartSubtitle.textContent = "";
       costChartSubtitle.textContent = "";
       tableSummarySub.textContent = "";
       tableBody.innerHTML = "";
@@ -6791,6 +6863,8 @@
     document.getElementById("month-chart-wrap").style.display = singleDay ? "none" : "";
     document.getElementById("cost-day-chart-wrap").style.display = singleDay ? "" : "none";
     document.getElementById("cost-month-chart-wrap").style.display = singleDay ? "none" : "";
+    document.getElementById("ean-day-chart-wrap").style.display = singleDay ? "" : "none";
+    document.getElementById("ean-month-chart-wrap").style.display = singleDay ? "none" : "";
     // Zoom only means something once there's a range to scroll through.
     chartZoomEl.style.display = singleDay ? "none" : "";
     // Frames the cost chart as derived FROM the usage chart above it, not an
@@ -6822,6 +6896,8 @@
       drawMonthCharts(range, series);
     }
 
+    drawEanChartFor(from, to, singleDay, futureNote);
+
     renderTable(range.dates, range.times, range.prices, series, range.hasUsage);
 
     lastRender = {
@@ -6833,6 +6909,358 @@
       realDayCount: realDayCount, totalDayCount: totalDayCount
     };
     exportBtn.disabled = false;
+  }
+
+  // --- Per-connection usage against the day-ahead price ---------------------
+  //
+  // The one chart on this screen that is NOT the whole portfolio. A hedge is
+  // held for the account and has no per-connection split, which is why the two
+  // charts above sum every connection — but metered usage and the day-ahead
+  // price are facts about one metering point, and reading them together is how
+  // a site's own load shape is judged against what it cost.
+  //
+  // It keeps its own geometry rather than joining the usage/cost pair's shared
+  // one: it carries a second y-axis on the right, so its plot area is a
+  // different width and aligning it with them would misalign it with itself.
+
+  var EAN_BAR_HUE = "#006ECF";      // actual usage, the same role blue-500 carries elsewhere
+  var EAN_PRICE_HUE = "#c77048";    // --pp-coral-value: text-safe, and no other chart role uses it
+  var EAN_PAD_LEFT = 46, EAN_PAD_RIGHT = 52, EAN_PAD_TOP = 18, EAN_PAD_BOTTOM = 26;
+  // The scrolling variant is thousands of pixels wide, so an axis at its right
+  // edge is an axis nobody can reach. There, both scales sit on the left
+  // together — the SVG titles each one, which is where a reader looks.
+  var EAN_PAD_LEFT_BOTH = 88, EAN_PAD_RIGHT_NONE = 12;
+  var EAN_CHART_HEIGHT = 260;
+  /** Below this, a dot per interval is a smear — the line alone carries it. */
+  var EAN_DOT_MIN_PITCH = 7;
+
+  var eanChart = document.getElementById("ean-chart");
+  var eanMonthChart = document.getElementById("ean-month-chart");
+  var eanMonthChartWrap = document.getElementById("ean-month-chart-wrap");
+  var eanChartSubtitle = document.getElementById("ean-chart-subtitle");
+  var eanChartSelect = document.getElementById("ean-chart-select");
+  var lastEanContext = null, lastEanGeom = null;
+  var lastEanMonthContext = null, lastEanMonthGeom = null;
+
+  /** The site the per-EAN chart is showing, falling back to the first one. */
+  function eanChartSite() {
+    var ids = allSiteIds();
+    if (!ids.length) { return null; }
+    return ids.indexOf(state.eanChartSite) >= 0 ? state.eanChartSite : ids[0];
+  }
+
+  function siteName(id) {
+    var s = (DATA && DATA.sites ? DATA.sites : []).filter(function (x) { return x.id === id; })[0];
+    return s ? s.name : id;
+  }
+
+  function siteEan(id) {
+    var s = (DATA && DATA.sites ? DATA.sites : []).filter(function (x) { return x.id === id; })[0];
+    return s ? EanRegistry.formatEan(s.ean) : "";
+  }
+
+  /** Nice round-ish bounds that always include zero — bars hang off a real baseline. */
+  function axisBounds(values) {
+    var lo = 0, hi = 0;
+    values.forEach(function (v) {
+      if (v == null || !isFinite(v)) { return; }
+      if (v < lo) { lo = v; }
+      if (v > hi) { hi = v; }
+    });
+    if (lo === 0 && hi === 0) { hi = 1; }
+    var pad = (hi - lo) * 0.08;
+    return { lo: lo - (lo < 0 ? pad : 0), hi: hi + pad };
+  }
+
+  /**
+   * Bars for one connection's actual usage, a dotted line for the day-ahead
+   * price, on their own axes.
+   *
+   * `pitch` is the distance between interval anchors; a bar sits inside it and
+   * the price point sits at its centre, so the two series line up at every
+   * interval rather than the line floating half a bar off.
+   */
+  function buildEanChartSvg(dates, times, usageKwh, priceMwh, opts) {
+    var n = times.length;
+    var width = opts.width;
+    var priceLeft = !!opts.priceAxisLeft;
+    var padLeft = priceLeft ? EAN_PAD_LEFT_BOTH : EAN_PAD_LEFT;
+    var padRight = priceLeft ? EAN_PAD_RIGHT_NONE : EAN_PAD_RIGHT;
+    var plotW = width - padLeft - padRight;
+    var plotH = EAN_CHART_HEIGHT - EAN_PAD_TOP - EAN_PAD_BOTTOM;
+    var pitch = n > 0 ? plotW / n : plotW;
+    var barW = barWidthFor(pitch);
+    var centreOf = function (i) { return padLeft + i * pitch + pitch / 2; };
+
+    var u = axisBounds(usageKwh), p = axisBounds(priceMwh);
+    var yU = function (v) { return EAN_PAD_TOP + plotH - ((v - u.lo) / (u.hi - u.lo)) * plotH; };
+    var yP = function (v) { return EAN_PAD_TOP + plotH - ((v - p.lo) / (p.hi - p.lo)) * plotH; };
+
+    var gridlines = "", leftLabels = "", rightLabels = "";
+    for (var g = 0; g <= 4; g++) {
+      var frac = g / 4;
+      var gy = EAN_PAD_TOP + frac * plotH;
+      gridlines += '<line x1="' + padLeft + '" y1="' + gy.toFixed(1) + '" x2="' + (padLeft + plotW) +
+        '" y2="' + gy.toFixed(1) + '" stroke="#eef3f9"></line>';
+      leftLabels += '<text x="' + (padLeft - 6) + '" y="' + (gy + 3).toFixed(1) +
+        '" font-size="9" fill="#8b98aa" text-anchor="end">' +
+        ConsumptionCalc.formatNL(u.hi - frac * (u.hi - u.lo), 0) + '</text>';
+      // Anchored away from the plot on both sides: "end" would run a right-hand
+      // label back across the bars, which is exactly how it first rendered.
+      rightLabels += '<text x="' + (priceLeft ? padLeft - 44 : padLeft + plotW + 6) + '" y="' + (gy + 3).toFixed(1) +
+        '" font-size="9" fill="' + EAN_PRICE_HUE + '" text-anchor="' + (priceLeft ? "end" : "start") + '">' +
+        ConsumptionCalc.formatNL(p.hi - frac * (p.hi - p.lo), 0) + '</text>';
+    }
+
+    // A real zero line, because usage goes negative whenever a site exports.
+    var zeroY = yU(0);
+    var zeroLine = '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
+      '" y2="' + zeroY.toFixed(1) + '" stroke="#C6CBD4" stroke-width="1"></line>';
+
+    var bars = "", i, measured;
+    for (i = 0; i < n; i++) {
+      var v = usageKwh[i];
+      if (v == null || !isFinite(v)) { continue; }
+      measured = !opts.hasUsage || opts.hasUsage[i];
+      var top = Math.min(yU(v), zeroY), h = Math.abs(yU(v) - zeroY);
+      var attrs = barFillAttrs(EAN_BAR_HUE, 1, measured, barW);
+      bars += '<rect x="' + (centreOf(i) - barW / 2).toFixed(2) + '" y="' + top.toFixed(2) +
+        '" width="' + barW.toFixed(2) + '" height="' + Math.max(h, 0.5).toFixed(2) +
+        '" fill="' + attrs.fill + '" opacity="' + attrs.opacity + '"></rect>';
+    }
+
+    // The price line is broken wherever the price is unknown rather than
+    // bridged across the gap — August 2026 has projected usage and no quoted
+    // forward price, and a straight run through it would invent one.
+    var segments = [], current = [];
+    for (i = 0; i < n; i++) {
+      if (priceMwh[i] == null || !isFinite(priceMwh[i])) {
+        if (current.length) { segments.push(current); current = []; }
+        continue;
+      }
+      current.push({ i: i, x: centreOf(i), y: yP(priceMwh[i]) });
+    }
+    if (current.length) { segments.push(current); }
+
+    var priceLine = segments.map(function (seg) {
+      if (seg.length === 1) { return ""; }
+      // Measured and projected halves of one segment get different strokes,
+      // so split it at the boundary rather than drawing one flat line.
+      var runs = [], run = [seg[0]];
+      for (var k = 1; k < seg.length; k++) {
+        var wasReal = !opts.hasUsage || opts.hasUsage[seg[k - 1].i];
+        var isReal = !opts.hasUsage || opts.hasUsage[seg[k].i];
+        run.push(seg[k]);
+        if (wasReal !== isReal) { runs.push({ pts: run.slice(0, -1).concat([seg[k]]), real: wasReal }); run = [seg[k]]; }
+      }
+      runs.push({ pts: run, real: !opts.hasUsage || opts.hasUsage[run[0].i] });
+      return runs.map(function (r) {
+        if (r.pts.length < 2) { return ""; }
+        return '<polyline points="' + r.pts.map(function (q) { return q.x.toFixed(1) + "," + q.y.toFixed(1); }).join(" ") +
+          '" fill="none" stroke="' + EAN_PRICE_HUE + '" stroke-width="2"' +
+          (r.real ? "" : ' stroke-dasharray="1,3" opacity="' + CERTAINTY_PROVISIONAL_OPACITY + '"') + '></polyline>';
+      }).join("");
+    }).join("");
+
+    // "Connected by multiple dots" — one per interval, but only while a dot is
+    // wide enough to read. Below that pitch they merge into a smear that hides
+    // the line instead of marking it.
+    var dots = "";
+    if (pitch >= EAN_DOT_MIN_PITCH) {
+      segments.forEach(function (seg) {
+        seg.forEach(function (q) {
+          var real = !opts.hasUsage || opts.hasUsage[q.i];
+          // A white ring, or the dot disappears into the 2px line it sits on
+          // and the marks stop being marks.
+          dots += '<circle cx="' + q.x.toFixed(1) + '" cy="' + q.y.toFixed(1) + '" r="' +
+            (pitch >= 14 ? 3.2 : 2.5) + '" fill="' + EAN_PRICE_HUE +
+            '" stroke="#fff" stroke-width="1.2"' +
+            (real ? "" : ' opacity="' + CERTAINTY_PROVISIONAL_OPACITY + '"') + '></circle>';
+        });
+      });
+    }
+
+    var boundaries = certaintyBoundaries(opts.hasUsage, function (idx) { return centreOf(idx) - pitch / 2; })
+      .map(function (m) { return boundaryMarkerMarkup(m.x, EAN_PAD_TOP, plotH, m.left, m.right); }).join("");
+
+    var xLabels = opts.xLabels(centreOf, pitch, EAN_PAD_TOP + plotH);
+
+    var defs = '<defs>' + hatchDefs([{ hue: EAN_BAR_HUE, pitch: hatchPitchFor(barW) }]) + '</defs>';
+    var axisTitles =
+      '<text x="' + (padLeft - 6) + '" y="10" font-size="9" fill="#8b98aa" text-anchor="end">kWh</text>' +
+      '<text x="' + (priceLeft ? padLeft - 44 : padLeft + plotW + 6) + '" y="10" font-size="9" fill="' + EAN_PRICE_HUE +
+        '" text-anchor="' + (priceLeft ? "end" : "start") + '">€/MWh</text>';
+
+    return {
+      // Axis labels last: a tall bar reaches the top of the plot, and drawn
+      // before the data they end up painted over by it.
+      svg: defs + gridlines + zeroLine + bars + priceLine + dots +
+        boundaries + xLabels + leftLabels + rightLabels + axisTitles +
+        '<line id="' + opts.crosshairId + '" x1="0" y1="' + EAN_PAD_TOP + '" x2="0" y2="' + (EAN_PAD_TOP + plotH) +
+        '" stroke="#8b98aa" stroke-width="1" stroke-dasharray="3,3" visibility="hidden"></line>',
+      width: width,
+      geom: { padLeft: padLeft, spacing: pitch, offset: pitch / 2, n: n }
+    };
+  }
+
+  /** Time-of-day ticks for a single day; one label per day across a range. */
+  function eanDayLabels(centreOf, pitch, baseY) {
+    var out = "";
+    var everyN = Math.max(1, Math.round(8 / Math.max(pitch, 0.5)) * 4);
+    for (var i = 0; i < lastEanTimes.length; i += Math.max(everyN, 4)) {
+      out += '<text x="' + centreOf(i).toFixed(1) + '" y="' + (baseY + 14) +
+        '" font-size="9" fill="#8b98aa" text-anchor="middle">' +
+        ConsumptionCalc.intervalEndLabel(lastEanTimes[i]) + '</text>';
+    }
+    return out;
+  }
+
+  function eanRangeLabels(dates) {
+    return function (centreOf, pitch, baseY) {
+      var out = "", seen = {}, starts = [];
+      dates.forEach(function (d, i) { if (!seen[d]) { seen[d] = true; starts.push(i); } });
+      // One label per day while they fit, then every other, every fourth…
+      var step = Math.max(1, Math.ceil(starts.length / Math.max(1, Math.floor((centreOf(dates.length - 1) - centreOf(0)) / 58))));
+      starts.forEach(function (idx, k) {
+        if (k % step !== 0) { return; }
+        out += '<line x1="' + (centreOf(idx) - pitch / 2).toFixed(1) + '" y1="' + EAN_PAD_TOP +
+          '" x2="' + (centreOf(idx) - pitch / 2).toFixed(1) + '" y2="' + baseY + '" stroke="#eef3f9"></line>' +
+          '<text x="' + (centreOf(idx) + 3).toFixed(1) + '" y="' + (baseY + 14) +
+          '" font-size="9" fill="#8b98aa" text-anchor="start">' + formatDateShort(dates[idx]) + '</text>';
+      });
+      return out;
+    };
+  }
+
+  var lastEanTimes = [];
+
+  /**
+   * Draws whichever variant the range calls for and registers it for hover.
+   *
+   * Registration happens once per element — `attachChartInteraction` pushes
+   * into CHARTS, so calling it on every render would stack a listener per
+   * redraw and leave the registry growing without bound.
+   */
+  var eanChartsAttached = false;
+
+  function drawEanCharts(range, usageKwh, priceMwh, singleDay) {
+    lastEanTimes = range.times;
+    var n = range.times.length;
+    var built;
+    if (singleDay) {
+      var dayWidth = Math.max(eanChart.parentNode.clientWidth || 0, 480);
+      built = buildEanChartSvg(range.dates, range.times, usageKwh, priceMwh, {
+        width: dayWidth, hasUsage: range.hasUsage, crosshairId: "ean-crosshair",
+        xLabels: eanDayLabels
+      });
+      eanChart.setAttribute("viewBox", "0 0 " + built.width + " " + EAN_CHART_HEIGHT);
+      eanChart.style.width = built.width + "px";
+      eanChart.innerHTML = built.svg;
+      lastEanGeom = built.geom;
+      lastEanContext = { dates: range.dates, times: range.times, usage: usageKwh, price: priceMwh,
+        hasUsage: range.hasUsage, kind: "ean" };
+      lastEanMonthGeom = null; lastEanMonthContext = null;
+    } else {
+      var wrapWidth = Math.max(eanMonthChartWrap.clientWidth || 0, 480);
+      var px = Math.max(RANGE_PX_PER_INTERVAL_MIN, n > 0 ? wrapWidth / n : RANGE_PX_PER_INTERVAL_MIN) * state.chartZoom;
+      built = buildEanChartSvg(range.dates, range.times, usageKwh, priceMwh, {
+        width: Math.max(wrapWidth, n * px), hasUsage: range.hasUsage, crosshairId: "ean-month-crosshair",
+        priceAxisLeft: true, xLabels: eanRangeLabels(range.dates)
+      });
+      eanMonthChart.setAttribute("viewBox", "0 0 " + built.width + " " + EAN_CHART_HEIGHT);
+      eanMonthChart.setAttribute("width", String(built.width));
+      eanMonthChart.innerHTML = built.svg;
+      lastEanMonthGeom = built.geom;
+      lastEanMonthContext = { dates: range.dates, times: range.times, usage: usageKwh, price: priceMwh,
+        hasUsage: range.hasUsage, kind: "ean" };
+      lastEanGeom = null; lastEanContext = null;
+    }
+
+    if (!eanChartsAttached) {
+      eanChartsAttached = true;
+      attachChartInteraction(eanChart, "ean-crosshair",
+        function () { return lastEanGeom; }, function () { return lastEanContext; }, highlightTableRow);
+      attachChartInteraction(eanMonthChart, "ean-month-crosshair",
+        function () { return lastEanMonthGeom; }, function () { return lastEanMonthContext; }, highlightTableRow);
+    }
+  }
+
+  /** Rebuilds the connection picker, keeping whatever is already chosen. */
+  function renderEanChartSelect() {
+    if (!eanChartSelect) { return; }
+    var active = eanChartSite();
+    eanChartSelect.innerHTML = (DATA && DATA.sites ? DATA.sites : []).map(function (site) {
+      return '<option value="' + esc(site.id) + '"' + (site.id === active ? " selected" : "") + '>' +
+        esc(site.name) + " · " + esc(EanRegistry.formatEan(site.ean)) + '</option>';
+    }).join("");
+  }
+
+  /**
+   * The per-EAN chart's own pass over the range.
+   *
+   * Its own `concatRangeData` call, for one site: the portfolio arrays
+   * render() already has are summed across every connection, and the whole
+   * point of this card is the one underneath that sum.
+   */
+  function drawEanChartFor(from, to, singleDay, futureNote) {
+    renderEanChartSelect();
+    var siteId = eanChartSite();
+    if (!siteId) {
+      eanChart.innerHTML = ""; eanMonthChart.innerHTML = "";
+      eanChartSubtitle.textContent = "";
+      return;
+    }
+    var one = concatRangeData(from, to, [siteId]);
+    var usageKwh = [], priceMwh = [];
+    for (var i = 0; i < one.times.length; i++) {
+      // The source is kW averaged over the interval; a quarter-hour of it is
+      // kWh — the same conversion consumption-calc.js does internally.
+      usageKwh.push((one.consumption[i] - one.production[i]) * 0.25);
+      priceMwh.push(one.prices[i] == null ? null : one.prices[i] * 1000);
+    }
+    eanChartSubtitle.textContent = siteName(siteId) + " · " + siteEan(siteId) + " · " +
+      one.times.length + " intervals" + futureNote;
+    drawEanCharts(one, usageKwh, priceMwh, singleDay);
+  }
+
+  function setEanChartSite(id) {
+    state.eanChartSite = id;
+    render();
+  }
+
+  /**
+   * Redraws just this chart at the current zoom/width, from the range render()
+   * last resolved — the zoom and resize paths never call render(), by design.
+   */
+  function redrawEanChart() {
+    if (!lastRender) { return; }
+    var singleDay = lastRender.totalDayCount === 1;
+    drawEanChartFor(lastRender.from, lastRender.to, singleDay, "");
+  }
+
+  // Same one-redraw-per-frame shape as scheduleMonthChartResize, watching this
+  // card's own wraps: it measures them on every draw, so without this a resized
+  // window leaves it at the width it first drew at.
+  var lastDrawnEanWidth = null, eanResizeQueued = false;
+  function scheduleEanChartResize() {
+    if (eanResizeQueued) { return; }
+    eanResizeQueued = true;
+    requestAnimationFrame(function () {
+      eanResizeQueued = false;
+      if (!lastRender) { return; }
+      var w = eanMonthChartWrap.style.display === "none"
+        ? (eanChart.parentNode.clientWidth || 0)
+        : (eanMonthChartWrap.clientWidth || 0);
+      if (!w || w === lastDrawnEanWidth) { return; }
+      lastDrawnEanWidth = w;
+      redrawEanChart();
+    });
+  }
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(scheduleEanChartResize).observe(eanMonthChartWrap);
+    new ResizeObserver(scheduleEanChartResize).observe(eanChart.parentNode);
+  } else {
+    window.addEventListener("resize", scheduleEanChartResize);
   }
 
   // --- CSV export -----------------------------------------------------------

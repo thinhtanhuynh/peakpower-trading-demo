@@ -1133,6 +1133,60 @@ are document-global, so the cost chart's provisional bars reuse the pattern
 the usage chart's `<defs>` already defined. Keep the two hexes identical or
 that reuse silently stops.
 
+#### Per-connection usage against the day-ahead price
+
+A third chart card, and **the one thing on this screen that is not the whole
+portfolio**. That is not a reversal of "Consumption is the whole portfolio": a
+hedge is held for the account and has no per-connection split, which is why the
+two charts above it sum every connection — but metered usage and the day-ahead
+price are facts about one metering point, and reading them together is how a
+site's own load shape is judged against what it cost. It draws no hedge line at
+all.
+
+| | |
+|---|---|
+| Bars | that connection's Actual Usage in kWh, off a real zero baseline — it goes negative whenever the site exports |
+| Line + dots | the day-ahead price in **€/MWh**, one dot per interval |
+| Filter | its own `Connection` select (`state.eanChartSite`), plus the shared From/To and the Day/Month/Quarter presets — one range, three charts |
+
+**It has its own geometry, deliberately.** The usage and cost charts must stay
+pixel-identical to each other because they are stacked and share a crosshair;
+this one carries a second y-axis, so its plot area is a different width and
+matching them would misalign it with itself.
+
+**The price axis moves side by variant.** On a single day it sits on the right;
+on the scrolling range variant it moves next to the kWh axis on the left
+(`priceAxisLeft`), because a right-hand axis on a chart thousands of pixels wide
+is an axis nobody can reach. That is why the legend names units and not sides.
+
+**Axis labels are drawn last.** A tall bar reaches the top of the plot, and
+labels emitted before the data end up painted over by it. The right-hand ones
+also anchor `start`, not `end` — anchored `end` they run back across the bars.
+
+**The price line breaks where the price is unknown** rather than bridging the
+gap: August 2026 has projected usage and no quoted forward price (see "Known
+gap" above), and a straight run through it would invent one. Its measured and
+projected halves are separate strokes, so the certainty vocabulary still holds —
+hatch and 55% on the bars, `1,3` dots on the line, the boundary marker, and
+"Projected" in the tooltip.
+
+**Dots below `EAN_DOT_MIN_PITCH` (7px) are dropped**, the same reasoning as
+`HATCH_MIN_BAR_WIDTH`: at a quarter's density they merge into a smear that hides
+the line instead of marking it. Above it they carry a white ring, or they
+disappear into the 2px line they sit on.
+
+**`concatRangeData(from, to, siteIds)` takes the site list** — it defaults to
+every connection, and this chart passes one id. `projectPortfolioInterval()`
+takes the same list, so a projected interval is projected for that site alone.
+
+**Two paths deliberately never call `render()`** — zoom and resize — so the
+chart is redrawn from `redrawEanChart()` in both, or it sits at the previous
+width while the two above it move.
+
+**`TOOLTIPS` is keyed by a context's `kind`.** It replaced a pair of
+"hide the other one" branches that only worked while there were exactly two
+charts; a third would have left one tooltip stranded on screen.
+
 #### A hedge is a step, not a ramp
 
 Every block-shaped series is drawn as a stair by `stepPoints()`: a flat run
