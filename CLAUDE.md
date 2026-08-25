@@ -114,6 +114,7 @@ jsdom or Playwright smoke test after changing a page shell.
 | `back-office-screens-data.js` | Back-office seeded data for Home, Customers, Wallets, Settlements, Data & feeds |
 | `onboarding-flow.js` | The onboarding flow's nine steps and the rules that gate them. Tested |
 | `customer-onboarding.html` | The nine-step onboarding flow a new customer signs up through |
+| `index.html` | The landing page the demo is opened from — one card per page, onboarding leading |
 | `customer-portal.html` | The working customer portal (7 screens) |
 | `back-office-portal.html` | The working back-office portal (6 real screens + 2 placeholders) |
 
@@ -2254,6 +2255,13 @@ That is correct — those rows answered a different question — but `pickAuthor
 returns early when the option clicked is the one already chosen. Without that
 guard, going back and clicking the highlighted option wipes every colleague
 typed in on step 8 with nothing on screen having changed.
+
+**A new page needs a card on `index.html`.** That landing page is how the demo
+is reached, and a page missing from it is a page nobody opens. Onboarding
+leads at full width because it is where the journey starts; the two portals
+share the row below. Note `index.html` is still on the **pre-SB-2026 teal
+palette** — it was never re-tokenised with the three portal pages, so a card
+added there matches that page rather than the design system.
 
 ### What this page does not share
 

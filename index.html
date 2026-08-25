@@ -31,6 +31,13 @@
   .lede { font-size:14.5px; color:var(--pp-text-body); line-height:1.6; max-width:620px; margin:0 0 28px; }
   .cards { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
   @media (max-width:640px) { .cards { grid-template-columns:1fr; } }
+  /* Onboarding is where the journey starts, so it leads at full width rather
+     than becoming a third column — three cards across 760px are too narrow to
+     read, and a third card on a second row reads as an afterthought. */
+  .cards.lead { grid-template-columns:1fr; }
+  .card.onboarding .tag { background:var(--pp-teal-100); color:var(--pp-teal-700); }
+  .card.onboarding a.btn { align-self:flex-start; }
+  .card .step-line { font-size:11.5px; color:var(--pp-text-faint); line-height:1.55; }
   .card {
     background:var(--pp-surface); border:1px solid var(--pp-border); border-radius:12px;
     padding:20px 22px; display:flex; flex-direction:column; gap:10px;
@@ -70,16 +77,29 @@
   <div class="eyebrow">PeakPower &middot; Proof of Concept</div>
   <h1>Trading POC — live demo</h1>
   <p class="lede">
-    A browser-only, client-calculated stand-in for two PeakPower portals: the
-    customer-facing Consumption/Trading portal and the internal Back Office
-    trade desk. Everything runs client-side against static test data —
-    there is no backend and no real customer or market data behind this demo.
+    A browser-only, client-calculated stand-in for PeakPower: the onboarding flow a
+    company signs up through, the customer-facing Consumption/Trading portal, and the
+    internal Back Office trade desk. Everything runs client-side against static test
+    data — there is no backend and no real customer or market data behind this demo.
   </p>
 
   <div class="demo-note">
     <b>Demo only.</b> All data on this site — customers, connections, trades, prices,
     wallets — is synthetic test data generated for this proof of concept. It does not
     represent real customers, accounts, or transactions.
+  </div>
+
+  <div class="cards lead">
+    <div class="card onboarding">
+      <span class="tag">Start here</span>
+      <h2>Customer Onboarding</h2>
+      <p>How a company becomes a customer: nine steps from personal details and the KvK
+        registration through the load profile, a one-cent bank verification and the
+        signatories who sign the agreement, ending on a pending-approval receipt.</p>
+      <div class="step-line">Standalone — it has no account to read yet, so nothing is
+        submitted and it shares no data with the two portals below.</div>
+      <a class="btn" href="customer-onboarding.html">Open Onboarding &rarr;</a>
+    </div>
   </div>
 
   <div class="cards">
