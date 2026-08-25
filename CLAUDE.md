@@ -2429,9 +2429,31 @@ row is a seeded fixture and a page-added company sharing a name prefix could
 only mis-match it, and `customerRecordFor()`, which serves seeded trades. A
 reload is back to the eight seeded rows.
 
-**Required is only legal name, KvK and the contact's name and email.** The other
-eight company fields are onboarding paperwork that arrives later and render `—`
-until it does. Formats checked: KvK (8 digits, unique), email, EAN (18 digits,
+**The desk asks what the onboarding flow asks.** A customer created at the desk
+and one who signed themselves up carry the same record, so step 1 covers the
+legal form, the registered address (street / city / postcode), the industry,
+the direction and the annual volume band as well as the bank and contact
+details it always had.
+
+**The option lists come from `onboarding-flow.js`, not a second copy.**
+`ENTITY_TYPES`, `INDUSTRIES` and `FLOWS` are read straight off it — the desk
+loads that module for its lists alone. Two copies of "the industries" is two
+lists that drift, and the one the customer picked from would stop matching the
+one the desk sees.
+
+**`VOLUME_BANDS` is the one place they differ**, and deliberately: it prefixes
+the onboarding bands with "Not given". Onboarding refuses to continue without a
+band; the desk requires only a legal name, a KvK and a contact, so it needs a
+way to say the question was not asked.
+
+**The step-1 cards are dealt alternately into two columns**, not named by
+index. The layout used to read `cards[0] + cards[2]` / `cards[1] + cards[3]`,
+so adding a group meant editing that line too — and forgetting left the new
+card off the step with nothing on screen to say so.
+
+**Required is still only legal name, KvK and the contact's name and email.**
+Everything else is paperwork that arrives later and renders `—` until it does;
+the new selects all carry a default, so none of them adds a way to be refused. Formats checked: KvK (8 digits, unique), email, EAN (18 digits,
 unique within the customer), and IBAN *when non-blank*. Everything else is free
 text — a format rule nobody can satisfy is worse than none.
 

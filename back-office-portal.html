@@ -313,6 +313,9 @@
 <script src="back-office-desk-data.js"></script>
 <script src="back-office-screens-data.js"></script>
 <script src="portal-demo-clock.js"></script>
+<!-- For its option lists only: the desk asks a new customer the same questions
+     the onboarding flow does, and two copies of "the industries" would drift. -->
+<script src="onboarding-flow.js"></script>
 <script>
 (function () {
   "use strict";
@@ -1746,8 +1749,14 @@
       companyFields: customersWithBorders([
         {label:'Legal name', value: c.name},
         {label:'Trade name', value: orDash(co.tradeName)},
+        {label:'Legal form', value: orDash(co.entityType)},
         {label:'KvK', value: c.kvk},
         {label:'VAT', value: orDash(co.vat)},
+        {label:'Registered address', value: orDash([co.street, co.city].filter(Boolean).join(', '))},
+        {label:'Postcode', value: orDash(co.postcode)},
+        {label:'Industry', value: orDash(co.industry)},
+        {label:'Direction', value: orDash(co.direction)},
+        {label:'Annual volume', value: orDash(co.annualVolume)},
         {label:'IBAN', value: orDash(co.iban)},
         {label:'BIC', value: orDash(co.bic)},
         {label:'Account holder', value: orDash(co.accountHolder)},
@@ -1816,12 +1825,30 @@
    * rest is onboarding paperwork that arrives later and renders as "—" until it
    * does.
    */
+  /* The option lists come from onboarding-flow.js, so the desk and the customer
+     answer the same question from the same list. VOLUME_BANDS adds a "Not
+     given" the onboarding flow has no need for: onboarding refuses to continue
+     without a band, the desk requires only a legal name, a KvK and a contact. */
+  var OF = window.OnboardingFlow;
+  var VOLUME_BANDS = ['Not given'].concat(OF.VOLUMES);
+
   var NEW_CUSTOMER_FIELD_GROUPS = [
     {title:'Company', subtitle:'the customer is a legal entity', fields:[
       {key:'name', label:'LEGAL NAME', placeholder:'Vandersteen Koeling B.V.', wide:true},
       {key:'tradeName', label:'TRADE NAME', placeholder:'Vandersteen Cooling', wide:true},
       {key:'kvk', label:'KVK', placeholder:'8 digits'},
-      {key:'vat', label:'VAT', placeholder:'NL812345678B01'}
+      {key:'entityType', label:'LEGAL FORM', choices: OF.ENTITY_TYPES},
+      {key:'vat', label:'VAT', placeholder:'NL812345678B01', wide:true}
+    ]},
+    {title:'Registered address', subtitle:'as held in the KvK register', fields:[
+      {key:'street', label:'STREET AND NUMBER', placeholder:'Havenweg 22', wide:true},
+      {key:'city', label:'CITY', placeholder:'Rotterdam'},
+      {key:'postcode', label:'POSTCODE', placeholder:'3089 JJ'}
+    ]},
+    {title:'Profile', subtitle:'what the desk starts the load shape from', fields:[
+      {key:'industry', label:'INDUSTRY', choices: OF.INDUSTRIES, wide:true},
+      {key:'direction', label:'DIRECTION', choices: OF.FLOWS},
+      {key:'annualVolume', label:'ANNUAL VOLUME', choices: VOLUME_BANDS}
     ]},
     {title:'Bank details', subtitle:'where settlements are paid', fields:[
       {key:'iban', label:'IBAN', placeholder:'NL18 INGB 0002 4455 66', wide:true},
@@ -1866,7 +1893,9 @@
 
   function emptyCustomerDraft() {
     return {
-      name:'', tradeName:'', kvk:'', vat:'',
+      name:'', tradeName:'', kvk:'', vat:'', entityType: OF.ENTITY_TYPES[0],
+      street:'', city:'', postcode:'',
+      industry: OF.INDUSTRIES[0], direction: OF.FLOWS[0], annualVolume: VOLUME_BANDS[0],
       iban:'', bic:'', accountHolder:'',
       billingAddress:'', visitingAddress:'',
       contactName:'', contactEmail:'', contactPhone:'',
@@ -2104,9 +2133,14 @@
       return cardHtml(g.title, g.subtitle, body);
     });
 
+    // Dealt alternately into two columns rather than named by index — adding a
+    // group used to mean editing this line too, and forgetting left the new
+    // card off the step with nothing to show for it.
+    var left = cards.filter(function (_, i) { return i % 2 === 0; }).join('');
+    var right = cards.filter(function (_, i) { return i % 2 === 1; }).join('');
     return '<div style="display:flex;gap:16px;align-items:flex-start">' +
-        '<div style="flex:1;display:flex;flex-direction:column;gap:16px">' + cards[0] + cards[2] + '</div>' +
-        '<div style="flex:1;display:flex;flex-direction:column;gap:16px">' + cards[1] + cards[3] + '</div>' +
+        '<div style="flex:1;display:flex;flex-direction:column;gap:16px">' + left + '</div>' +
+        '<div style="flex:1;display:flex;flex-direction:column;gap:16px">' + right + '</div>' +
       '</div>';
   }
 
@@ -2842,7 +2876,9 @@
       available: '—', availableTone: 'default',
       openTrades: '0', lastSettlement: '—',
       contact: String(draft.contactName).trim(),
-      city: '',
+      // The list has a city column and the form now asks for one, so it is
+      // read rather than left blank.
+      city: String(draft.city).trim(),
       company: companyRecord(draft),
       meteringRows: draft.connections.map(meteringRowFrom),
       accountRows: draft.accounts.map(accountRowFrom),
@@ -2855,7 +2891,9 @@
   /** The typed company fields, trimmed, as the detail page reads them. */
   function companyRecord(draft) {
     var out = {};
-    ['tradeName', 'vat', 'iban', 'bic', 'accountHolder', 'billingAddress',
+    ['tradeName', 'vat', 'entityType', 'street', 'city', 'postcode',
+      'industry', 'direction', 'annualVolume',
+      'iban', 'bic', 'accountHolder', 'billingAddress',
       'visitingAddress', 'contactName', 'contactEmail', 'contactPhone'].forEach(function (k) {
       out[k] = String(draft[k]).trim();
     });
