@@ -197,12 +197,19 @@
   .banner.success { background:var(--pp-green-bg); border:1px solid var(--pp-green-border); color:var(--pp-green-text); }
   .banner.success .banner-icon { background:var(--pp-green); }
 
-  button { border:1px solid transparent; border-radius:var(--radius-md); font-size:13px; font-weight:600; padding:10px 20px; cursor:pointer; transition:background-color .15s ease, border-color .15s ease, color .15s ease; }
+  button, a.btn-secondary { border:1px solid transparent; border-radius:var(--radius-md); font-size:13px; font-weight:600; padding:10px 20px; cursor:pointer; transition:background-color .15s ease, border-color .15s ease, color .15s ease; }
+  /* The deposit instructions are a real file, so that control is an <a download>.
+     The base rule above is an element selector, which an anchor never matches. */
+  a.btn-secondary { display:inline-block; text-decoration:none; }
   .btn-primary { background:var(--pp-blue-700); border-color:var(--pp-blue-700); color:#fff; }
   .btn-primary:hover:not(:disabled) { background:var(--pp-blue-900); border-color:var(--pp-blue-900); }
   .btn-secondary { background:#fff; border-color:var(--pp-border-strong); color:var(--pp-text-heading); }
   .btn-secondary:hover:not(:disabled) { background:var(--pp-surface-alt); }
-  .btn-sm { padding:7px 14px; font-size:12px; }
+  /* `a.btn-sm` as well as `.btn-sm`: the base rule above matches the anchor as
+     `a.btn-secondary` (0,1,1), which out-specifies a bare `.btn-sm` (0,1,0) —
+     the link kept the full-size padding and sat taller than the button it
+     replaced. Equal weight, later in the file, so the small variant wins. */
+  .btn-sm, a.btn-sm { padding:7px 14px; font-size:12px; }
   button:disabled { opacity:.5; cursor:not-allowed; }
 
   /* --- step 6: the two ways to send one cent ---------------------------- */
@@ -516,28 +523,11 @@
         '<div class="note-foot">This is your net electricity volume — consumption minus production, if applicable — regardless of whether you choose to fix prices.</div>');
   }
 
+  /** The name is the link's href and the banner's own text — written once. */
+  var INSTRUCTIONS_FILE = "PeakPower_Funding_Instructions.docx";
+
   function step6Html() {
     var verified = state.bankVerified;
-    // Two independent facts, not a chain: a transfer can be in flight while
-    // iDEAL settles first, and the instructions banner is the only place the
-    // payment description is explained. Chaining them lets one silently
-    // outrank the other. No full stop after the company name — a Dutch legal
-    // form ends in one already, so appending another prints "B.V..".
-    var after = "";
-    if (verified) {
-      after += '<div style="margin-top:14px">' + bannerHtml("success", "&#10003;", "Bank account verified",
-        "IBAN NL18 INGB 0002 4455 66 · account holder matches " + orgName() +
-        " · the cent is credited to your wallet.") + '</div>';
-    }
-    if (state.instructionsReady) {
-      after += '<div style="margin-top:14px">' + bannerHtml("info", "i", "Deposit instructions prepared",
-        "A PDF with PeakPower’s bank details is ready. Use description " + F.applicationRef() +
-        " — it is what links your € 0,01 to this application.") + '</div>';
-    }
-    if (!verified && !state.instructionsReady) {
-      after = '<div class="note-foot">You can continue without verifying — the agreement is only issued once the one cent arrives.</div>';
-    }
-
     return cardHtml("Bank account verification", "A € 0,01 payment confirms the IBAN and the account holder",
       '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' +
         '<span class="fg-label" style="margin:0">Status</span>' +
@@ -552,9 +542,45 @@
         '<div class="pay-card">' +
           '<div><h4>Bank transfer</h4><p>Wire € 0,01 to PeakPower Trading B.V. Credited on the next business day.</p></div>' +
           '<div class="ref-row"><div><div class="k">Payment description</div><div class="v">' + esc(F.applicationRef()) + '</div></div></div>' +
-          '<div class="spacer"><button type="button" class="btn-secondary btn-sm" onclick="ONB.downloadInstructions()">Download deposit instructions</button></div>' +
+          // A real file, so a real link: it downloads on the click itself, and
+          // right-click → Save as works. The handler only marks that it
+          // happened — see downloadInstructions() for why it must not re-render.
+          '<div class="spacer"><a class="btn-secondary btn-sm" href="' + INSTRUCTIONS_FILE + '" download ' +
+            'onclick="ONB.downloadInstructions()">Download deposit instructions</a></div>' +
         '</div>' +
-      '</div>' + after);
+      '</div>' +
+      '<div id="bank-after">' + bankAfterHtml() + '</div>');
+  }
+
+  /**
+   * What sits under the two payment cards.
+   *
+   * Two independent facts, not a chain: a transfer can be in flight while iDEAL
+   * settles first, and the instructions banner is the only place the payment
+   * description is explained. Chaining them lets one silently outrank the
+   * other. No full stop after the company name — a Dutch legal form ends in one
+   * already, so appending another prints "B.V..".
+   *
+   * Its own function because downloadInstructions() patches it in place rather
+   * than re-rendering the step — see there.
+   */
+  function bankAfterHtml() {
+    var verified = state.bankVerified;
+    var after = "";
+    if (verified) {
+      after += '<div style="margin-top:14px">' + bannerHtml("success", "&#10003;", "Bank account verified",
+        "IBAN NL18 INGB 0002 4455 66 · account holder matches " + orgName() +
+        " · the cent is credited to your wallet.") + '</div>';
+    }
+    if (state.instructionsReady) {
+      after += '<div style="margin-top:14px">' + bannerHtml("info", "i", "Deposit instructions downloaded",
+        INSTRUCTIONS_FILE + " carries PeakPower’s bank details. Use description " + F.applicationRef() +
+        " — it is what links your € 0,01 to this application.") + '</div>';
+    }
+    if (!verified && !state.instructionsReady) {
+      after = '<div class="note-foot">You can continue without verifying — the agreement is only issued once the one cent arrives.</div>';
+    }
+    return after;
   }
 
   function step7Html() {
@@ -789,7 +815,15 @@
       renderStep();
     },
     payOneCent: function () { state.bankVerified = true; renderStep(); },
-    downloadInstructions: function () { state.instructionsReady = true; renderStep(); },
+    // Patched in place, never re-rendered: renderStep() would remove the <a>
+    // that is mid-click from the document, and a browser does not follow a link
+    // whose element left the page during the click. Same failure as the blur
+    // rebuilds elsewhere — the handler runs and nothing downloads.
+    downloadInstructions: function () {
+      state.instructionsReady = true;
+      var el = document.getElementById("bank-after");
+      if (el) { el.innerHTML = bankAfterHtml(); }
+    },
     goStep: function (n) {
       // Only backwards, or forwards one step at a time through next(): the
       // rail must never skip a step whose answers have not been given.

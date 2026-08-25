@@ -118,6 +118,7 @@ jsdom or Playwright smoke test after changing a page shell.
 | `back-office-screens-data.js` | Back-office seeded data for Home, Customers, Wallets, Settlements, Data & feeds. **The Customer Portal loads it too**, for the customer roster its sign-in directory is built from |
 | `onboarding-flow.js` | The onboarding flow's nine steps and the rules that gate them. Tested |
 | `customer-onboarding.html` | The nine-step onboarding flow a new customer signs up through |
+| `PeakPower_Funding_Instructions.docx` | The file step 6's **Download deposit instructions** link serves. Served straight from the repo root — see "Download deposit instructions is a real file" |
 | `index.html` | The landing page the demo is opened from — one card per page, onboarding leading |
 | `customer-portal.html` | The working customer portal (7 screens) |
 | `back-office-portal.html` | The working back-office portal (6 real screens + 2 placeholders) |
@@ -2446,6 +2447,34 @@ transfer can be in flight when the cent arrives another way — so the two
 banners stack rather than chaining through `else if`. Chaining them hid the
 instructions banner the moment the cent landed, and that banner is the only
 place the `PP-ONB-7F3K` payment description is explained.
+
+Both live in `bankAfterHtml()` rather than inline in `step6Html()`, because
+`downloadInstructions()` patches `#bank-after` instead of re-rendering — see
+below.
+
+### Download deposit instructions is a real file
+
+`PeakPower_Funding_Instructions.docx` sits in the repo root and the control is
+an `<a href download>`, not a button: the browser downloads it on the click
+itself and right-click → Save as works. It used to be a `<button>` whose handler
+only raised a banner claiming a PDF was ready — there was no file, and the
+format was wrong.
+
+Two things that has to keep:
+
+- **`downloadInstructions()` must not call `renderStep()`.** It patches
+  `#bank-after` in place, because re-rendering removes the `<a>` that is
+  mid-click from the document and a browser will not follow a link whose element
+  left the page during the click. Same failure as the blur rebuilds elsewhere:
+  the handler runs and nothing downloads.
+- **The button chrome is an element selector, which an anchor never matches.**
+  The base rule is `button, a.btn-secondary`, and `.btn-sm` had to become
+  `.btn-sm, a.btn-sm` with it — `a.btn-secondary` (0,1,1) out-specifies a bare
+  `.btn-sm` (0,1,0), so the link kept the full-size padding and sat taller than
+  the button it replaced.
+
+`INSTRUCTIONS_FILE` is the filename written once: it is both the `href` and the
+name the banner reads back.
 
 ### The authority answer decides who signs
 
