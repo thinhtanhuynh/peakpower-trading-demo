@@ -83,6 +83,8 @@ node portal-trade-link.test.js
 node portal-terms-link.test.js
 node portal-demo-clock.test.js
 node onboarding-flow.test.js
+node portal-accounts.test.js
+node ean-registry.test.js
 ```
 
 They run against fixtures, not the multi-MB source files. `portal-seed-data.js`
@@ -109,9 +111,11 @@ jsdom or Playwright smoke test after changing a page shell.
 | `portal-terms-link.js` | Deposit percentage and settlement maths, shared both ways. Tested |
 | `portal-trade-link.js` | Carries trades between the portals over `localStorage`. Tested |
 | `portal-demo-clock.js` | Shifts what both portals think "now" is, so a demo can reach a date-dependent state without waiting for it. Tested |
+| `portal-accounts.js` | Derives who can sign in, and under which company, from the desk's own customer roster. Tested |
+| `ean-registry.js` | The unassigned metering points, the search over them, and which company claimed which. Tested |
 | `portal-seed-data.js` | Static seed data for the customer screens with no live source |
 | `back-office-desk-data.js` | Back-office seeded trades/queues plus `buildQueues()` |
-| `back-office-screens-data.js` | Back-office seeded data for Home, Customers, Wallets, Settlements, Data & feeds |
+| `back-office-screens-data.js` | Back-office seeded data for Home, Customers, Wallets, Settlements, Data & feeds. **The Customer Portal loads it too**, for the customer roster its sign-in directory is built from |
 | `onboarding-flow.js` | The onboarding flow's nine steps and the rules that gate them. Tested |
 | `customer-onboarding.html` | The nine-step onboarding flow a new customer signs up through |
 | `index.html` | The landing page the demo is opened from — one card per page, onboarding leading |
@@ -518,6 +522,13 @@ The destination is `PortalSeedData.PAYOUT_ACCOUNT` — **the customer's own
 account**, not `BANK_DETAILS`, which is PeakPower's *receiving* account for a
 deposit. It renders read-only: changing where money is paid out is a
 bank-details change the desk verifies, not a field on a withdrawal form.
+
+**Only a seeded account has one**, so `acctPayout()` returns `null` for every
+other company and the whole flow has to survive that: the topbar drops the
+Withdraw funds button, and `renderWalletWithdraw()` renders an empty card
+saying no payout account is on file rather than a form whose right-hand column
+is a null dereference. Hiding the button alone is not enough — a stale screen
+still asks.
 
 **Both amount fields patch on blur, never re-render.** `setTopupAmount()` and
 `setWithdrawAmount()` reformat their own `<input>` through
@@ -1616,29 +1627,104 @@ The portal shows **one account at a time**, and the avatar menu at the foot of
 the rail switches between the accounts this browser has signed in to.
 `ACCOUNTS` is the registry; `acct()` is the only way to reach the active one.
 
-**Only Vandersteen Koeling has fixtures.** It is marked `seeded: true` and
-`acctList(key)` hands it the matching `PortalSeedData` export; every other
-account gets `[]` from the same call. So "this account has none of that" is one
-branch in one place instead of a check on every screen, and no second account's
-data is invented to make it look busy.
+**Any account of any customer the desk has on its books can sign in.**
+`portal-accounts.js` builds `DIRECTORY` from `BackOfficeScreensData`'s own
+`CUSTOMER_LIST` and `buildCustomerDetail(c).accounts` — currently 18 sign-ins
+across 8 companies, and a company added to that roster becomes signed-in-able
+with no change here. That is why `customer-portal.html` loads
+`back-office-screens-data.js`: a second list of the same companies is a list
+that drifts. **Only `CUSTOMER_LIST` and `buildCustomerDetail()` are safe to
+call from the portal** — `buildAttentionItems()` dereferences
+`BackOfficeDeskData.TAG_STYLE`, and the portal does not load
+`back-office-desk-data.js`.
+
+**`ACCOUNTS` is keyed by the sign-in address, not by company.** Two colleagues
+at one company are two sign-ins showing the same company's data, and the menu
+lists both — a company-keyed map would let the second replace the first.
+`state.accountId` is therefore an email.
+
+**Only Vandersteen Koeling has fixtures.** `seeded` is `kvk ===
+PortalSeedData.CUSTOMER_ID` and `acctList(key)` hands a seeded account the
+matching `PortalSeedData` export; every other account gets `[]` from the same
+call. So "this account has none of that" is one branch in one place instead of
+a check on every screen, and no other company's data is invented to make it
+look busy. The same rule gives them a zero wallet, no metering
+(`datasetForAccount()`) and no payout account (`acctPayout()`).
 
 | | |
 |---|---|
-| Store | `peakpower.accounts.v1` — `{activeId, signedIn}`, same swallow-every-failure discipline as the other links: an unreadable value lands on the seeded account, never on an error |
-| Products | `peakpower.products.v2`, a **map keyed by account id**. v1 was a bare array for the single account this portal used to have; read one as the other and both directions yield garbage, so the key is bumped rather than migrated |
-| Adding one | "Add another account" opens an email + password form. `PORTAL_LOGINS` is the list of sign-ins the demo knows, and a wrong email and a wrong password are told apart — a form that says only "sign-in failed" cannot be acted on |
+| Store | `peakpower.accounts.v1` — `{activeId, signedIn}`, same swallow-every-failure discipline as the other links: an unreadable value lands on the seeded account, never on an error. **Not versioned up** when ids became emails: `readAccountSession()` already validates every stored id against `ACCOUNTS` and drops what it does not know, which is stronger than a version bump |
+| Products | `peakpower.products.v3`, a **map keyed by KvK**. v1 was a bare array for the single account this portal used to have and v2 was keyed by account id, which became per-person — and a product is bought by the company, not by whoever signed in. `productKey()` is the one place that resolves it |
+| Adding one | "Add another account" opens an email + password form. `PortalAccounts.findByEmail(DIRECTORY, …)` matches case-insensitively and trimmed, and a wrong email and a wrong password are told apart — a form that says only "sign-in failed" cannot be acted on |
 
-**This is not authentication.** `PORTAL_LOGINS` and `DEMO_PASSWORD` are a list
-shipped to the browser, in a portal whose every figure is synthetic. Nothing
-here is a credential and nothing is verified anywhere else; the form exists so
-the switch has a real shape, not so it protects anything.
+**This is not authentication.** `DIRECTORY` and `DEMO_PASSWORD` are shipped to
+the browser, in a portal whose every figure is synthetic. Nothing here is a
+credential and nothing is verified anywhere else; the form exists so the switch
+has a real shape, not so it protects anything.
+
+#### Deriving the address
+
+The mockup's seeded accounts carry a bare handle (`jdevries`), not an address,
+so `PortalAccounts.signInEmail(account, legalName)` is the one rule for both
+cases: **a stored address wins, otherwise derive.** A desk-created account
+already has one, because the Add customer wizard asks for it and
+`accountRowFrom()` stores it in `username`.
+
+- domain — the legal name folded to ASCII, its legal form dropped
+  (`LEGAL_FORMS`), joined, `+ ".nl"`: `Vandersteen Koeling B.V.` →
+  `vandersteenkoeling.nl`
+- local part — `first + "." + rest joined`: `J. de Vries` → `j.devries`
+- a blank name or company yields `""` and `buildDirectory()` drops that row
+  rather than emitting `@domain.nl`; a duplicate address stays with the company
+  that claimed it first
+
+**The desk renders the same function**, in the Customers detail's accounts
+table under a **SIGN-IN EMAIL** column (`customersAccountsCardHtml(d,
+legalName)`). That column is the only place an operator can see what a person
+signs in with, so deriving it twice would drift on the first rename — and the
+stored-address-wins branch would diverge at exactly the row that matters, a
+customer created a minute ago. The synthesised `username` on
+`buildCustomerDetail()`'s non-Vandersteen rows was deleted with it: it was
+never something anyone could sign in with.
+
+**That cell wraps, it does not truncate.** An ellipsis costs the column its only
+reason to exist, so it takes the widest of the six tracks, a `<wbr>` before the
+`@` (a wrapped address splits into two whole halves), and the card takes
+`flex:1.45` against Commercial settings' `flex:1`. At the original even split
+every address was hidden past its halfway point.
+
+**Known limits, all of them deliberate:**
+
+- **A customer created in the desk cannot sign in.** `state.newCustomers` is
+  page-local by design and `DIRECTORY` is built once at load, so the portal
+  never sees it. Persisting it would need a fourth versioned link.
+- **Roles are recorded, not enforced.** The directory brings in Traders and a
+  Viewer, and no screen gates on `acct().userRole` — the same position the
+  four-eyes setting takes.
+- **The desk's Wallets screen shows a balance for companies the portal shows at
+  zero.** That is `seeded` doing its job: a non-seeded account is genuinely
+  empty. Do not "fix" it by reading `WALLETS` into the portal.
+- Half the directory is mockup filler — `buildCustomerDetail()` synthesises a
+  second account per company as `"S. Finance"`, whose address is now
+  user-facing text on a sign-in screen.
 
 **`switchAccount()` has to do everything at once, in order.** Persist, reset,
 re-derive, then render:
 
-- the wallet trio, the ledger extras, the counters, `depositReserved` /
-  `depositResolved`, `products` and `trades` all belong to the account being
-  left — a figure carried over is one account's money read under another's name
+- **the money resets only when the *company* changes, not the person.**
+  Everything else identifying a company is keyed by KvK — the trade link
+  through `forThisAccount()`, the products through `productKey()`, the deposit
+  percentage through `depositPct()` — so a `sameCompany` switch keeps the
+  wallet trio, the ledger extras, the counters and
+  `depositReserved`/`depositResolved`. Resetting them would release deposits
+  still reserved against trades that stay on screen (spendable twice, and the
+  accept and withdraw guards both read the inflated figure) and leave
+  `reconcileDeposits()` with no record to settle when the desk answers
+- `products` and `trades` are re-derived either way; a figure carried across
+  companies is one account's money read under another's name
+- **switching to the account already showing returns early**, closing the menu.
+  `submitLogin()` calls this unconditionally, and without the guard signing in
+  as yourself would run the whole reset below for nothing
 - every open sub-view goes too (`connId`, `tradeId`, `settlementId`, the
   wizard, the wallet view, the ledger filter)
 - `usageProfiles` and `lastRender` are caches keyed by **site id, not account**
@@ -1649,6 +1735,9 @@ re-derive, then render:
 - `renderAccountMenu()` **and** `state.page` + `activatePageDom()`. Skip the
   first and `.account-scrim` stays over the viewport swallowing every click;
   skip the other two and the render lands in a hidden container
+- an id it does not recognise ends in `closeAccountMenu()`, **not** a bare
+  `return` — this is reached from the menu, and returning leaves that same
+  scrim behind
 
 **The demo clock stays global.** It is a wall-clock offset shared with the Back
 Office under `peakpower.demoClock.v1`; scoping it per account would break the
@@ -1660,12 +1749,19 @@ across all of them — scope the scan too and two accounts in one browser mint
 the same `TRD-` id, which `publish()` then updates in place, one overwriting
 the other.
 
-**Three separate reads had to be filtered, not one.** `customerId` was already
-on every published record (`buildRequest` stores it, `submitWizard` supplies
-it), so this is only the read side: `forThisAccount()` is applied in
-`syncLinkedTrades()` and in `liveTradeRecords()`. Filtering only the first
-leaves the Consumption hedge line, the hedge cost, the coverage figures and
-`MAX_SELECTABLE_DATE` still summing another account's confirmed trades.
+**Never call `PortalTradeLink.read()` directly — go through
+`liveTradeRecords()`.** `customerId` was already on every published record
+(`buildRequest` stores it, `submitWizard` supplies it), so this is only the
+read side, and `liveTradeRecords()` is the one place it reads the link, filters
+through `forThisAccount()` and swallows a storage failure. Every call site fails
+silently without it: `syncLinkedTrades()` and `confirmedBlocksForRange()` (or
+the Consumption hedge line, the hedge cost, the coverage figures and
+`MAX_SELECTABLE_DATE` sum another company's confirmed trades),
+`outstandingBalances()` (the Wallet's outstanding table, the Dashboard's card
+and banner, `overdueCount()` and the withdrawal guard), `depositsOnHoldLabel()`,
+`payTradeBalance()` and `respondToOffer()` — the last two look a trade up **by
+id across the whole link**, so an unfiltered read pays or accepts against a
+record belonging to another company.
 
 **`portal-trade-link.js` no longer hardcodes the user.** `requestedBy` rides on
 the record, and `respondToOffer()` / `payBalance()` take `by` from the caller —
@@ -1674,12 +1770,14 @@ would file one account's decision under another account's name.
 
 ### An account with no data
 
-A second account is genuinely empty, and every screen says so in its own words
-rather than rendering furniture:
+Most accounts are genuinely empty — only the seeded company has fixtures, so
+14 of the 18 sign-ins land here. Every screen says so in its own words rather
+than rendering furniture:
 
 | Screen | Shows |
 |---|---|
-| Dashboard | a welcome card naming what is missing, plus the price tiles — the forward curve is market data, not account data |
+| Dashboard | a welcome card naming what is missing, plus the price tiles — the forward curve is market data, not account data. They render in the populated screen's own `.price-card-grid` six-across; a `.price-tiles` class no stylesheet defined stacked them full-width |
+| Prices | the six cards and the trend, with an amber banner saying no connections are registered — and **no "Request a price →" links**. `startWizardFromPrice()` still guards itself, but a link whose handler runs and changes nothing reads as a broken page |
 | Connections, Trading, Settlements | one `emptyCardHtml()` each |
 | Consumption | `statusCardHtml("No connections", …)`, and `setConsumptionChromeVisible(false)` hides the two chart cards and the interval table |
 | Wallet | € 0,00 across the three cards, and a first-deposit prompt instead of the low-balance alert — a wallet that was never funded is not "below its alert", nothing has gone wrong yet |
@@ -1700,7 +1798,7 @@ the presets, the zoom buttons and Export when the account has no data, so
 neither path is reachable.
 
 **The wizard needs a connection to cover.** `canRequestTrade()` gates all four
-"Request a trade" entry points on there being one — `requireFutureTrading()`
+"Request a trade" entry points and the Prices cards' six links on there being one — `requireFutureTrading()`
 checks the product only, and without this the wizard is fully operable on an
 empty account and files a request at the desk with an empty roster.
 
@@ -1743,7 +1841,8 @@ Three rules worth keeping:
   click. That was a real bug, caught only by a click test.
 
 Products **persist in this browser, per account**, under
-`peakpower.products.v2` (`readProducts(id)` / `writeProducts(id, ids)`), so a
+`peakpower.products.v3` (`readProducts(id)` / `writeProducts(id, ids)`, keyed by
+the account's KvK), so a
 demo does not begin by switching Future Trading on again — and switching
 account switches which products are active with it. It is not a cross-portal link — this is the customer
 switching a product on themselves, not a term the desk sets — and it keeps the
@@ -2036,6 +2135,111 @@ The confirm ledger row's amount is **€ 0,00** — it nets to no change in
 available, the same as the seeded `TRD-1051` confirmation row, because the
 money left available at reservation, not now. What it does move is the settled
 balance.
+
+## Adding a connection
+
+A metering point is **found, never typed**. `ean-registry.js` holds the pool of
+points registered with the grid operators and not yet on any customer, the
+search over it, and the record of who took which — and both portals add a
+connection through it.
+
+```
+Customer Portal · Connections · Add connection  --claim-->  peakpower.eanClaims.v1
+Back Office · Customers · Add connection / wizard step 2  --claim-->  (same key)
+```
+
+**The pool is shared, so a claim is final for both.** A point taken in one
+portal is gone from the other's search on its next read — verified by claiming
+in each direction. That is the whole reason the EAN is not a text field: an EAN
+either exists and is free, or it does not, and letting either portal invent one
+would make "unassigned" mean nothing.
+
+### The search
+
+`EanRegistry.search(rows, query)` reads what was typed through `parseQuery()`:
+
+| Typed | Read as | Matches |
+|---|---|---|
+| `871687100000000130`, `8716 8710 0000`, `000000163` | EAN (digits only) | any point whose EAN contains those digits |
+| `8232DP`, `8232 dp` | postcode | every point on it |
+| `8232DP 24`, `8232 dp 24` | postcode + house number | the one point |
+| `Rotterdam`, `Pekstraat` | free text | street or city |
+| *(empty)* | — | **everything**, so the pool can be browsed |
+
+Digits alone are an EAN because nothing else in this data is a bare number that
+long. A Dutch postcode is four digits and two letters, and `normalisePostcode()`
+folds `3514 uh` and `3514UH` together, so the space is never the reason a search
+misses.
+
+An empty query returning the whole pool is deliberate: a demo where you have to
+already know an EAN before anything appears is not a demo.
+
+### Claiming
+
+`claim(storage, ean, owner)` **refuses a point that is not in the pool or that
+someone already holds**, and returns `null` rather than throwing — so the check
+is in the registry, not in whichever button was clicked, and a screen that sat
+open while the other portal took the point cannot claim it anyway. Same
+transport and the same failure discipline as the trade and terms links: one
+versioned key (`peakpower.eanClaims.v1`) and every read problem landing on
+"nothing claimed".
+
+### Customer Portal
+
+`state.connectionsView` is `list` or `add` on the same screen, and
+`state.eanQuery` is what was typed. **The search field is patched in place**
+(`refreshEanResults()` writes `#ean-results` only) — a re-render would rebuild
+the `<input>` mid-keystroke, the rule the wallet's amount fields and the wizard's
+volume field already follow.
+
+**Read `acctConnections()`, never `acctList("CONNECTIONS")`.** That helper is
+the one place the seeded fixtures and the claimed points are joined; going
+around it drops every added connection out of the list, the detail, the wizard's
+roster, the counts and the published request. `connectionFromClaim()` converts a
+claimed row into the shape those screens already render.
+
+Two things a claimed point does not have, and both say so rather than borrowing
+the fixtures' answer:
+
+- **No delivery history.** The detail's Data quality card is one reading of
+  fourteen delivered days — the strip, the correction notice and the interval
+  count are one claim — so an empty `dq` renders "no data has arrived yet"
+  instead of fourteen blank cells under a seeded month's story.
+- **No name.** It reads as its street and number (`Pekstraat 24`) until the
+  customer names it, and `autoNamed` is what makes the labels card say so. The
+  seeded unnamed connection still says "— no name set —": it has nothing else to
+  go on, a point picked by address does.
+
+### Back Office
+
+Both places the desk adds a connection — the customer detail's **Add
+connection** and the new-customer wizard's **step 2** — open the same picker
+(`state.eanPicker = {target, query}`), and picking fills a row rather than
+opening a blank one. `startDetailRow('connections')` redirects into it;
+`addCustomerRow()` now serves accounts only.
+
+**EAN, address and commodity are read-only on the row** — they are the metering
+point's own facts and arrive with it. The desk names the connection and sets the
+date it starts on, which are the customer's. `wizardControlHtml()` renders a
+read-only field as text, not as a disabled input: a disabled input invites a
+click that does nothing.
+
+**`pendingEans()` is why the same point cannot be picked twice.** Nothing is
+claimed until the customer is created or the row saved, so rows already sitting
+in the draft (or already on the customer) are filtered out of the picker by
+hand; without it a point could be picked twice and refused only on the way out.
+
+**`prefilledCustomerDraft()` takes its connections from the pool as it stands**
+(`prefillConnections(2)`), for the same reason its KvK walks with the number of
+customers created: a fixed pair is refused the second time the toggle is used in
+a session, which reads as the toggle being broken rather than the validation
+working.
+
+**Known limit:** the desk can only add a connection to a customer *it created on
+this page* (`c.isNew`), and those customers are page-local, so a desk-assigned
+point never appears in the Customer Portal. What does cross over is the pool
+shrinking. Assigning to a seeded customer would need `METERING` to stop being a
+fixture.
 
 ## Cross-portal trade flow
 

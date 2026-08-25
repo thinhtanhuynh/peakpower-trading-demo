@@ -114,7 +114,10 @@
   .account-pop .ap-item-label { font-size:12.5px; font-weight:600; color:var(--pp-text-heading); }
   .account-pop .ap-item-sub { font-size:10.5px; color:var(--pp-text-faint); margin-top:2px; }
   .account-pop .ap-chevron { font-size:12px; color:var(--pp-text-faint); }
-  .account-pop .ap-section { border-bottom:1px solid var(--pp-border); padding:6px 0; }
+  /* Scrolls at about six accounts. The popover grows upwards from the rail's
+     foot, so an unbounded list runs off the top of the window and takes "Add
+     another account" with it — the one row you need to reach it. */
+  .account-pop .ap-section { border-bottom:1px solid var(--pp-border); padding:6px 0; max-height:264px; overflow-y:auto; }
   .account-pop .ap-account { display:flex; align-items:center; gap:10px; padding:9px 14px; cursor:pointer; }
   .account-pop .ap-account:hover { background:var(--pp-surface-alt); }
   /* The account already showing is not a thing to click. */
@@ -1197,6 +1200,11 @@
 <script src="consumption-data-loader.js"></script>
 <script src="usage-projection.js"></script>
 <script src="portal-seed-data.js"></script>
+<!-- The customer roster the desk owns, read here rather than kept a second
+     time: two lists of the same companies is one list that drifts. -->
+<script src="back-office-screens-data.js"></script>
+<script src="portal-accounts.js"></script>
+<script src="ean-registry.js"></script>
 <script src="portal-trade-link.js"></script>
 <script src="portal-terms-link.js"></script>
 <script src="portal-demo-clock.js"></script>
@@ -1359,54 +1367,56 @@
   // like. Nothing is fabricated to make a second account look busy.
 
   /**
-   * The sign-ins this demo knows. Email is the login (the Back Office's own
-   * new-customer flow says so), and the password is checked so the form does
-   * something real rather than accepting anything typed into it.
+   * Every sign-in this portal knows: one per person, across every company the
+   * desk has on its books. Derived from the desk's own customer roster and its
+   * own per-customer accounts, so a company it knows about can always be
+   * signed in to and the two portals cannot disagree about who exists.
    *
-   * This is NOT authentication: it is a lookup in a list shipped to the
-   * browser, in a portal whose every figure is synthetic. Nothing here is a
-   * credential and nothing is verified anywhere else.
+   * The password is checked so the form does something real rather than
+   * accepting anything typed into it. This is NOT authentication: it is a
+   * lookup in a list shipped to the browser, in a portal whose every figure is
+   * synthetic. Nothing here is a credential and nothing is verified anywhere.
    */
-  var DEMO_PASSWORD = "peakpower";
-  var PORTAL_LOGINS = [
-    { email: "j.devries@vandersteen.nl", accountId: "vandersteen" },
-    { email: "s.kramer@kramerlogistics.nl", accountId: "kramer" },
-    { email: "m.vandijk@vandijkglas.nl", accountId: "vandijk" }
-  ];
+  var DEMO_PASSWORD = PortalAccounts.DEMO_PASSWORD;
+  var DIRECTORY = PortalAccounts.buildDirectory(
+    BackOfficeScreensData.CUSTOMER_LIST,
+    function (c) { return BackOfficeScreensData.buildCustomerDetail(c).accounts; });
 
   /**
-   * Every account this portal can show. `seeded` marks the one the shipped
-   * fixtures belong to; the others carry empty slices of the same shape, so
-   * every screen reads the same fields whichever account is active.
+   * The same people, as the records every screen reads through acct().
+   *
+   * Keyed by the sign-in address, because two colleagues at one company are
+   * two sign-ins showing the same company's data — a company-keyed map would
+   * make the second one replace the first in the account list.
+   *
+   * `seeded` marks the one company the shipped fixtures belong to; every other
+   * account carries empty slices of the same shape, so each screen reads the
+   * same fields whichever account is active.
    */
-  var ACCOUNTS = {
-    vandersteen: {
-      id: "vandersteen", seeded: true,
-      legalName: "Vandersteen Koeling B.V.", customerName: "Vandersteen Koeling",
-      kvk: PortalSeedData.CUSTOMER_ID,
-      userName: "J. de Vries", userRole: "Admin", initials: "JV",
-      walletAvailable: PortalSeedData.WALLET_AVAILABLE_BALANCE, walletSettled: 29122.00, walletReserved: 9400.00,
-      seededDepositsOnHold: 1
-    },
-    kramer: {
-      id: "kramer", seeded: false,
-      legalName: "Kramer Logistics B.V.", customerName: "Kramer Logistics",
-      kvk: "68812340",
-      userName: "S. Kramer", userRole: "Admin", initials: "SK",
-      walletAvailable: 0, walletSettled: 0, walletReserved: 0,
-      seededDepositsOnHold: 0
-    },
-    vandijk: {
-      id: "vandijk", seeded: false,
-      legalName: "Van Dijk Glastuinbouw B.V.", customerName: "Van Dijk Glastuinbouw",
-      kvk: "70012399",
-      userName: "M. van Dijk", userRole: "Admin", initials: "MD",
-      walletAvailable: 0, walletSettled: 0, walletReserved: 0,
-      seededDepositsOnHold: 0
-    }
-  };
+  var ACCOUNTS = {};
+  DIRECTORY.forEach(function (entry) {
+    var seeded = entry.kvk === PortalSeedData.CUSTOMER_ID;
+    ACCOUNTS[entry.email] = {
+      seeded: seeded,
+      legalName: entry.legalName, customerName: entry.customerName,
+      kvk: entry.kvk,
+      userName: entry.userName, userRole: entry.userRole, initials: entry.initials,
+      walletAvailable: seeded ? PortalSeedData.WALLET_AVAILABLE_BALANCE : 0,
+      walletSettled: seeded ? 29122.00 : 0,
+      walletReserved: seeded ? 9400.00 : 0,
+      seededDepositsOnHold: seeded ? 1 : 0
+    };
+  });
 
-  var DEFAULT_ACCOUNT_ID = "vandersteen";
+  /** The seeded company's first account — the one the fixtures were written for. */
+  var DEFAULT_ACCOUNT_ID = (DIRECTORY.filter(function (e) {
+    return e.kvk === PortalSeedData.CUSTOMER_ID;
+  })[0] || DIRECTORY[0]).email;
+
+  /** An account at some other company, for the sign-in form's own example. */
+  var EXAMPLE_LOGIN = DIRECTORY.filter(function (e) {
+    return e.kvk !== PortalSeedData.CUSTOMER_ID;
+  })[0] || DIRECTORY[0];
 
   /** The active account's record. Never returns undefined. */
   function acct() { return ACCOUNTS[state.accountId] || ACCOUNTS[DEFAULT_ACCOUNT_ID]; }
@@ -1438,10 +1448,12 @@
   // default rather than throwing, and a write that cannot happen is not an
   // error the customer needs to see.
   //
-  // v2, keyed by account id. v1 was a bare array for the single account this
-  // portal used to have; reading one as the other yields garbage in both
-  // directions, so the key is bumped rather than migrated.
-  var PRODUCTS_KEY = "peakpower.products.v2";
+  // v3, keyed by KvK. v1 was a bare array for the single account this portal
+  // used to have and v2 was keyed by account id, which became per-person once
+  // a company could have several sign-ins — and a product is bought by the
+  // company, not by whoever signed in. Reading one shape as another yields
+  // garbage in every direction, so the key is bumped rather than migrated.
+  var PRODUCTS_KEY = "peakpower.products.v3";
   var DEFAULT_PRODUCTS = ["day-ahead"];
 
   function readProductMap() {
@@ -1455,15 +1467,21 @@
     }
   }
 
+  /** The company an account belongs to — two colleagues hold the same products. */
+  function productKey(accountId) {
+    var a = ACCOUNTS[accountId];
+    return a ? a.kvk : "";
+  }
+
   function readProducts(accountId) {
-    var forAccount = readProductMap()[accountId];
-    if (!Array.isArray(forAccount)) { return DEFAULT_PRODUCTS.slice(); }
-    return forAccount.filter(function (id) { return typeof id === "string"; });
+    var forCompany = readProductMap()[productKey(accountId)];
+    if (!Array.isArray(forCompany)) { return DEFAULT_PRODUCTS.slice(); }
+    return forCompany.filter(function (id) { return typeof id === "string"; });
   }
 
   function writeProducts(accountId, ids) {
     var map = readProductMap();
-    map[accountId] = ids;
+    map[productKey(accountId)] = ids;
     try { window.localStorage.setItem(PRODUCTS_KEY, JSON.stringify(map)); } catch (e) { /* private mode / quota */ }
   }
 
@@ -1509,6 +1527,8 @@
     // the "Add another account" form is open.
     loginForm: null,
     page: "Dashboard", connId: null,
+    // "list" or "add" — the unassigned-EAN search lives on the same screen.
+    connectionsView: "list", eanQuery: "",
     tradingView: "list", tradeId: null, wizardStep: 0,
     walletView: "ledger",
     walletAvailable: ACCOUNTS[ACCOUNT_SESSION.activeId].walletAvailable,
@@ -1622,7 +1642,7 @@
         if (!other) { return ""; }
         var isActive = id === state.accountId;
         return '<div class="ap-account' + (isActive ? " active" : "") + '"' +
-          (isActive ? "" : ' onclick="PP.switchAccount(\'' + id + '\')"') + '>' +
+          (isActive ? "" : ' onclick="PP.switchAccount(\'' + esc(id) + '\')"') + '>' +
           '<div class="avatar sm">' + esc(other.initials) + '</div>' +
           '<div style="flex:1;min-width:0"><div class="ap-item-label">' + esc(other.legalName) + '</div>' +
           '<div class="ap-item-sub">' + esc(other.userName) + ' &middot; ' + esc(other.userRole) + '</div></div>' +
@@ -1676,8 +1696,9 @@
           '<button type="button" class="btn-primary btn-sm" onclick="PP.submitLogin()">Sign in</button>' +
           '<button type="button" class="btn-secondary btn-sm" onclick="PP.cancelLoginForm()">Cancel</button>' +
         '</div>' +
-        '<div class="caption" style="line-height:1.5">Demo only — these sign-ins are a list shipped with the page, not real authentication. ' +
-          'Try <b>' + esc(PORTAL_LOGINS[1].email) + '</b> with password <b>' + esc(DEMO_PASSWORD) + '</b>.</div>' +
+        '<div class="caption" style="line-height:1.5">Demo only — these sign-ins are a directory shipped with the page, not real authentication. ' +
+          'Any account of any customer on the desk works; try <b>' + esc(EXAMPLE_LOGIN.email) +
+          '</b> with password <b>' + esc(DEMO_PASSWORD) + '</b>.</div>' +
       '</div>';
   }
 
@@ -1728,8 +1749,12 @@
   }
 
   /**
-   * "Sign in" to another company: look the email up, check the password, add
-   * the account and switch to it.
+   * "Sign in" to another company: look the email up in the directory, check the
+   * password, add the account and switch to it.
+   *
+   * Any account of any company the desk knows about works — the directory is
+   * every one of them, not a hand-written shortlist, so a company added to the
+   * roster is signed-in-able with no change here.
    *
    * A wrong email and a wrong password are told apart, because a form that
    * says only "sign-in failed" cannot be acted on. Signing in to an account
@@ -1739,19 +1764,19 @@
     var f = state.loginForm;
     if (!f) { return; }
     var email = String(f.email || "").trim().toLowerCase();
-    var match = PORTAL_LOGINS.filter(function (l) { return l.email === email; })[0];
+    var match = PortalAccounts.findByEmail(DIRECTORY, email);
     var fail = function (msg) {
       state.loginForm.error = msg;
       var err = document.getElementById("login-error");
       if (err) { err.textContent = msg; err.style.display = ""; }
     };
     if (!email) { return fail("Enter the email that account signs in with."); }
-    if (!match || !ACCOUNTS[match.accountId]) { return fail("No account found for that email."); }
+    if (!match || !ACCOUNTS[match.email]) { return fail("No account found for that email."); }
     if (String(f.password || "") !== DEMO_PASSWORD) { return fail("That password is not right for this account."); }
 
-    if (state.signedInIds.indexOf(match.accountId) === -1) { state.signedInIds.push(match.accountId); }
+    if (state.signedInIds.indexOf(match.email) === -1) { state.signedInIds.push(match.email); }
     state.loginForm = null;
-    switchAccount(match.accountId);
+    switchAccount(match.email);
   }
 
   /**
@@ -1764,23 +1789,42 @@
    * and only then render.
    */
   function switchAccount(id) {
-    if (!ACCOUNTS[id]) { return; }
+    // Closing on the way out, not a bare return: this is reached from the
+    // account menu, and the menu's `.account-scrim` covers the whole viewport
+    // — left behind by an id that no longer exists, it swallows every later
+    // click with nothing on screen to explain it.
+    if (!ACCOUNTS[id]) { closeAccountMenu(); return; }
+    // Already showing: switching to yourself would run the whole reset below
+    // and throw away this session's wallet movements for nothing.
+    if (id === state.accountId) { closeAccountMenu(); return; }
     var a = ACCOUNTS[id];
+    // A colleague at the same company is the same wallet. Everything else that
+    // identifies a company is keyed by KvK — the trade link through
+    // forThisAccount(), the products through productKey(), the deposit
+    // percentage through depositPct() — so resetting the money on a
+    // same-company switch would release deposits still reserved against trades
+    // that stay on screen, and leave reconcileDeposits() with no record of
+    // them to settle.
+    var sameCompany = a.kvk === acct().kvk;
     state.accountId = id;
     writeAccountSession();
 
-    state.walletAvailable = a.walletAvailable;
-    state.walletSettled = a.walletSettled;
-    state.walletReserved = a.walletReserved;
-    state.walletLedgerExtra = [];
-    state.topupCount = 0; state.topupAmount = 0; state.lastTopup = null;
-    state.withdrawalCount = 0; state.withdrawAmount = 0; state.lastWithdrawal = null;
-    state.depositReserved = {}; state.depositResolved = {};
+    if (!sameCompany) {
+      state.walletAvailable = a.walletAvailable;
+      state.walletSettled = a.walletSettled;
+      state.walletReserved = a.walletReserved;
+      state.walletLedgerExtra = [];
+      state.topupCount = 0; state.lastTopup = null;
+      state.withdrawalCount = 0; state.lastWithdrawal = null;
+      state.depositReserved = {}; state.depositResolved = {};
+    }
+    state.topupAmount = 0; state.withdrawAmount = 0;
     state.products = readProducts(id);
     state.trades = [];
 
     // Every open sub-view belonged to the account being left.
     state.connId = null; state.tradeId = null; state.settlementId = null;
+    state.connectionsView = "list"; state.eanQuery = "";
     state.tradingView = "list"; state.wizardStep = 0; state.wizard = null;
     state.walletView = "ledger"; state.ledgerFilter = 0;
     state.chartZoom = 1; state.hoverBar = null;
@@ -1838,6 +1882,7 @@
   function resetSubViewsFor(pageCap) {
     state.page = pageCap; state.connId = null; state.tradingView = "list"; state.tradeId = null;
     state.settlementId = null; state.wizardStep = 0; state.walletView = "ledger";
+    state.connectionsView = "list"; state.eanQuery = "";
   }
 
   function goTo(pageCap) {
@@ -1955,7 +2000,58 @@
    * four connections when it covered six.
    */
   function tradableConnections() {
-    return acctList("CONNECTIONS").filter(function (c) { return !c.notTradeable; });
+    return acctConnections().filter(function (c) { return !c.notTradeable; });
+  }
+
+  /**
+   * Every metering point on this account: the seeded fixtures plus every point
+   * claimed from the unassigned pool.
+   *
+   * One list, so a point the customer just added is a connection *everywhere* —
+   * the list, the detail, the wizard's roster, the counts, the published
+   * request — rather than only on the screen that added it. Read it instead of
+   * `acctList("CONNECTIONS")`, which is the seeded half alone.
+   */
+  function acctConnections() {
+    return acctList("CONNECTIONS").concat(claimedConnections());
+  }
+
+  function readEanClaims() {
+    if (typeof window === "undefined" || !window.localStorage) { return {}; }
+    return EanRegistry.read(window.localStorage);
+  }
+
+  /** A claimed pool row in the shape every connection screen already renders. */
+  function connectionFromClaim(c) {
+    var named = String(c.name || "").trim();
+    var gas = c.commodity !== "Electricity";
+    return {
+      id: "ean-" + c.ean,
+      // Its address until the customer names it. "— no name set —" is what the
+      // seeded unnamed connection says, but that one has nothing else to go on;
+      // a point picked by address a moment ago does, and a list row reading
+      // "Pekstraat 24" is the difference between a usable list and six blanks.
+      name: named || (c.street + " " + c.houseNumber),
+      autoNamed: !named,
+      ean: EanRegistry.formatEan(c.ean),
+      commodity: c.commodity,
+      notTradeable: gas,
+      status: gas ? "Not tradeable" : "Active",
+      statusTone: gas ? "neutral" : "success",
+      // A point registered a moment ago has no delivery history, and the
+      // detail's data-quality strip is driven by `dq` — empty means say so
+      // rather than render fourteen "none" cells and a correction notice.
+      latestDate: "—", latestNote: "no data yet", volume: "—", coverage: null,
+      description: "—", gridOperator: c.gridOperator,
+      capacity: c.capacityKw ? ConsumptionCalc.formatNL(c.capacityKw, 0) + " kW" : "—",
+      address: EanRegistry.formatAddress(c),
+      activeSince: c.claimedAt || "—", contractUntil: "open-ended", lastChanged: "—",
+      dq: []
+    };
+  }
+
+  function claimedConnections() {
+    return EanRegistry.claimsFor(readEanClaims(), acct().kvk).map(connectionFromClaim);
   }
 
   /**
@@ -1966,7 +2062,7 @@
    * connections on an account that has none.
    */
   function connectionCountLabel(detailed) {
-    var all = acctList("CONNECTIONS");
+    var all = acctConnections();
     if (!all.length) { return "No connections yet"; }
     var power = all.filter(function (c) { return !c.notTradeable; }).length;
     var gas = all.length - power;
@@ -2452,6 +2548,8 @@
   window.PP = {
     goTo: goTo, goToConsumption: goToConsumption, viewTradeOnChart: viewTradeOnChart,
     openConnection: openConnection, closeConnection: closeConnection,
+    startAddConnection: startAddConnection, cancelAddConnection: cancelAddConnection,
+    onEanQueryInput: onEanQueryInput, addConnection: addConnection,
     openTrade: openTrade, backToTrades: backToTrades,
     startWizard: startWizard, startWizardFromPrice: startWizardFromPrice,
     startWizardFromConnection: startWizardFromConnection, cancelWizard: cancelWizard,
@@ -2528,7 +2626,7 @@
    * place so the wizard's cards and the request it publishes can't drift.
    */
   function connectionEan(id) {
-    var c = acctList("CONNECTIONS").filter(function (x) { return x.id === id; })[0];
+    var c = acctConnections().filter(function (x) { return x.id === id; })[0];
     return c ? c.ean : "";
   }
 
@@ -2541,9 +2639,7 @@
    * debt, and a rejected or failed one never became one.
    */
   function outstandingBalances() {
-    var live;
-    try { live = PortalTradeLink.read(window.localStorage) || []; } catch (e) { return []; }
-    return live.filter(function (r) {
+    return liveTradeRecords().filter(function (r) {
       if (!r.settlement || r.settlement.paidAt) { return false; }
       var st = PortalTradeLink.effectiveStatus(r, nowForLink());
       return st === PortalTradeLink.STATUS_ACCEPTED || st === PortalTradeLink.STATUS_CONFIRMED;
@@ -2566,9 +2662,7 @@
    */
 
   function depositsOnHoldLabel() {
-    var live = [];
-    try { live = PortalTradeLink.read(window.localStorage) || []; } catch (e) { /* seed count only */ }
-    var n = acct().seededDepositsOnHold + live.filter(function (r) {
+    var n = acct().seededDepositsOnHold + liveTradeRecords().filter(function (r) {
       return PortalTradeLink.depositState(r) === "on-hold";
     }).length;
     return n + " accepted trade" + (n === 1 ? "" : "s") + " awaiting confirmation";
@@ -2586,9 +2680,7 @@
    * there is an unpaid balance at all, so a stale screen cannot pay twice.
    */
   function payTradeBalance(id) {
-    var list;
-    try { list = PortalTradeLink.read(window.localStorage) || []; } catch (e) { return; }
-    var req = list.filter(function (r) { return r.id === id; })[0];
+    var req = liveTradeRecords().filter(function (r) { return r.id === id; })[0];
     if (!req || !req.settlement || req.settlement.paidAt) { return; }
     var amount = req.settlement.balanceEur || 0;
     if (amount > state.walletAvailable) { return; }   // the button is disabled too
@@ -2619,11 +2711,7 @@
    * re-syncs and the trade shows as expired.
    */
   function respondToOffer(id, action) {
-    var list;
-    try {
-      list = PortalTradeLink.read(window.localStorage);
-    } catch (e) { return; }
-    var req = list.filter(function (r) { return r.id === id; })[0];
+    var req = liveTradeRecords().filter(function (r) { return r.id === id; })[0];
     if (!req) { return; }
     // The schedule is built here, at the moment of acceptance, from the
     // percentage in force right now — and then frozen on the record. A Sell
@@ -2916,15 +3004,19 @@
     } else if (page === "Dashboard") {
       setCrumb(acct().legalName + " · " + connectionCountLabel());
     } else if (page === "Connections" && state.connId) {
-      var conn = acctList("CONNECTIONS").filter(function (c) { return c.id === state.connId; })[0];
+      var conn = acctConnections().filter(function (c) { return c.id === state.connId; })[0];
       title = conn ? conn.name : "Connections";
       setCrumb("EAN " + (conn ? conn.ean : ""), "Connections", "closeConnection");
       // No topbar "Request a trade" here: the mockup's version started a blank
       // wizard, which would silently discard the connection you are looking at.
       // The one below the block-positions table carries this connection through.
+    } else if (page === "Connections" && state.connectionsView === "add") {
+      title = "Add connection";
+      setCrumb("Unassigned metering points", "Connections", "cancelAddConnection");
     } else if (page === "Connections") {
       setCrumb(connectionCountLabel(true));
-      actionsHtml = '<button type="button" class="btn-secondary" onclick="PP.noop()">Export CSV</button>';
+      actionsHtml = '<button type="button" class="btn-primary" onclick="PP.startAddConnection()">Add connection</button>' +
+        '<button type="button" class="btn-secondary" onclick="PP.noop()">Export CSV</button>';
     } else if (page === "Prices") {
       setCrumb("Dutch power · indicative only");
     } else if (page === "Trading" && state.tradingView === "detail") {
@@ -2953,7 +3045,9 @@
     } else if (page === "Wallet") {
       setCrumb(acct().legalName + " · EUR");
       actionsHtml = '<button type="button" class="btn-primary" onclick="PP.topUpWallet()">Deposit funds</button>' +
-        '<button type="button" class="btn-secondary" onclick="PP.withdrawFunds()">Withdraw funds</button>';
+        (acctPayout()
+          ? '<button type="button" class="btn-secondary" onclick="PP.withdrawFunds()">Withdraw funds</button>'
+          : "");
     } else if (page === "Settlements" && state.settlementId) {
       var inv = acctList("SETTLEMENTS").filter(function (x) { return x.id === state.settlementId; })[0];
       title = inv ? "Settlement " + inv.id : "Settlements";
@@ -3190,14 +3284,17 @@
     // An account with no connections has no position to summarise, and the
     // hero's figures are seeded ones belonging to the seeded account — see
     // dashboardHeroHtml. Say what is missing and what to do about it instead.
-    if (!acctList("CONNECTIONS").length) {
+    if (!acctConnections().length) {
       document.getElementById("dashboard-body").innerHTML =
         emptyCardHtml("Welcome to " + acct().legalName,
           "Nothing is trading on this account yet",
           "This account has no connections yet, so there is no position to show. PeakPower adds your " +
           "metering points once they are registered — consumption, trades and settlements start from there.") +
+        // The same six-across grid the populated Dashboard uses. `.price-tiles`
+        // was a class no stylesheet defines, so the tiles stacked full-width.
         cardHtml("Price indications", "Indicative only — not an offer",
-          '<div class="price-tiles">' + acctPriceTilesHtml() + '</div>');
+          '<div class="price-card-grid" style="grid-template-columns:repeat(6,1fr);gap:10px">' +
+            acctPriceTilesHtml() + '</div>');
       return;
     }
     var pending = state.trades.filter(function (t) { return t.pending; })[0];
@@ -3308,15 +3405,18 @@
 
   function renderConnectionsPage() {
     if (state.connId) { renderConnectionDetail(); return; }
+    if (state.connectionsView === "add") { renderConnectionsAdd(); return; }
 
     var cols = "2.2fr 1fr 1fr 1.3fr 1fr 1.4fr";
     var head = '<div class="gt-head" style="grid-template-columns:' + cols + '"><div>CONNECTION</div><div>COMMODITY</div><div>STATUS</div>' +
       '<div>LATEST DATA</div><div class="gt-cell-num">AUGUST VOLUME</div><div class="gt-cell-num">BLOCK COVERAGE</div></div>';
-    var connections = acctList("CONNECTIONS");
+    var connections = acctConnections();
     if (!connections.length) {
       document.getElementById("connections-body").innerHTML = emptyCardHtml("Connections",
         "Metering points on this account",
-        "No connections on this account yet. PeakPower adds them once your metering points are registered.");
+        "No connections on this account yet. Add the metering point you want to trade on — " +
+        "you will need its EAN code, or its postcode and house number.",
+        '<button type="button" class="btn-primary" onclick="PP.startAddConnection()">Add connection</button>');
       return;
     }
     var rows = connections.map(function (c) {
@@ -3347,14 +3447,126 @@
     document.getElementById("connections-body").innerHTML = topRow + table + banner + caption;
   }
 
+  // --- Connections: adding one from the unassigned pool ---------------------
+
+  var ADD_CONN_COLS = "1.5fr 2.1fr 0.9fr 0.9fr 0.8fr 0.9fr";
+
+  /**
+   * The metering points still free to take, matched against what was typed.
+   *
+   * Available first, then searched: a point someone claimed a moment ago is
+   * gone from the results whichever portal took it, rather than being offered
+   * and then refused on the click.
+   */
+  function eanSearchResults() {
+    return EanRegistry.search(EanRegistry.availableRows(readEanClaims()), state.eanQuery);
+  }
+
+  function eanResultsHtml() {
+    var rows = eanSearchResults();
+    var typed = String(state.eanQuery || "").trim();
+    if (!rows.length) {
+      return '<div class="empty-state">No unassigned connection matches ' +
+        (typed ? '“' + esc(typed) + '”' : "that") +
+        '. Check the EAN code, or the postcode and house number.</div>';
+    }
+    var head = '<div class="gt-head" style="grid-template-columns:' + ADD_CONN_COLS + '">' +
+      '<div>EAN</div><div>ADDRESS</div><div>COMMODITY</div><div>GRID OPERATOR</div>' +
+      '<div class="gt-cell-num">CAPACITY</div><div></div></div>';
+    var body = rows.map(function (r) {
+      return '<div class="gt-row" style="grid-template-columns:' + ADD_CONN_COLS + '">' +
+        '<div class="gt-mono">' + esc(EanRegistry.formatEan(r.ean)) + '</div>' +
+        '<div>' + esc(EanRegistry.formatAddress(r)) + '</div>' +
+        '<div>' + esc(r.commodity) + '</div>' +
+        '<div>' + esc(r.gridOperator) + '</div>' +
+        '<div class="gt-cell-num">' + (r.capacityKw ? ConsumptionCalc.formatNL(r.capacityKw, 0) + " kW" : "—") + '</div>' +
+        '<div style="text-align:right"><button type="button" class="btn-primary btn-sm" onclick="PP.addConnection(\'' +
+          esc(r.ean) + '\')">Add</button></div>' +
+        '</div>';
+    }).join("");
+    return '<div class="grid-table">' + head + '<div class="gt-scroll">' + body + '</div></div>' +
+      '<div class="caption" style="margin-top:10px">' + rows.length + ' of ' +
+      EanRegistry.availableRows(readEanClaims()).length + ' unassigned connections shown.</div>';
+  }
+
+  /**
+   * Patched in place, never re-rendered — a full render rebuilds the `<input>`
+   * mid-keystroke and takes the caret with it, the same rule the wallet's
+   * amount fields and the wizard's volume field follow.
+   */
+  function refreshEanResults() {
+    var el = document.getElementById("ean-results");
+    if (el) { el.innerHTML = eanResultsHtml(); }
+  }
+
+  function onEanQueryInput(value) {
+    state.eanQuery = value;
+    refreshEanResults();
+  }
+
+  function renderConnectionsAdd() {
+    var searchCard = cardHtml("Find a connection", "Search by EAN code, or by postcode and house number",
+      '<input id="ean-query" type="text" class="search-input" style="width:100%;max-width:420px" ' +
+        'value="' + esc(state.eanQuery || "") + '" autocomplete="off" ' +
+        'placeholder="871687100000000130  or  8232DP 24" ' +
+        'oninput="PP.onEanQueryInput(this.value)">' +
+      '<div class="caption" style="margin-top:8px">Only metering points not yet registered to a company are listed. ' +
+        'If yours is missing it is already on another account — PeakPower can move it across.</div>' +
+      '<div id="ean-results" style="margin-top:14px">' + eanResultsHtml() + '</div>');
+
+    document.getElementById("connections-body").innerHTML = searchCard;
+  }
+
+  function startAddConnection() {
+    state.eanQuery = "";
+    state.connId = null;
+    state.connectionsView = "add";
+    // A screen change owes both of these, or the render lands in a hidden
+    // container: the handler runs and nothing on screen moves.
+    state.page = "Connections"; activatePageDom("connections");
+    renderApp();
+  }
+
+  function cancelAddConnection() {
+    state.connectionsView = "list";
+    state.eanQuery = "";
+    renderApp();
+  }
+
+  /**
+   * Take a metering point for this account.
+   *
+   * The registry re-checks that it is in the pool and still free, so a stale
+   * screen cannot claim a point another company took while it sat open — the
+   * guard is there rather than on this button.
+   */
+  function addConnection(ean) {
+    var claimed = EanRegistry.claim(window.localStorage, ean, {
+      kvk: acct().kvk, company: acct().legalName, name: "", by: acctSignature(), at: connectionStamp()
+    });
+    if (!claimed) { refreshEanResults(); return; }
+    state.connectionsView = "list";
+    state.eanQuery = "";
+    renderApp();
+  }
+
+  /** "25 August 2026" by the demo clock — what a connection's Active since reads. */
+  function connectionStamp() {
+    var d = new Date(nowForLink());
+    var months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    return d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
+  }
+
   function renderConnectionDetail() {
-    var c = PortalSeedData.CONNECTIONS.filter(function (x) { return x.id === state.connId; })[0];
+    var c = acctConnections().filter(function (x) { return x.id === state.connId; })[0];
     if (!c) { closeConnection(); return; }
 
     var labelsCard = cardHtml("Your labels", "Visible only to your organisation",
       '<div class="field-box"><div class="field-label">Name</div><div class="field-value">' + c.name + '</div></div>' +
       '<div class="field-box"><div class="field-label">Description</div><div class="field-value">' + c.description + '</div></div>' +
-      '<div class="caption">' + (c.lastChanged === "—" ? "Not yet named" : "Last changed by you on " + c.lastChanged) + '</div>' +
+      '<div class="caption">' + (c.autoNamed
+        ? "Named after its address — give it your own name to use it everywhere"
+        : (c.lastChanged === "—" ? "Not yet named" : "Last changed by you on " + c.lastChanged)) + '</div>' +
       '<div style="display:flex;gap:10px;margin-top:12px"><button type="button" class="btn-primary" onclick="PP.noop()">Save</button>' +
       '<button type="button" class="btn-secondary" onclick="PP.noop()">Cancel</button></div>');
 
@@ -3375,11 +3587,19 @@
       '<div><span class="swatch" style="background:var(--pp-amber-bg);border:1px solid var(--pp-amber-border)"></span>Provisional</div>' +
       '<div><span class="swatch" style="background:var(--pp-indigo-bg);border:1px solid var(--pp-violet-border)"></span>Corrected</div>' +
       '<div><span class="swatch" style="background:var(--pp-red-bg);border:1px solid var(--pp-red-border)"></span>None</div></div>';
-    var dqCard = cardHtml("Data quality", "Last 14 delivery dates",
-      '<div class="dq-grid">' + dqCells + '</div>' + dqLegend +
-      '<div class="banner banner-amber" style="margin-top:10px"><div class="banner-icon">!</div><div class="banner-body">Data for 12 August is provisional. PVNed may still correct it until 27 August.</div></div>' +
-      '<div class="caption" style="margin-top:8px">Intervals received today: 96 of 96 · consumption and production</div>' +
-      '<div class="caption">Corrections received this month: 1 (31 July, received 1 August 08:00)</div>');
+    // The strip, the correction notice and the interval count below it are one
+    // reading of fourteen delivered days. A point registered a moment ago has
+    // none of them, so it says so rather than printing a seeded month's history
+    // over an empty grid.
+    var dqCard = dqCells
+      ? cardHtml("Data quality", "Last 14 delivery dates",
+          '<div class="dq-grid">' + dqCells + '</div>' + dqLegend +
+          '<div class="banner banner-amber" style="margin-top:10px"><div class="banner-icon">!</div><div class="banner-body">Data for 12 August is provisional. PVNed may still correct it until 27 August.</div></div>' +
+          '<div class="caption" style="margin-top:8px">Intervals received today: 96 of 96 · consumption and production</div>' +
+          '<div class="caption">Corrections received this month: 1 (31 July, received 1 August 08:00)</div>')
+      : cardHtml("Data quality", "Last 14 delivery dates",
+          '<div class="empty-state">No delivery data has arrived for this connection yet. ' +
+          'Readings start once ' + esc(c.gridOperator) + ' begins sending them, usually within a few working days.</div>');
 
     // Blocks are held for the WHOLE account, so there is no per-connection
     // allocation to list here. The seeded `blocks` arrays on CONNECTIONS said
@@ -3454,6 +3674,16 @@
   function renderPricesPage() {
     var infoBar = '<div class="banner banner-teal">These are indicative market prices, not offers. A firm, time-limited price is issued only in response to a trade request.</div>';
 
+    // The curve is market data, so it is worth reading on an account with no
+    // connections — but there is nothing to request a price against. Said once
+    // here rather than six times on the cards, and the links go with it: a
+    // handler that runs and changes nothing reads as a broken page.
+    var canRequest = canRequestTrade();
+    if (!canRequest) {
+      infoBar += '<div class="banner banner-amber">No connections are registered on this account yet, ' +
+        'so a trade cannot be requested against these prices.</div>';
+    }
+
     var cardsHtml = PortalSeedData.PRICES.map(function (p) {
       var periodType = p.label === "Next month" ? "month" : (p.label === "Next quarter" ? "quarter" : "year");
       var staleCls = p.stale ? " stale" : "";
@@ -3468,7 +3698,9 @@
         '<div class="pc-meta"><span>€ / MWh</span><span>observed ' + p.observed + '</span></div>' +
         '<div class="pc-foot">' +
           '<span class="pc-note">Indication — not an offer</span>' +
-          '<span class="pc-request" onclick="PP.startWizardFromPrice(\'' + p.shape + '\',\'' + periodType + '\')">Request a price →</span>' +
+          (canRequest
+            ? '<span class="pc-request" onclick="PP.startWizardFromPrice(\'' + p.shape + '\',\'' + periodType + '\')">Request a price →</span>'
+            : "") +
         '</div>' +
         '</div>';
     }).join("");
@@ -4567,6 +4799,19 @@
   }
 
   function renderWalletWithdraw() {
+    // Only a customer whose bank details the desk has verified has somewhere to
+    // be paid out to, and the form's whole right-hand column is that account.
+    // The toolbar hides the button, so this is the stale-screen path — it says
+    // what is missing rather than rendering a form that cannot be submitted.
+    if (!acctPayout()) {
+      document.getElementById("wallet-body").innerHTML = emptyCardHtml("Withdraw funds", "",
+        // customerName, not legalName: a Dutch legal form ends in a full stop,
+        // so a sentence that appends one after it prints "B.V..".
+        "No payout account is on file for " + acct().customerName + ". PeakPower verifies a bank account before it can pay out to it.",
+        '<button type="button" class="btn-secondary" onclick="PP.backToWallet()">Back to wallet</button>');
+      return;
+    }
+
     function chipHtml(amt, label) {
       var sel = state.withdrawAmount === amt ? " selected" : "";
       var over = amt > state.walletAvailable ? " disabled" : "";

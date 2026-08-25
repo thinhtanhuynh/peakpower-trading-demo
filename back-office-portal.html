@@ -322,6 +322,8 @@
 <script src="portal-seed-data.js"></script>
 <script src="back-office-desk-data.js"></script>
 <script src="back-office-screens-data.js"></script>
+<script src="portal-accounts.js"></script>
+<script src="ean-registry.js"></script>
 <script src="portal-demo-clock.js"></script>
 <!-- For its option lists only: the desk asks a new customer the same questions
      the onboarding flow does, and two copies of "the industries" would drift. -->
@@ -360,6 +362,8 @@
     // An inline row being added on a created customer's detail page:
     // {kind: "connections" | "accounts", row, err}, or null.
     detailRowDraft: null,
+    // {target: "wizard" | "detail", query} while the unassigned-EAN search is open.
+    eanPicker: null,
     commercialEditing: false,
     // Per customer, keyed by kvk. It used to be one shared list, which was
     // harmless while every field was decorative — but the deposit % is a real
@@ -1523,7 +1527,9 @@
         // steals width from the dates and wraps them out of line with the row
         // above. Only the fixed-width cells are pinned; a long name may wrap.
         '<div style="font-family:var(--font-mono);white-space:nowrap">' + esc(m.ean) + '</div>' +
-        '<div style="color:' + esc(m.nameColor) + '">' + esc(m.name) + '</div>' +
+        '<div style="color:' + esc(m.nameColor) + '">' + esc(m.name) +
+          (m.address ? '<div style="font-size:10.5px;color:var(--pp-text-faint);margin-top:2px">' +
+            esc(m.address) + '</div>' : '') + '</div>' +
         '<div style="color:' + esc(m.commodityColor) + '">' + esc(m.commodity) + '</div>' +
         '<div style="white-space:nowrap">' + esc(m.validFrom) + '</div>' +
         '<div style="color:' + esc(m.validToColor) + ';white-space:nowrap">' + esc(m.validTo) + '</div>' +
@@ -1534,7 +1540,8 @@
       emptyTableRow("No metering points yet — add the customer's first connection."));
 
     var table = '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
-      head + rows + detailRowEditorHtml('connections', COLS) + '</div>';
+      head + rows + detailRowEditorHtml('connections', COLS) + '</div>' +
+      (eanPickerOpen('detail') ? eanPickerHtml() : '');
 
     // The mockup passes meteringSummary as the Card's `action` prop, i.e. a
     // bare text node in the card header (no styling of its own).
@@ -1634,18 +1641,30 @@
 
   // --- detail: Customer accounts --------------------------------------------
 
-  function customersAccountsCardHtml(d) {
-    var COLS = '1.2fr 1.2fr 1fr 1.1fr 1fr 0.6fr';
+  /**
+   * `legalName` is the customer's own name, which the accounts need because
+   * the seeded fixtures carry a bare handle from the mockup rather than an
+   * address. Both are resolved through `PortalAccounts.signInEmail()`, the same
+   * function the Customer Portal's sign-in looks the address up by — the column
+   * has to name what someone actually signs in with, or it names nothing.
+   */
+  function customersAccountsCardHtml(d, legalName) {
+    var COLS = '1.1fr 0.9fr 1.9fr 1fr 0.9fr 0.5fr';
 
     var head = '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
-      '<div>NAME</div><div>ROLE</div><div>USERNAME</div><div>LAST SIGN-IN</div><div>STATUS</div><div></div>' +
+      '<div>NAME</div><div>ROLE</div><div>SIGN-IN EMAIL</div><div>LAST SIGN-IN</div><div>STATUS</div><div></div>' +
       '</div>';
 
     var rows = d.accounts.map(function (a) {
       return '<div style="display:grid;grid-template-columns:' + COLS + ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center;color:' + esc(a.textColor) + '">' +
         '<div style="font-weight:600">' + esc(a.name) + '</div>' +
         '<div>' + badge(a.role, S.roleTone(a.role)) + '</div>' +
-        '<div style="font-family:var(--font-mono);font-size:11px">' + esc(a.username) + '</div>' +
+        // Wraps rather than truncating: this column exists so an operator can
+        // read back what someone signs in with, and half an address does not
+        // do that. The <wbr> offers the break before the @, so a wrapped address
+        // splits into two whole halves; anywhere is the last resort under it.
+        '<div style="font-family:var(--font-mono);font-size:11px;overflow-wrap:anywhere">' +
+          esc(PortalAccounts.signInEmail(a, legalName)).replace("@", "<wbr>@") + '</div>' +
         '<div>' + esc(a.lastSignIn) + '</div>' +
         '<div>' + badge(a.statusLabel, a.statusTone) + '</div>' +
         '<div style="text-align:right;color:var(--pp-teal-600);cursor:pointer">' + esc(a.actionLabel) + '</div>' +
@@ -1814,9 +1833,12 @@
       '<div style="flex:1.7">' + customersMeteringCardHtml(d) + '</div>' +
       '</div>';
 
+    // Commercial settings is a short key/value stack; the accounts table has
+    // six columns, one of them an email address. The top row is already 1/1.7
+    // for the same reason.
     var bottomRow = '<div style="display:flex;gap:16px;align-items:flex-start">' +
       '<div style="flex:1">' + customersCommercialCardHtml() + '</div>' +
-      '<div style="flex:1">' + customersAccountsCardHtml(d) + '</div>' +
+      '<div style="flex:1.45">' + customersAccountsCardHtml(d, c.name) + '</div>' +
       '</div>';
 
     return '<div style="display:flex;flex-direction:column;gap:16px">' +
@@ -1887,13 +1909,17 @@
     {label:'Active', tone:'success'}
   ];
 
+  // EAN, address and commodity are read-only: they are the metering point's
+  // own facts and come from the registry with it. The desk names the connection
+  // and sets the date it starts on — those are the customer's, not the point's.
   var CONNECTION_ROW_FIELDS = [
-    {key:'ean', label:'EAN', placeholder:'871687100000000011', mono:true},
+    {key:'ean', label:'EAN', readOnly:true, mono:true},
+    {key:'address', label:'ADDRESS', readOnly:true},
     {key:'name', label:'CONNECTION NAME', placeholder:'Rotterdam DC'},
-    {key:'commodity', label:'COMMODITY', choices:['Electricity', 'Gas']},
+    {key:'commodity', label:'COMMODITY', readOnly:true},
     {key:'validFrom', label:'VALID FROM', type:'date'}
   ];
-  var CONNECTION_ROW_COLS = '1.6fr 1.4fr 1fr 1fr 32px';
+  var CONNECTION_ROW_COLS = '1.5fr 1.7fr 1.2fr 0.8fr 1fr 32px';
 
   var ACCOUNT_ROW_FIELDS = [
     {key:'name', label:'NAME', placeholder:'J. de Vries'},
@@ -1938,10 +1964,11 @@
       billingAddress: 'Ceresstraat 14, Venlo', visitingAddress: 'Ceresstraat 14, Venlo',
       contactName: 'S. Bakker', contactEmail: 's.bakker@bakkervries.nl', contactPhone: '+31 77 320 4410',
       status: 'Onboarding',
-      connections: [
-        {ean:'871687100000000114', name:'Venlo cold store', commodity:'Electricity', validFrom: isoToday()},
-        {ean:'871687100000000122', name:'Venlo dock 3', commodity:'Electricity', validFrom: isoToday()}
-      ],
+      // Taken from the pool as it stands, not written down: a fixed pair is
+      // refused as "Already on another customer" the second time the toggle is
+      // used in a session, which reads as the toggle being broken rather than
+      // the validation working. Same reasoning as the KvK above.
+      connections: prefillConnections(2),
       // An Admin among them, or customerAccountsFormError refuses step 3 — a
       // prefill that cannot be submitted is not a prefill.
       accounts: [
@@ -1951,8 +1978,17 @@
     };
   }
 
-  function emptyConnectionRow() {
-    return {ean:'', name:'', commodity:'Electricity', validFrom: isoToday()};
+  /** The first N metering points still free, as wizard rows. */
+  function prefillConnections(n) {
+    return EanRegistry.availableRows(EanRegistry.read(window.localStorage))
+      .filter(function (r) { return r.commodity === 'Electricity'; })
+      .slice(0, n)
+      .map(function (r) {
+        return {
+          ean: r.ean, address: EanRegistry.formatAddress(r),
+          name: r.street + ' ' + r.houseNumber, commodity: r.commodity, validFrom: isoToday()
+        };
+      });
   }
   function emptyAccountRow() {
     return {name:'', email:'', role: S.ROLE_VIEWER};
@@ -2000,13 +2036,21 @@
   }
 
   /** Step 2, per row. An EAN is 18 digits and identifies one metering point. */
+  /**
+   * Rows come from the picker, so a bad EAN means the pool moved under the
+   * screen — the point was claimed elsewhere while this form sat open. Checked
+   * here rather than only on the way in, which is what makes the wizard's third
+   * step still refuse a row picked ten minutes ago.
+   */
   function customerConnectionErrors(rows) {
     var seen = {};
+    var claims = EanRegistry.read(window.localStorage);
     return rows.map(function (r) {
       var err = {};
-      var ean = String(r.ean).replace(/\s+/g, '');
+      var ean = EanRegistry.eanDigits(r.ean);
       if (!ean) { err.ean = 'Required'; }
-      else if (!/^\d{18}$/.test(ean)) { err.ean = 'Eighteen digits'; }
+      else if (!EanRegistry.findByEan(EanRegistry.UNASSIGNED, ean)) { err.ean = 'Not a known metering point'; }
+      else if (claims[ean]) { err.ean = 'Already on another customer'; }
       else if (seen[ean]) { err.ean = 'Already on this customer'; }
       if (!err.ean) { seen[ean] = true; }
       return err;
@@ -2054,6 +2098,14 @@
     var normal = base || FORM_INPUT;
     var style = err ? normal.replace('var(--pp-border-strong)', 'var(--pp-red)') : normal;
     var control;
+    // The EAN, the address and the commodity are the metering point's own
+    // facts, picked from the registry rather than typed. Rendering them as
+    // disabled inputs would invite a click that does nothing, so they are text.
+    if (f.readOnly) {
+      return '<div style="font-size:12px;color:var(--pp-text-heading);padding:9px 0;line-height:1.35' +
+        (f.mono ? ';font-family:var(--font-mono)' : '') + '">' + esc(value == null ? '' : value) + '</div>' +
+        (err ? '<div class="field-err" style="' + FORM_ERROR_NOTE + '">' + esc(err) + '</div>' : '');
+    }
     if (f.choices) {
       control = '<select onchange="' + handler + '" style="' + style + '">' +
         f.choices.map(function (c) {
@@ -2118,7 +2170,7 @@
       '</div>';
   }
 
-  function wizardRowTableHtml(kind, fields, cols, rows, errs, emptyText, addLabel) {
+  function wizardRowTableHtml(kind, fields, cols, rows, errs, emptyText, addLabel, addHandler) {
     var head = '<div style="display:grid;grid-template-columns:' + cols + ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
       fields.map(function (f) { return '<div>' + esc(f.label) + '</div>'; }).join('') + '<div></div>' +
       '</div>';
@@ -2130,7 +2182,8 @@
     return '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden;margin-top:4px">' +
       head + body + '</div>' +
       '<div style="margin-top:12px">' +
-        '<button type="button" class="btn-secondary btn-sm" onclick="BO.addCustomerRow(\'' + kind + '\')">' +
+        '<button type="button" class="btn-secondary btn-sm" onclick="' +
+          (addHandler || ("BO.addCustomerRow('" + kind + "')")) + '">' +
           esc(addLabel) + '</button>' +
       '</div>';
   }
@@ -2197,8 +2250,9 @@
     var body = wizardRowTableHtml('connections', CONNECTION_ROW_FIELDS, CONNECTION_ROW_COLS,
       draft.connections, errors.connections,
       'No connections yet — a customer can be created without any and gain them later.',
-      '+ Add connection');
-    return cardHtml('Connections', 'one row per metering point, identified by its EAN', body);
+      '+ Find connection', "BO.startEanPicker('wizard')") +
+      (eanPickerOpen('wizard') ? eanPickerHtml() : '');
+    return cardHtml('Connections', 'one row per metering point, found by EAN or by address', body);
   }
 
   function wizardAccountsStepHtml(draft, errors) {
@@ -2734,6 +2788,7 @@
     state.commercialEditing = false;
     state.commercialSnapshot = null;
     state.detailRowDraft = null;
+    state.eanPicker = null;
     clearNewCustomerForm();
     if (!quiet) { render(); }
   }
@@ -2746,15 +2801,137 @@
   function startDetailRow(kind) {
     var c = customersFind(state.customerId);
     if (!c || !c.isNew) { return; }
-    state.detailRowDraft = {
-      kind: kind,
-      row: kind === 'accounts' ? emptyAccountRow() : emptyConnectionRow(),
-      err: {}
-    };
+    // A connection is not typed, it is found: its EAN, address and commodity
+    // are the metering point's own, so the picker comes first and fills the
+    // draft row with them.
+    if (kind === 'connections') { startEanPicker('detail'); return; }
+    state.detailRowDraft = { kind: kind, row: emptyAccountRow(), err: {} };
     render();
   }
   function cancelDetailRow() {
     state.detailRowDraft = null;
+    render();
+  }
+
+  // --- picking a metering point out of the unassigned pool -------------------
+  //
+  // One panel, both places a connection is added: the customer detail's Add
+  // connection and the new-customer wizard's step 2. An EAN cannot be typed in
+  // either — it is a metering point that either exists and is free, or does
+  // not.
+
+  var EAN_PICK_COLS = '1.5fr 2.1fr 0.9fr 0.9fr 0.9fr';
+
+  function eanPickerOpen(target) {
+    return !!(state.eanPicker && state.eanPicker.target === target);
+  }
+
+  function startEanPicker(target) {
+    state.detailRowDraft = null;
+    state.eanPicker = { target: target, query: '' };
+    render();
+  }
+
+  function cancelEanPicker() {
+    state.eanPicker = null;
+    render();
+  }
+
+  /** Patched in place — a re-render would rebuild the field being typed into. */
+  function onEanPickerInput(value) {
+    if (!state.eanPicker) { return; }
+    state.eanPicker.query = value;
+    var el = document.getElementById('ean-picker-results');
+    if (el) { el.innerHTML = eanPickerResultsHtml(); }
+  }
+
+  /**
+   * EANs already spoken for on this screen but not yet claimed — rows sitting
+   * in the wizard's draft, or already on the customer being looked at. Nothing
+   * is claimed until the customer is created or the row saved, so without this
+   * the same point could be picked twice and refused only on the way out.
+   */
+  function pendingEans() {
+    var out = [];
+    var w = state.customerWizard;
+    if (w) { w.draft.connections.forEach(function (r) { out.push(EanRegistry.eanDigits(r.ean)); }); }
+    var c = customersFind(state.customerId);
+    if (c && c.meteringRows) { c.meteringRows.forEach(function (r) { out.push(EanRegistry.eanDigits(r.ean)); }); }
+    return out;
+  }
+
+  function eanPickerRows() {
+    var pending = pendingEans();
+    var free = EanRegistry.availableRows(EanRegistry.read(window.localStorage))
+      .filter(function (r) { return pending.indexOf(r.ean) === -1; });
+    return EanRegistry.search(free, state.eanPicker ? state.eanPicker.query : '');
+  }
+
+  function eanPickerResultsHtml() {
+    var rows = eanPickerRows();
+    var typed = state.eanPicker ? String(state.eanPicker.query || '').trim() : '';
+    if (!rows.length) {
+      return emptyTableRow('No unassigned metering point matches ' +
+        (typed ? '“' + typed + '”' : 'that') + ' — check the EAN, or the postcode and house number.');
+    }
+    var head = '<div style="display:grid;grid-template-columns:' + EAN_PICK_COLS +
+      ';gap:10px;padding:9px 12px;background:var(--pp-surface-alt);font-size:10px;font-weight:700;color:var(--pp-text-body);letter-spacing:.03em">' +
+      '<div>EAN</div><div>ADDRESS</div><div>COMMODITY</div><div>GRID OPERATOR</div><div></div></div>';
+    var body = rows.map(function (r) {
+      return '<div style="display:grid;grid-template-columns:' + EAN_PICK_COLS +
+          ';gap:10px;padding:10px 12px;font-size:12px;border-top:1px solid var(--pp-border);align-items:center">' +
+        // Raw digits, not grouped: the metering table this row lands in shows
+        // the whole 18-digit EAN, and one screen carries one convention.
+        '<div style="font-family:var(--font-mono);white-space:nowrap">' + esc(r.ean) + '</div>' +
+        '<div>' + esc(EanRegistry.formatAddress(r)) + '</div>' +
+        '<div>' + esc(r.commodity) + '</div>' +
+        '<div>' + esc(r.gridOperator) + '</div>' +
+        '<div style="text-align:right"><button type="button" class="btn-primary btn-sm" onclick="BO.pickEan(\'' +
+          esc(r.ean) + '\')">Select</button></div>' +
+        '</div>';
+    }).join('');
+    return '<div style="border:1px solid var(--pp-border);border-radius:8px;overflow:hidden">' + head + body + '</div>';
+  }
+
+  function eanPickerHtml() {
+    return '<div style="border:1px solid var(--pp-border-strong);border-radius:8px;padding:14px 16px;margin-top:4px;background:var(--pp-surface-alt)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">' +
+        '<div>' +
+          '<div style="font-size:12.5px;font-weight:700;color:var(--pp-text-heading)">Find a metering point</div>' +
+          '<div style="font-size:11px;color:var(--pp-text-body);margin-top:3px">By EAN code, or by postcode and house number. Only points not yet on a customer are listed.</div>' +
+        '</div>' +
+        '<button type="button" class="btn-secondary btn-sm" onclick="BO.cancelEanPicker()">Cancel</button>' +
+      '</div>' +
+      '<input id="ean-picker-query" type="text" autocomplete="off" placeholder="871687100000000130  or  8232DP 24" ' +
+        'value="' + esc(state.eanPicker ? state.eanPicker.query : '') + '" ' +
+        'oninput="BO.onEanPickerInput(this.value)" style="' + FORM_INPUT + ';max-width:420px;margin:12px 0">' +
+      '<div id="ean-picker-results">' + eanPickerResultsHtml() + '</div>' +
+      '</div>';
+  }
+
+  /**
+   * Take the picked point into the row it was picked for.
+   *
+   * Re-read from the free rows rather than trusting the button: the panel may
+   * have been open while the same point was claimed in the other portal.
+   */
+  function pickEan(ean) {
+    var row = EanRegistry.findByEan(eanPickerRows(), ean);
+    if (!row) { onEanPickerInput(state.eanPicker ? state.eanPicker.query : ''); return; }
+    var draft = {
+      ean: row.ean,
+      address: EanRegistry.formatAddress(row),
+      name: row.street + ' ' + row.houseNumber,
+      commodity: row.commodity,
+      validFrom: isoToday()
+    };
+    var target = state.eanPicker.target;
+    state.eanPicker = null;
+    if (target === 'wizard') {
+      state.customerWizard.draft.connections.push(draft);
+    } else {
+      state.detailRowDraft = { kind: 'connections', row: draft, err: {} };
+    }
     render();
   }
   function updateDetailRow(key, value, elm) {
@@ -2781,7 +2958,18 @@
     if (Object.keys(draft.err).length) { render(); return; }
 
     if (accounts) { c.accountRows.push(accountRowFrom(draft.row)); }
-    else { c.meteringRows.push(meteringRowFrom(draft.row)); }
+    else {
+      // Claimed as it is saved, so it leaves the pool for the other portal too.
+      // The registry refuses a point someone took first, which is the same
+      // check customerConnectionErrors just made — belt and braces, because
+      // this is the write.
+      if (!claimEanFor(c, draft.row.ean)) {
+        draft.err = { ean: 'Already on another customer' };
+        render();
+        return;
+      }
+      c.meteringRows.push(meteringRowFrom(draft.row));
+    }
     state.detailRowDraft = null;
     render();
   }
@@ -2821,6 +3009,7 @@
     state.customerView = 'list';
     state.customerWizard = null;
     state.customerPrefill = false;
+    state.eanPicker = null;
   }
 
   function cancelNewCustomer() {
@@ -2860,9 +3049,10 @@
    * row index baked in, so the rows below a removed one would otherwise keep
    * writing to the wrong record.
    */
+  /** Accounts only — a connection comes from the picker, never a blank row. */
   function addCustomerRow(kind) {
-    if (!state.customerWizard) { return; }
-    state.customerWizard.draft[kind].push(kind === 'accounts' ? emptyAccountRow() : emptyConnectionRow());
+    if (!state.customerWizard || kind !== 'accounts') { return; }
+    state.customerWizard.draft.accounts.push(emptyAccountRow());
     render();
   }
   function removeCustomerRow(kind, i) {
@@ -2961,8 +3151,30 @@
       accountRows: draft.accounts.map(accountRowFrom),
       isNew: true
     });
+    // The customer exists now, so its metering points leave the pool. Done
+    // after the record is pushed, because claimEanFor names the company it is
+    // claiming for and reads it off that record.
+    var created = state.newCustomers[0];
+    draft.connections.forEach(function (r) { claimEanFor(created, r.ean); });
     clearNewCustomerForm();
     selectCustomer(kvk);
+  }
+
+  /**
+   * Take a metering point for a customer, and say whether it worked.
+   *
+   * Returns false when the registry refuses — the point is not in the pool, or
+   * someone claimed it while this screen was open. The caller decides what to
+   * say about it; nothing here writes to the screen.
+   */
+  function claimEanFor(customer, ean) {
+    return !!EanRegistry.claim(window.localStorage, ean, {
+      kvk: String(customer.kvk),
+      company: String(customer.name),
+      name: '',
+      by: 'Back office',
+      at: isoToday()
+    });
   }
 
   /** The typed company fields, trimmed, as the detail page reads them. */
@@ -2987,6 +3199,9 @@
     var gas = c.commodity === 'Gas';
     return {
       ean: String(c.ean).replace(/\s+/g, ''),
+      // Carried through so the table can say where the point is. The seeded
+      // fixtures have no address and render without the sub-line.
+      address: String(c.address || ''),
       name: named || '— none set —',
       nameColor: named ? 'var(--pp-text-heading)' : 'var(--pp-text-faint)',
       commodity: c.commodity,
@@ -3211,6 +3426,8 @@
     updateCustomerRow: updateCustomerRow, addCustomerRow: addCustomerRow,
     removeCustomerRow: removeCustomerRow, wizardBack: wizardBack, wizardNext: wizardNext,
     startDetailRow: startDetailRow, cancelDetailRow: cancelDetailRow,
+    startEanPicker: startEanPicker, cancelEanPicker: cancelEanPicker,
+    onEanPickerInput: onEanPickerInput, pickEan: pickEan,
     updateDetailRow: updateDetailRow, saveDetailRow: saveDetailRow,
     startCommercialEdit: startCommercialEdit, cancelCommercialEdit: cancelCommercialEdit,
     saveCommercialEdit: saveCommercialEdit, updateCommercialField: updateCommercialField,

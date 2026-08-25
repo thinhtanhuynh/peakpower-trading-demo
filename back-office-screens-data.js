@@ -216,9 +216,13 @@
         dataTone: 'success', dataLabel: 'OK'
       });
     }
+    // No `username`: the accounts table shows the sign-in address, which
+    // PortalAccounts derives from the person's and the company's own name. The
+    // handle these rows used to synthesise was never anything anyone could
+    // sign in with, and leaving it would put two answers on one row.
     var accounts = [
-      {name: c.contact, role: ROLE_ADMIN, username: c.contact.split(' ').pop().toLowerCase(), lastSignIn:'30 Jul 14:25', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'},
-      {name: c.contact.charAt(0) + '. Finance', role: ROLE_TRADER, username: c.contact.split(' ').pop().toLowerCase() + 'f', lastSignIn:'28 Jul 10:12', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'}
+      {name: c.contact, role: ROLE_ADMIN, lastSignIn:'30 Jul 14:25', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'},
+      {name: c.contact.charAt(0) + '. Finance', role: ROLE_TRADER, lastSignIn:'28 Jul 10:12', statusTone:'success', statusLabel:'Active', actionLabel:'edit', textColor:'var(--pp-text-heading)'}
     ];
     return {
       status: c.status, statusTone: c.statusTone, connections: c.connections, available: c.available, availableTone: c.availableTone,
