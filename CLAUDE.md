@@ -1005,6 +1005,7 @@ There is no single controls row. Each control sits with what it filters:
 | Date `#day-date` *or* From/To `#from-date` `#to-date`, plus the Day/Month/Quarter presets | the usage-chart card's toolbar | they filter the charts and table |
 | Zoom `#chart-zoom` (`#zoom-out`/`#zoom-in`) | same toolbar, right of the presets | it changes how closely the already-filtered range is viewed |
 | Export CSV `#export-csv` | the interval table's summary row | export belongs with what it exports |
+| Export CSV `#export-ean-csv` | the per-connection card's own header | it exports that card, not the table |
 
 **The ids are the contract, not the DOM position.** These elements are
 acquired once by `getElementById` and nothing reads their parent, position or
@@ -1309,6 +1310,14 @@ changes. One function drives all four variants using a cursor-position →
 nearest-interval calculation, not per-mark listeners, so it scales to ~8,700
 points.
 
+#### Card order on the screen
+
+Usage chart, **interval table**, cost chart, per-connection chart. The table
+sits directly under the chart whose numbers it lists — it used to be last, three
+cards below them. Its `.table-wrap` carries `margin-top:12px`: the disclosure's
+summary line is the table's own title, and a bordered box butted against it
+reads as one block rather than a heading and its content.
+
 #### Interval table and CSV
 
 A Date column (short format, e.g. "5 Aug 2026") comes first — on a single day
@@ -1340,12 +1349,32 @@ The table is a collapsed `<details>` disclosure. Two rules around it:
   hiding** and reports `display:block` for closed content, so a
   computed-style check there passes vacuously.
 
-**CSV export** writes exactly the table's 16 columns in the table's order, and
-every row of the current range — the full filtered dataset, not just what's on
-screen — named `consumption_all-connections_<from>[_to_<to>].csv`. Values are
-**unformatted** (dot decimal, no thousands separators, 6 decimals) so the file
-parses regardless of locale; a UTF-8 BOM is prepended for Excel. The button is
-disabled whenever the range is empty and uses `.btn-primary`.
+#### Two CSV exports, one writer
+
+`buildCsv(columns, rowCount, ctx)` and `downloadCsv(name, text)` are shared, so
+there is one escaper (`csvCell`) and one BOM. Both files write **unformatted**
+values — dot decimal, no thousands separators, 6 decimals — so they parse
+regardless of locale, and an empty cell where a value is null rather than the
+string "null".
+
+| | Columns | Named | Button |
+|---|---|---|---|
+| The interval table's | `CSV_COLUMNS` — exactly the table's 16, in the table's order | `consumption_all-connections_<from>[_to_<to>].csv` | `#export-csv`, in the table's summary row |
+| The per-connection card's | `EAN_CSV_COLUMNS` — Date, Time, Connection, EAN, Consumption, Production, Actual Usage, Day-ahead (€/MWh) | `usage_and_price_<ean>_<from>[_to_<to>].csv` | `#export-ean-csv`, beside that card's Connection select |
+
+Both write **every row of the current range**, not just what is on screen, and
+both disable when the range is empty.
+
+**The per-connection file has its own column list on purpose.** It is one
+metering point's usage against the price; the portfolio's hedge and position
+columns have no per-connection meaning (see "Blocks belong to the account, not
+a connection"). Consumption and production ride along because the chart's own
+figure is their difference, and a reader checking it should not have to take
+that on trust.
+
+**It writes `lastEanRender`, not a recomputation.** `drawEanChartFor()` stores
+the range, the usage and the price it just drew, so the file and the chart
+cannot disagree about which connection or which range they are showing.
 
 #### Three numbers not to tidy
 
@@ -1757,7 +1786,7 @@ than rendering furniture:
 | Dashboard | a welcome card naming what is missing, plus the price tiles — the forward curve is market data, not account data. They render in the populated screen's own `.price-card-grid` six-across; a `.price-tiles` class no stylesheet defined stacked them full-width |
 | Prices | the six cards and the trend, with an amber banner saying no connections are registered — and **no "Request a price →" links**. `startWizardFromPrice()` still guards itself, but a link whose handler runs and changes nothing reads as a broken page |
 | Connections, Trading, Settlements | one `emptyCardHtml()` each |
-| Consumption | `statusCardHtml("No connections", …)`, and `setConsumptionChromeVisible(false)` hides the two chart cards and the interval table |
+| Consumption | `statusCardHtml("No connections", …)`, and `setConsumptionChromeVisible(false)` hides the three chart cards and the interval table |
 | Wallet | € 0,00 across the three cards, and a first-deposit prompt instead of the low-balance alert — a wallet that was never funded is not "below its alert", nothing has gone wrong yet |
 
 **Never render a `.grid-table` with no rows.** `.gt-head` is a tinted strip

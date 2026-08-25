@@ -414,7 +414,10 @@
      against the full expanded table height when open. */
   .table-header-row { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-3); }
   .table-header-row details { flex:1; min-width:0; }
-  .table-wrap { max-height:420px; overflow:auto; border:1px solid var(--pp-border); border-radius:8px; }
+  /* The disclosure's summary line is this table's title, and a bordered box
+     butted straight against it reads as one block rather than a heading and
+     its content. */
+  .table-wrap { margin-top:12px; max-height:420px; overflow:auto; border:1px solid var(--pp-border); border-radius:8px; }
   table { width:100%; border-collapse:collapse; font-size:12px; }
   /* Density matches the design system's own spec for this exact table (its
      Consumption "Intervals" card — head 9px/12px @10px, row 11px/12px,
@@ -1081,6 +1084,35 @@
           </div>
         </div>
         <div class="card" data-consumption-chrome>
+          <!-- CSS-only disclosure: rows stay in the DOM at all times (only
+               visibility toggles), so highlightTableRow()'s querySelector +
+               scrollIntoView keep working while collapsed. open persists
+               across renders since this element is never recreated —
+               renderTable() only replaces #table-body's innerHTML.
+               Export CSV is a FLEX SIBLING of <details>, not a child of it —
+               native <details> hides every child but <summary> while closed,
+               so a button nested inside would be unreachable without first
+               expanding the table, defeating the point of exporting without
+               having to look at the spreadsheet. -->
+          <div class="table-header-row">
+            <details id="table-details">
+              <summary class="table-summary">
+                <span class="table-summary-title">15-minute interval detail</span>
+                <span class="table-summary-sub" id="table-summary-sub"></span>
+              </summary>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Date</th><th>Time</th><th class="num">Consumption (kWh)</th><th class="num">Production (kWh)</th><th class="num">EPEX (€/kWh)</th><th class="num">Usage Cost (€)</th><th class="num">Actual Usage (kWh)</th><th class="num">Base Volume (kWh)</th><th class="num">Peak Volume (kWh)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Uncovered (kWh)</th><th class="num">Long (kWh)</th><th class="num">Short (kWh)</th><th class="num">Delta Cost (€)</th><th class="num">Hedge Cost (€)</th><th class="num">Total Cost (€)</th></tr>
+                  </thead>
+                  <tbody id="table-body"></tbody>
+                </table>
+              </div>
+            </details>
+            <button type="button" class="btn-primary" id="export-csv" disabled>Export CSV</button>
+          </div>
+        </div>
+        <div class="card" data-consumption-chrome>
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div>
               <div class="card-title">Cost — 15-minute intervals</div>
@@ -1114,9 +1146,12 @@
             </div>
             <!-- The one control this card owns. From/To and the presets in the
                  usage card's toolbar filter it too — one range, three charts. -->
-            <div class="field-group" style="margin-bottom:0;min-width:230px">
-              <label class="fg-label" for="ean-chart-select" style="letter-spacing:.03em">Connection</label>
-              <select id="ean-chart-select" onchange="PP.setEanChartSite(this.value)"></select>
+            <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+              <div class="field-group" style="margin-bottom:0;min-width:230px">
+                <label class="fg-label" for="ean-chart-select" style="letter-spacing:.03em">Connection</label>
+                <select id="ean-chart-select" onchange="PP.setEanChartSite(this.value)"></select>
+              </div>
+              <button type="button" class="btn-primary" id="export-ean-csv" onclick="PP.exportEanCsv()" disabled>Export CSV</button>
             </div>
           </div>
           <div id="ean-day-chart-wrap">
@@ -1128,35 +1163,6 @@
           <div class="legend">
             <div><span class="swatch" style="background:var(--pp-chart-usage)"></span>Actual usage (kWh)</div>
             <div><span class="swatch" style="background:transparent;height:0;width:16px;border-top:2px solid #c77048"></span>Day-ahead price (€/MWh)</div>
-          </div>
-        </div>
-        <div class="card" data-consumption-chrome>
-          <!-- CSS-only disclosure: rows stay in the DOM at all times (only
-               visibility toggles), so highlightTableRow()'s querySelector +
-               scrollIntoView keep working while collapsed. open persists
-               across renders since this element is never recreated —
-               renderTable() only replaces #table-body's innerHTML.
-               Export CSV is a FLEX SIBLING of <details>, not a child of it —
-               native <details> hides every child but <summary> while closed,
-               so a button nested inside would be unreachable without first
-               expanding the table, defeating the point of exporting without
-               having to look at the spreadsheet. -->
-          <div class="table-header-row">
-            <details id="table-details">
-              <summary class="table-summary">
-                <span class="table-summary-title">15-minute interval detail</span>
-                <span class="table-summary-sub" id="table-summary-sub"></span>
-              </summary>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr><th>Date</th><th>Time</th><th class="num">Consumption (kWh)</th><th class="num">Production (kWh)</th><th class="num">EPEX (€/kWh)</th><th class="num">Usage Cost (€)</th><th class="num">Actual Usage (kWh)</th><th class="num">Base Volume (kWh)</th><th class="num">Peak Volume (kWh)</th><th class="num">Hedge Volume (kWh)</th><th class="num">Uncovered (kWh)</th><th class="num">Long (kWh)</th><th class="num">Short (kWh)</th><th class="num">Delta Cost (€)</th><th class="num">Hedge Cost (€)</th><th class="num">Total Cost (€)</th></tr>
-                  </thead>
-                  <tbody id="table-body"></tbody>
-                </table>
-              </div>
-            </details>
-            <button type="button" class="btn-primary" id="export-csv" disabled>Export CSV</button>
           </div>
         </div>
       </div>
@@ -2617,7 +2623,7 @@
 
   window.PP = {
     goTo: goTo, goToConsumption: goToConsumption, viewTradeOnChart: viewTradeOnChart,
-    setEanChartSite: setEanChartSite,
+    setEanChartSite: setEanChartSite, exportEanCsv: exportEanCsv,
     openConnection: openConnection, closeConnection: closeConnection,
     startAddConnection: startAddConnection, cancelAddConnection: cancelAddConnection,
     onEanQueryInput: onEanQueryInput, addConnection: addConnection,
@@ -6442,6 +6448,10 @@
       eanChart.innerHTML = "";
       eanMonthChart.innerHTML = "";
       eanChartSubtitle.textContent = "";
+      // Both early returns skip drawEanChartFor(), so this is the only place
+      // the card's export is dropped. Left alone it holds the LAST account's
+      // range, and PP.exportEanCsv() would write another company's readings.
+      clearEanRender();
       costChartSubtitle.textContent = "";
       tableSummarySub.textContent = "";
       tableBody.innerHTML = "";
@@ -6488,6 +6498,10 @@
       eanChart.innerHTML = "";
       eanMonthChart.innerHTML = "";
       eanChartSubtitle.textContent = "";
+      // Both early returns skip drawEanChartFor(), so this is the only place
+      // the card's export is dropped. Left alone it holds the LAST account's
+      // range, and PP.exportEanCsv() would write another company's readings.
+      clearEanRender();
       costChartSubtitle.textContent = "";
       tableSummarySub.textContent = "";
       tableBody.innerHTML = "";
@@ -6586,6 +6600,10 @@
   var eanChartSelect = document.getElementById("ean-chart-select");
   var lastEanContext = null, lastEanGeom = null;
   var lastEanMonthContext = null, lastEanMonthGeom = null;
+  // What the per-connection card is currently showing — the export writes this
+  // rather than recomputing, so the file and the chart cannot disagree.
+  var lastEanRender = null;
+  var exportEanBtn = document.getElementById("export-ean-csv");
 
   /** The site the per-EAN chart is showing, falling back to the first one. */
   function eanChartSite() {
@@ -6597,6 +6615,12 @@
   function siteName(id) {
     var s = (DATA && DATA.sites ? DATA.sites : []).filter(function (x) { return x.id === id; })[0];
     return s ? s.name : id;
+  }
+
+  /** The 18 digits, unspaced — what a spreadsheet and a filename want. */
+  function siteEanDigits(id) {
+    var site = (DATA && DATA.sites ? DATA.sites : []).filter(function (x) { return x.id === id; })[0];
+    return site ? EanRegistry.eanDigits(site.ean) : "";
   }
 
   function siteEan(id) {
@@ -6832,6 +6856,7 @@
     if (!siteId) {
       eanChart.innerHTML = ""; eanMonthChart.innerHTML = "";
       eanChartSubtitle.textContent = "";
+      clearEanRender();
       return;
     }
     var one = concatRangeData(from, to, [siteId]);
@@ -6848,7 +6873,17 @@
     // no hedge line, so past the meters it is genuinely empty.
     eanChartSubtitle.textContent = siteName(siteId) + " · " + siteEan(siteId) + " · " +
       coverageLabel(one, "no readings for this range yet");
+    lastEanRender = {
+      from: from, to: to, range: one, usage: usageKwh, price: priceMwh,
+      name: siteName(siteId), ean: siteEanDigits(siteId)
+    };
+    if (exportEanBtn) { exportEanBtn.disabled = one.times.length === 0; }
     drawEanCharts(one, usageKwh, priceMwh, singleDay);
+  }
+
+  function clearEanRender() {
+    lastEanRender = null;
+    if (exportEanBtn) { exportEanBtn.disabled = true; }
   }
 
   function setEanChartSite(id) {
@@ -6926,22 +6961,47 @@
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
 
-  function buildCsv(r) {
-    var lines = [CSV_COLUMNS.map(function (c) { return csvCell(c.header); }).join(",")];
-    for (var i = 0; i < r.range.times.length; i++) {
+  /** Header row plus one row per interval, from any column list. */
+  function buildCsv(columns, rowCount, ctx) {
+    var lines = [columns.map(function (c) { return csvCell(c.header); }).join(",")];
+    for (var i = 0; i < rowCount; i++) {
       var row = [];
-      for (var c = 0; c < CSV_COLUMNS.length; c++) { row.push(csvCell(CSV_COLUMNS[c].get(r, i))); }
+      for (var c = 0; c < columns.length; c++) { row.push(csvCell(columns[c].get(ctx, i))); }
       lines.push(row.join(","));
     }
     return lines.join("\r\n");
   }
 
-  function exportCsv() {
-    if (!lastRender) { return; }
-    var r = lastRender;
-    // BOM so Excel detects UTF-8.
-    var blob = new Blob(["﻿" + buildCsv(r)], { type: "text/csv;charset=utf-8;" });
-    var name = "consumption_all-connections_" + r.from + (r.from === r.to ? "" : "_to_" + r.to) + ".csv";
+  /**
+   * The per-connection card's own columns: exactly what that chart plots.
+   *
+   * Its own list rather than a slice of the portfolio one — this is a single
+   * metering point's usage against the price, and the hedge and position
+   * columns have no per-connection meaning (see "Blocks belong to the account,
+   * not a connection"). Consumption and production come along because the
+   * chart's figure is their difference, and a reader checking it should not
+   * have to take that on trust.
+   */
+  var EAN_CSV_COLUMNS = [
+    { header: "Date", get: function (c, i) { return c.range.dates[i]; } },
+    // The end label, matching every other time this app prints an interval.
+    { header: "Time", get: function (c, i) { return ConsumptionCalc.intervalEndLabel(c.range.times[i]); } },
+    { header: "Connection", get: function (c) { return c.name; } },
+    { header: "EAN", get: function (c) { return c.ean; } },
+    { header: "Consumption (kWh)", get: function (c, i) {
+        return c.range.consumption[i] == null ? null : c.range.consumption[i] * 0.25; } },
+    { header: "Production (kWh)", get: function (c, i) {
+        return c.range.production[i] == null ? null : c.range.production[i] * 0.25; } },
+    { header: "Actual Usage (kWh)", get: function (c, i) { return c.usage[i]; } },
+    { header: "Day-ahead (EUR/MWh)", get: function (c, i) { return c.price[i]; } }
+  ];
+
+  /** from, or from_to_to — the range as a filename reads it. */
+  function rangeSuffix(from, to) { return from + (from === to ? "" : "_to_" + to); }
+
+  /** Hands the browser a file. The BOM is what makes Excel read it as UTF-8. */
+  function downloadCsv(name, text) {
+    var blob = new Blob(["\ufeff" + text], { type: "text/csv;charset=utf-8;" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
@@ -6950,6 +7010,20 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  }
+
+  function exportCsv() {
+    if (!lastRender) { return; }
+    var r = lastRender;
+    downloadCsv("consumption_all-connections_" + rangeSuffix(r.from, r.to) + ".csv",
+      buildCsv(CSV_COLUMNS, r.range.times.length, r));
+  }
+
+  function exportEanCsv() {
+    if (!lastEanRender) { return; }
+    var c = lastEanRender;
+    downloadCsv("usage_and_price_" + c.ean + "_" + rangeSuffix(c.from, c.to) + ".csv",
+      buildCsv(EAN_CSV_COLUMNS, c.range.times.length, c));
   }
 
   // Everything below only runs once the raw source files have been fetched
