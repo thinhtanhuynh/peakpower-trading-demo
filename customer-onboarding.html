@@ -108,6 +108,15 @@
   .rail-foot .k { font-size:9.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#7b8ba0; }
   .rail-foot .v { font-family:var(--font-mono); font-size:11.5px; color:#c2ccd9; margin-top:5px; }
   .rail-foot .n { font-size:10.5px; color:#7b8ba0; margin-top:8px; line-height:1.45; }
+  /* Demo chrome, so it sits with the demo chrome rather than in the form —
+     nothing here is part of the application. */
+  .rail-toggle { display:flex; align-items:center; gap:10px; margin-top:16px; padding-top:14px; border-top:1px solid rgba(255,255,255,.09); cursor:pointer; }
+  .rail-toggle .sw { width:34px; height:19px; border-radius:var(--radius-pill); background:rgba(255,255,255,.16); flex-shrink:0; position:relative; transition:background-color .15s ease; }
+  .rail-toggle .sw::after { content:""; position:absolute; top:2px; left:2px; width:15px; height:15px; border-radius:50%; background:#fff; transition:transform .15s ease; }
+  .rail-toggle.on .sw { background:var(--pp-mint); }
+  .rail-toggle.on .sw::after { transform:translateX(15px); }
+  .rail-toggle .t { font-size:11.5px; color:#c2ccd9; line-height:1.35; }
+  .rail-toggle .t small { display:block; font-size:10.5px; color:#7b8ba0; margin-top:2px; }
 
   /* --- the flow --------------------------------------------------------- */
   .flow { flex:1; display:flex; justify-content:center; padding:34px 44px 56px; overflow:auto; }
@@ -288,6 +297,10 @@
       <div class="k">Application</div>
       <div class="v" id="rail-ref"></div>
       <div class="n">Quote this reference when you contact the desk.</div>
+      <div class="rail-toggle" id="prefill-toggle" role="switch" tabindex="0" aria-checked="false">
+        <span class="sw"></span>
+        <span class="t">Prefill demo data<small id="prefill-sub">Fills every step</small></span>
+      </div>
     </div>
   </div>
 
@@ -325,27 +338,18 @@
 
   var F = window.OnboardingFlow;
   var state = F.defaultState();
+  var prefilled = false;
 
   // Deep-link into a step for a demo (?step=6), and a prefilled application
   // (?prefill=1) so the later steps can be reached without typing nine
   // screens of answers. Both are demo affordances and neither is required.
   (function readQuery() {
     var q = new URLSearchParams(window.location.search);
-    if (q.get("prefill") !== null) {
-      state.f = {
-        firstName: "Peter", lastName: "de Vries", email: "p.devries@vandersteen.nl",
-        password: "correct-horse-battery", orgName: "Vandersteen Koeling B.V.", kvk: "24398112",
-        street: "Havenweg 22", city: "Rotterdam", postcode: "3089 JJ"
-      };
-      state.agreed = true;
-      state.industryIndex = 1;
-      state.flowIndex = 2;
-      state.volumeIndex = 3;
-      state.authorityIndex = 1;
-      state.signatories = F.signatoriesForAuthority(1, state.f);
-      state.signatories[1] = { first: "Marieke", last: "Vandersteen", email: "m.vandersteen@vandersteen.nl", locked: false };
-    }
-    if (q.get("bankVerified") !== null) { state.bankVerified = true; }
+    if (q.get("prefill") !== null) { state = F.prefilledState(); prefilled = true; }
+    // Kept for the case prefill does not cover: an unverified bank account on
+    // an otherwise complete application, which is what step 9's amber card is
+    // for. On its own it just marks the cent as received.
+    if (q.get("bankVerified") !== null) { state.bankVerified = q.get("bankVerified") !== "0"; }
     if (q.get("step")) { state.step = F.clampStep(q.get("step")); }
   })();
 
@@ -803,6 +807,47 @@
     }
   };
 
+  /**
+   * Fill or empty the whole application, without leaving the step you are on.
+   *
+   * It replaces the state rather than patching it, so switching it off is a
+   * real reset — a half-cleared application would be neither, and the point of
+   * the toggle is to see both ends.
+   */
+  function setPrefill(on) {
+    var step = state.step;
+    prefilled = !!on;
+    state = prefilled ? F.prefilledState() : F.defaultState();
+    // The step survives: the toggle is for seeing a step filled in, and
+    // sending the reader back to step 1 to do that is the opposite of useful.
+    // Clamped anyway, since an empty application cannot be past its own
+    // validation — but the rail refuses to move forward, not back.
+    state.step = step;
+    renderPrefillToggle();
+    renderStep();
+  }
+
+  function renderPrefillToggle() {
+    var t = document.getElementById("prefill-toggle");
+    if (!t) { return; }
+    t.classList.toggle("on", prefilled);
+    t.setAttribute("aria-checked", prefilled ? "true" : "false");
+    var sub = document.getElementById("prefill-sub");
+    if (sub) { sub.textContent = prefilled ? "Every step answered" : "Fills every step"; }
+  }
+
+  (function wirePrefillToggle() {
+    var t = document.getElementById("prefill-toggle");
+    if (!t) { return; }
+    t.addEventListener("click", function () { setPrefill(!prefilled); });
+    // A switch is operable from the keyboard, and Space is what a switch takes.
+    t.addEventListener("keydown", function (evt) {
+      if (evt.key !== " " && evt.key !== "Enter") { return; }
+      evt.preventDefault();
+      setPrefill(!prefilled);
+    });
+  })();
+
   el.next.addEventListener("click", function () { window.ONB.next(); });
   el.back.addEventListener("click", function () { window.ONB.back(); });
 
@@ -816,6 +861,7 @@
     window.ONB.next();
   });
 
+  renderPrefillToggle();
   renderStep();
 })();
 </script>

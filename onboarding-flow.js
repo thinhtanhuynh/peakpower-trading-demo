@@ -64,6 +64,33 @@
     };
   }
 
+  /**
+   * A complete application, for walking the flow without typing nine screens.
+   *
+   * Every field the flow carries, not only the ones a step refuses on — the
+   * entity type and the bank verification are answers too, and leaving them at
+   * their defaults made "prefilled" quietly untrue. The test that pins this is
+   * that every one of the nine steps validates.
+   */
+  function prefilledState() {
+    var s = defaultState();
+    s.f = {
+      firstName: "Peter", lastName: "de Vries", email: "p.devries@vandersteen.nl",
+      password: "correct-horse-battery", orgName: "Vandersteen Koeling B.V.", kvk: "24398112",
+      street: "Havenweg 22", city: "Rotterdam", postcode: "3089 JJ"
+    };
+    s.agreed = true;
+    s.bankVerified = true;
+    s.entityIndex = ENTITY_TYPES.indexOf("BV");
+    s.industryIndex = INDUSTRIES.indexOf("Cold storage & refrigeration");
+    s.flowIndex = FLOWS.indexOf("Both");
+    s.volumeIndex = 3;
+    s.authorityIndex = 1;
+    s.signatories = signatoriesForAuthority(1, s.f);
+    s.signatories[1] = { first: "Marieke", last: "Vandersteen", email: "m.vandersteen@vandersteen.nl", locked: false };
+    return s;
+  }
+
   /** Digits only — a KvK number pasted with spaces or dots is still eight digits. */
   function kvkDigits(value) { return String(value || "").replace(/\D/g, ""); }
 
@@ -188,6 +215,7 @@
     KVK_DIGITS: KVK_DIGITS,
     blankSignatory: blankSignatory,
     defaultState: defaultState,
+    prefilledState: prefilledState,
     kvkDigits: kvkDigits,
     looksLikeEmail: looksLikeEmail,
     signatoryComplete: signatoryComplete,

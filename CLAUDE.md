@@ -2277,10 +2277,25 @@ added there matches that page rather than the design system.
 
 ### Demo affordances
 
+**The Prefill demo data toggle** sits in the rail's footer, with the demo
+chrome rather than in the form, and fills or empties the whole application
+without leaving the step you are on — sending the reader back to step 1 to see
+a step filled in is the opposite of useful. It replaces the state rather than
+patching it, so switching it off is a real reset; a half-cleared application
+would be neither end.
+
+**`prefilledState()` answers every field, not only the gated ones.** The entity
+type and the bank verification are answers too, and leaving them at their
+defaults made "prefilled" quietly untrue — the industry likewise sat on "Not
+specified". The test that pins this is that **all nine steps validate** against
+it and step 9's read-back contains no blank, which is a stronger statement than
+listing the fields and one that cannot go stale as fields are added.
+
 `?step=N` opens on a step (clamped to 1–9 by `clampStep()`, so a bad link lands
-on a real one), `?prefill=1` fills the application in, and `?bankVerified`
-marks the cent as received. All three are for walking a demo to a later step
-without typing nine screens; none is required and none changes the rules.
+on a real one), `?prefill=1` opens with the toggle on, and `?bankVerified=0`
+turns the cent back off on an otherwise complete application — the one state
+prefill cannot express, and what step 9's amber card exists for. None is
+required and none changes the rules.
 
 **The rail only goes backwards.** `goStep()` refuses `n > state.step`, and a
 step that has not been reached carries no handler and no pointer cursor —

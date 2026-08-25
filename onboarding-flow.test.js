@@ -244,6 +244,59 @@ function stateAt(step, patch) {
   assert.strictEqual(Flow.summaryRows(empty).length, 12, "the same twelve rows, answered or not");
 })();
 
+// --- prefilledState fills EVERY field, not only the gated ones --------------
+(function () {
+  var p = Flow.prefilledState();
+  var d = Flow.defaultState();
+
+  // The strongest statement of "complete": every step validates.
+  for (var n = 1; n <= Flow.LAST_STEP; n++) {
+    p.step = n;
+    assert.strictEqual(Flow.stepValid(p), true, "prefilled application passes step " + n);
+  }
+
+  // Every text field answered.
+  Object.keys(d.f).forEach(function (k) {
+    assert.ok(String(p.f[k]).trim().length > 0, "prefill fills f." + k);
+  });
+
+  // Every choice answered — including the two that are not gated by any step,
+  // which is exactly where an incomplete prefill hides.
+  assert.ok(p.entityIndex >= 0, "entity type is chosen");
+  assert.strictEqual(Flow.ENTITY_TYPES[p.entityIndex], "BV");
+  assert.ok(p.industryIndex > 0, "industry is a real choice, not 'Not specified'");
+  assert.strictEqual(Flow.INDUSTRIES[p.industryIndex], "Cold storage & refrigeration");
+  assert.strictEqual(Flow.FLOWS[p.flowIndex], "Both");
+  assert.ok(p.volumeIndex >= 0);
+  assert.ok(p.authorityIndex >= 0);
+  assert.strictEqual(p.agreed, true, "terms accepted");
+  assert.strictEqual(p.bankVerified, true, "the cent is a real answer to step 6");
+
+  // The signatories match the authority answer that was given.
+  assert.strictEqual(p.signatories.length, Flow.minSignatories(p.authorityIndex));
+  p.signatories.forEach(function (x, i) {
+    assert.strictEqual(Flow.signatoryComplete(x), true, "signatory " + i + " is complete");
+  });
+  assert.strictEqual(p.signatories[0].locked, true, "the applicant's own row stays locked");
+  assert.strictEqual(p.signatories[0].email, p.f.email, "and carries the email from step 1");
+
+  // Nothing on step 9's read-back is left blank.
+  Flow.summaryRows(p).forEach(function (r) {
+    assert.notStrictEqual(r.v, "—", "prefilled summary has no blank: " + r.k);
+    assert.notStrictEqual(r.v, "Not given", "prefilled summary has no blank: " + r.k);
+    assert.notStrictEqual(r.v, "Not registered", "prefilled summary has no blank: " + r.k);
+    assert.notStrictEqual(r.v, "Not verified yet", "prefilled summary has no blank: " + r.k);
+  });
+
+  // It starts where an empty one does; the page decides which step to show.
+  assert.strictEqual(Flow.prefilledState().step, 1);
+  // And it is a fresh object each time — a shared one would let the page's
+  // edits leak into the next toggle.
+  var a = Flow.prefilledState();
+  a.f.firstName = "changed";
+  assert.strictEqual(Flow.prefilledState().f.firstName, "Peter", "each call is a fresh state");
+})();
+
 // --- clampStep keeps a deep link on a real step -----------------------------
 (function () {
   assert.strictEqual(Flow.clampStep(0), 1);
