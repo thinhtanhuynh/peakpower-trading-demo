@@ -2277,6 +2277,16 @@ own pair.
 
 - **A 296px rail, not the portals' 236px.** Nine step labels, and "Authorised
   signatories" wraps at 236.
+- **Its rules read the ramps, not the `--pp-teal-*` aliases.** The portals'
+  own `.banner-teal` and `.ds-banner.info` still use those — they were written
+  before the palette rewrite, which is exactly what the aliases exist for. This
+  page came after it, so its info banner is `--pp-mint-bg` /
+  `--pp-mint-border` / `--pp-blue-700`. That moves the border one tier, to the
+  mint border that actually pairs with the background; `#43d3a6` is
+  `--pp-sidebar-subtitle`'s hue and has no border role of its own.
+- **`#7b8ba0` and `#93a2b5` stay literal**, because the portals hardcode them
+  too — the muted sidebar greys have no token in the shared block, and adding
+  one for a single page would break the four-file byte-identical `:root`.
 - **Its own breakpoint at 900px**, below which the rail goes horizontal and
   every two-column row stacks. Card, Badge, Banner, Button and StatCard are
   hand-reimplemented here for the third time — there is no build step to share
