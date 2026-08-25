@@ -41,6 +41,34 @@ function stateAt(step, patch) {
   });
 })();
 
+// --- the industry list -----------------------------------------------------
+(function () {
+  assert.strictEqual(Flow.INDUSTRIES[0], "Not specified",
+    "index 0 must mean 'not answered' — step 4 is optional and 0 is its default");
+  assert.strictEqual(Flow.INDUSTRIES.length, 25, "Not specified plus 24 industries");
+
+  var seen = {};
+  Flow.INDUSTRIES.forEach(function (name) {
+    assert.ok(typeof name === "string" && name.trim(), "every entry is a real label");
+    assert.ok(!seen[name], "no duplicate: " + name);
+    seen[name] = true;
+  });
+
+  // Alphabetical after the leading sentinel — the list is long enough that
+  // scanning it depends on the order holding.
+  var rest = Flow.INDUSTRIES.slice(1);
+  assert.deepStrictEqual(rest, rest.slice().sort(function (a, b) { return a < b ? -1 : a > b ? 1 : 0; }),
+    "the 24 industries stay in alphabetical order");
+
+  // Every index the flow can hold resolves to a label, so the step 9 read-back
+  // can never print undefined.
+  Flow.INDUSTRIES.forEach(function (_, i) {
+    var rows = Flow.summaryRows(Object.assign(Flow.defaultState(), { industryIndex: i }));
+    var industry = rows.filter(function (r) { return r.k === "Industry"; })[0];
+    assert.strictEqual(industry.v, Flow.INDUSTRIES[i]);
+  });
+})();
+
 // --- defaultState is genuinely empty ---------------------------------------
 (function () {
   var s = Flow.defaultState();
@@ -265,7 +293,7 @@ function stateAt(step, patch) {
   assert.ok(p.entityIndex >= 0, "entity type is chosen");
   assert.strictEqual(Flow.ENTITY_TYPES[p.entityIndex], "BV");
   assert.ok(p.industryIndex > 0, "industry is a real choice, not 'Not specified'");
-  assert.strictEqual(Flow.INDUSTRIES[p.industryIndex], "Cold storage & refrigeration");
+  assert.strictEqual(Flow.INDUSTRIES[p.industryIndex], "Agriculture & Food Processing");
   assert.strictEqual(Flow.FLOWS[p.flowIndex], "Both");
   assert.ok(p.volumeIndex >= 0);
   assert.ok(p.authorityIndex >= 0);

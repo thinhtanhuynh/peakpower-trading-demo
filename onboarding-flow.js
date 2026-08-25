@@ -28,8 +28,16 @@
 
   var ENTITY_TYPES = ["BV", "NV", "Eenmanszaak", "VOF", "Maatschap", "CV", "Stichting", "Vereniging", "Coöperatie"];
 
-  var INDUSTRIES = ["Not specified", "Cold storage & refrigeration", "Logistics & warehousing", "Food processing",
-    "Manufacturing", "Data centre", "Horticulture & greenhouses", "Retail & hospitality", "Public sector", "Other"];
+  /* "Not specified" leads and is the default: step 4 is optional, so index 0
+     has to mean "not answered" rather than silently answering Agriculture. */
+  var INDUSTRIES = ["Not specified",
+    "Agriculture & Food Processing", "Arts, Medias & Entertainment", "Casinos & Gambling",
+    "Construction", "Cryptocurrency", "Defense & Military Industry", "Education",
+    "Energy & Utilities", "Financial Services", "Food & Lodging", "Government",
+    "Health Professions", "Holding Company", "Industry & Manufacturing", "Mining",
+    "Non-Profit", "Professional Services", "Real Estate", "Retail Trade, Automotive",
+    "Retail Trade, Jewelry & Antiques", "Retail Trade, Others", "Sport & Tourism",
+    "Technology & Computing", "Transportation"];
 
   var FLOWS = ["Consumption", "Production", "Both"];
 
@@ -82,7 +90,9 @@
     s.agreed = true;
     s.bankVerified = true;
     s.entityIndex = ENTITY_TYPES.indexOf("BV");
-    s.industryIndex = INDUSTRIES.indexOf("Cold storage & refrigeration");
+    // A refrigerated warehouse for food. indexOf, not a literal index, so a
+    // reordered list cannot silently prefill a different industry.
+    s.industryIndex = INDUSTRIES.indexOf("Agriculture & Food Processing");
     s.flowIndex = FLOWS.indexOf("Both");
     s.volumeIndex = 3;
     s.authorityIndex = 1;
