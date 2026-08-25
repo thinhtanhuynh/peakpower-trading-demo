@@ -5159,8 +5159,14 @@
 
     var costFigureHtml, costSubHtml;
     if (totalCostOpts.unavailable) {
+      // Total is genuinely unknown without a day-ahead price — but the hedge
+      // half of it is contracted and known, so it is stated rather than
+      // swallowed along with the number that depends on spot.
       costFigureHtml = '<div class="position-figure">€ —</div>';
-      costSubHtml = '<div class="position-sub">' + totalCostOpts.sublabel + '</div>';
+      costSubHtml = '<div class="position-sub">' + totalCostOpts.sublabel + '</div>' +
+        (stats.hedgeCostEur
+          ? '<div class="position-note">hedge ' + eurValue(stats.hedgeCostEur) + ' contracted for this range</div>'
+          : '');
     } else {
       costFigureHtml = '<div class="position-figure ' + costTone + '">' + signedEur(totalCostEur) + '</div>';
       costSubHtml = '<div class="position-sub">hedge ' + eurValue(stats.hedgeCostEur) +
@@ -5192,7 +5198,8 @@
       ? seg("Covered", coveredKwh, "var(--pp-chart-covered)", true) +
         seg("Short", shortKwh, "var(--pp-chart-short)", true) +
         seg("Long", longKwh, "var(--pp-chart-long)")
-      : '<div class="composition-seg on-light" style="width:100%;background:var(--pp-border-strong)">No position for this range</div>';
+      : '<div class="composition-seg on-light" style="width:100%;background:var(--pp-border-strong)">' +
+        (stats.intervalsWithUsage ? 'No position for this range' : 'No readings yet — hedge only') + '</div>';
 
     function legendItem(label, kwh, swatch, valueColor) {
       return '<div class="cl-item"><span class="cl-swatch" style="background:' + swatch + '"></span>' + label +
@@ -5210,7 +5217,9 @@
           costFigureHtml + costSubHtml + '</div>' +
         '<div><div class="position-eyebrow">' +
           '<div style="display:flex;align-items:center;gap:8px"><span>Position</span>' + posBadge + '</div>' +
-          '<span>' + kwhValue(stats.actualUsageKwh) + ' usage</span></div>' +
+          '<span>' + (stats.intervalsWithUsage
+            ? kwhValue(stats.actualUsageKwh) + ' usage'
+            : kwhValue(stats.hedgeVolumeKwh) + ' hedged') + '</span></div>' +
           '<div class="composition-bar">' + barHtml + '</div>' +
           '<div class="composition-legend">' + legendHtml + '</div>' + posNote +
         '</div>' +
@@ -5278,6 +5287,25 @@
     return Math.max(pitch - gap, 0.5);
   }
 
+  /**
+   * A polyline per unbroken run of points — `pointAt(i)` returns null wherever
+   * there is nothing to plot. One `<polyline>` across a gap would draw a
+   * straight line through intervals that carry no data at all.
+   */
+  function lineSegments(n, pointAt, tail) {
+    var out = "", run = [];
+    function flush() {
+      if (run.length > 1) { out += '<polyline points="' + run.join(" ") + tail; }
+      run = [];
+    }
+    for (var i = 0; i < n; i++) {
+      var pt = pointAt(i);
+      if (pt == null) { flush(); } else { run.push(pt); }
+    }
+    flush();
+    return out;
+  }
+
   function buildChartSvg(times, actualUsage, hedgeVolume, uncovered, width, opts) {
     var n = times.length;
     width = width || 960;
@@ -5287,12 +5315,13 @@
     var plotH = height - padTop - padBottom;
     var minVal = 0, maxVal = 0;
     var i;
-    // actualUsage is always a real number now — measured or (per forward's
-    // historical-profile forecast) projected — so it always participates in
-    // the range.
+    // Usage is null on an interval the meters have not reached; the hedge is
+    // known for every interval. Scaling to a null would make the axis NaN.
     for (i = 0; i < n; i++) {
-      minVal = Math.min(minVal, actualUsage[i]);
-      maxVal = Math.max(maxVal, actualUsage[i]);
+      if (actualUsage[i] != null) {
+        minVal = Math.min(minVal, actualUsage[i]);
+        maxVal = Math.max(maxVal, actualUsage[i]);
+      }
       minVal = Math.min(minVal, hedgeVolume[i]);
       maxVal = Math.max(maxVal, hedgeVolume[i]);
     }
@@ -5305,6 +5334,10 @@
     var rbw = barWidthFor(barW);   // the rendered bar, gapped inside its slot
     var coveredBars = "", bars = "";
     for (i = 0; i < n; i++) {
+      // No reading, no bar: the covered band and the short/long gap are both
+      // measured-against-hedge quantities, so neither exists here. The hedge
+      // line still runs through — it is contracted, not measured.
+      if (actualUsage[i] == null) { continue; }
       var bx = barX(i);
       var yNet = yFor(actualUsage[i]);
       var yHedge = yFor(hedgeVolume[i]);
@@ -5328,11 +5361,12 @@
     // is nothing to split it on.
     var hedgePoints = stepPoints(n, function (k) { return padLeft + k * barW + barW / 2; }, barW / 2,
       function (k) { return yFor(hedgeVolume[k]); });
-    var netPts = [];
-    for (i = 0; i < n; i++) {
-      netPts.push((padLeft + i * barW + barW / 2).toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1));
-    }
-    var netLines = '<polyline points="' + netPts.join(" ") + '" fill="none" stroke="#006ECF" stroke-width="2"></polyline>';
+    // Broken where there is no reading rather than bridged across the gap: a
+    // straight run through it would draw usage nobody measured.
+    var netLines = lineSegments(n, function (k) {
+      return actualUsage[k] == null ? null
+        : (padLeft + k * barW + barW / 2).toFixed(1) + "," + yFor(actualUsage[k]).toFixed(1);
+    }, '" fill="none" stroke="#006ECF" stroke-width="2"></polyline>');
     // Ticks name the instant an interval ENDS (see intervalEndLabel), so the
     // tick is placed at that interval's RIGHT edge and selected by its end
     // time — the "08:00" tick belongs to the interval starting 07:45, and
@@ -5630,6 +5664,34 @@
    *  past the real dataset (no per-date grid to borrow from DATA.byDate). The
    *  one real DST-short day (2026-03-29, 92 slots) never needs this — it's
    *  always inside MIN_DATE..MAX_DATE and has its own real grid. */
+  /* The plain 96-slot day, for a future date that has no measured grid of its
+     own. Only the hedge is drawn on those intervals, but they still need an
+     x-position each. The one real DST-short day (2026-03-29, 92 slots) never
+     needs this — it is inside the measured window and has its own grid. */
+  var SYNTHETIC_TIMES = null;
+  function syntheticDayTimes() {
+    if (SYNTHETIC_TIMES) { return SYNTHETIC_TIMES; }
+    var t = [];
+    for (var h = 0; h < 24; h++) {
+      for (var m = 0; m < 60; m += 15) { t.push(pad2(h) + ":" + pad2(m)); }
+    }
+    SYNTHETIC_TIMES = t;
+    return t;
+  }
+
+  /** Every calendar date in [from, to] inclusive, measured or not. */
+  function allCalendarDatesInRange(from, to) {
+    var out = [];
+    var d = from;
+    while (d <= to) {
+      out.push(d);
+      var parts = d.split("-").map(Number);
+      var next = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2] + 1));
+      d = next.getUTCFullYear() + "-" + pad2(next.getUTCMonth() + 1) + "-" + pad2(next.getUTCDate());
+    }
+    return out;
+  }
+
   /** Start/end of the day, month, or quarter containing `anchor` (a YYYY-MM-DD). */
   function periodRange(period, anchor) {
     var year = parseInt(anchor.slice(0, 4), 10);
@@ -5773,12 +5835,15 @@
   }
 
   /**
-   * One row per measured 15-minute interval in [from, to].
+   * One row per 15-minute interval in [from, to].
    *
-   * Dates the meters have not delivered are **skipped entirely** — no row, no
-   * placeholder. This screen shows what was measured and nothing else; there
-   * is no forecast of usage and no forward price standing in for spot, so a
-   * date past the metering window has nothing to say and says nothing.
+   * A date the meters have delivered carries its real consumption, production
+   * and EPEX. A date past them carries **null for all three** — not an
+   * estimate. There is no forecast of usage here and no forward price standing
+   * in for spot; what survives on those intervals is the hedge, which
+   * `consumption-calc.js` computes from the blocks and the calendar alone and
+   * therefore knows exactly. Every usage- and cost-derived field nulls itself
+   * per field, so the charts and the table simply have nothing to draw there.
    *
    * `siteIds` defaults to every connection — Consumption's own charts are the
    * whole portfolio, and that is deliberate (see CLAUDE.md). The per-EAN chart
@@ -5786,11 +5851,31 @@
    * question about one metering point, unlike a hedge, which is held for the
    * account and has no per-connection split to show.
    */
+  function maxDate(a, b) { return (b && b > a) ? b : a; }
+
+  /** A year past today by the demo clock — how far the range inputs reach. */
+  function oneYearAhead() {
+    var d = new Date(nowForLink());
+    return (d.getFullYear() + 1) + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+
+  /**
+   * "3.456 of 35.040 intervals metered" — states coverage rather than letting
+   * a mostly-empty forward range read as a full one. Says nothing extra when
+   * every interval carries a reading.
+   */
+  function coverageLabel(range, emptyNote) {
+    var total = range.times.length;
+    if (range.meteredCount === total) { return total + " intervals"; }
+    if (range.meteredCount === 0) {
+      return total + " intervals · " + (emptyNote || "none metered yet");
+    }
+    return total + " intervals · " + ConsumptionCalc.formatNL(range.meteredCount, 0) + " metered";
+  }
+
   function concatRangeData(from, to, forSiteIds) {
-    // The dataset's own dates, not every calendar date — the rest would only
-    // be skipped below.
-    var dates = datesInRange(from, to);
-    var allTimes = [], allDatesPerIndex = [], allPrices = [], allC = [], allG = [];
+    var dates = allCalendarDatesInRange(from, to);
+    var allTimes = [], allDatesPerIndex = [], allPrices = [], allC = [], allG = [], metered = [];
     var siteIds = forSiteIds || allSiteIds();
     dates.forEach(function (d) {
       var ds = DATA.byDate[d];
@@ -5798,19 +5883,30 @@
       // the portfolio or for none of it — but this checks rather than assumes,
       // since a half-measured sum would silently understate the total.
       var series = siteIds.map(function (id) { return DATA.bySite[id] && DATA.bySite[id][d]; });
-      if (!ds || !series.length || !series.every(function (x) { return !!x; })) { return; }
-      for (var i = 0; i < ds.t.length; i++) {
-        var sumC = 0, sumG = 0;
-        for (var k = 0; k < series.length; k++) { sumC += series[k].c[i]; sumG += series[k].g[i]; }
-        allTimes.push(ds.t[i]);
+      var real = !!ds && series.length > 0 && series.every(function (x) { return !!x; });
+      var times = real ? ds.t : syntheticDayTimes();
+      for (var i = 0; i < times.length; i++) {
+        allTimes.push(times[i]);
         allDatesPerIndex.push(d);
-        allPrices.push(ds.p[i]);
-        allC.push(sumC);
-        allG.push(sumG);
+        metered.push(real);
+        if (real) {
+          var sumC = 0, sumG = 0;
+          for (var k = 0; k < series.length; k++) { sumC += series[k].c[i]; sumG += series[k].g[i]; }
+          allPrices.push(ds.p[i]);
+          allC.push(sumC);
+          allG.push(sumG);
+        } else {
+          allPrices.push(null);
+          allC.push(null);
+          allG.push(null);
+        }
       }
     });
     return {
-      dates: allDatesPerIndex, times: allTimes, prices: allPrices, consumption: allC, production: allG
+      dates: allDatesPerIndex, times: allTimes, prices: allPrices, consumption: allC, production: allG,
+      // How many intervals actually carry readings — for the subtitle, which
+      // states coverage rather than letting a mostly-empty range look full.
+      meteredCount: metered.filter(Boolean).length
     };
   }
 
@@ -5872,8 +5968,11 @@
     var minVal = 0, maxVal = 0;
     var i;
     for (i = 0; i < n; i++) {
-      minVal = Math.min(minVal, actualUsage[i]);
-      maxVal = Math.max(maxVal, actualUsage[i]);
+      // Skips a null reading — scaling to one would make the axis NaN.
+      if (actualUsage[i] != null) {
+        minVal = Math.min(minVal, actualUsage[i]);
+        maxVal = Math.max(maxVal, actualUsage[i]);
+      }
       minVal = Math.min(minVal, hedgeVolume[i]);
       maxVal = Math.max(maxVal, hedgeVolume[i]);
     }
@@ -5888,6 +5987,10 @@
 
     var coveredBars = "", bars = "";
     for (i = 0; i < n; i++) {
+      // No reading, no bar: the covered band and the short/long gap are both
+      // measured-against-hedge quantities, so neither exists here. The hedge
+      // line still runs through — it is contracted, not measured.
+      if (actualUsage[i] == null) { continue; }
       var bx = barX(i);
       var yNet = yFor(actualUsage[i]);
       var yHedge = yFor(hedgeVolume[i]);
@@ -5910,11 +6013,10 @@
 
     var hedgePoints = stepPoints(n, function (k) { return padLeft + k * stepX; }, barW / 2,
       function (k) { return yFor(hedgeVolume[k]); });
-    var netPts = [];
-    for (i = 0; i < n; i++) {
-      netPts.push((padLeft + i * stepX).toFixed(1) + "," + yFor(actualUsage[i]).toFixed(1));
-    }
-    var netLines = '<polyline points="' + netPts.join(" ") + '" fill="none" stroke="#006ECF" stroke-width="1.5"></polyline>';
+    var netLines = lineSegments(n, function (k) {
+      return actualUsage[k] == null ? null
+        : (padLeft + k * stepX).toFixed(1) + "," + yFor(actualUsage[k]).toFixed(1);
+    }, '" fill="none" stroke="#006ECF" stroke-width="1.5"></polyline>');
 
     var dayGridlines = "";
     var dayLabels = "";
@@ -5981,8 +6083,12 @@
     opts = opts || {};
     var minVal = 0, maxVal = 0, i;
     for (i = 0; i < n; i++) {
-      minVal = Math.min(minVal, totalCost[i]);
-      maxVal = Math.max(maxVal, totalCost[i]);
+      // Total cost is null wherever usage or the day-ahead price is; hedge
+      // cost is known for every interval, priced at the block's own rate.
+      if (totalCost[i] != null) {
+        minVal = Math.min(minVal, totalCost[i]);
+        maxVal = Math.max(maxVal, totalCost[i]);
+      }
       minVal = Math.min(minVal, hedgeCost[i]);
       maxVal = Math.max(maxVal, hedgeCost[i]);
     }
@@ -5996,11 +6102,13 @@
     // Hedge cost is as block-shaped as hedge volume is — same step treatment.
     var hedgePoints = stepPoints(n, function (k) { return padLeft + k * stepX + anchorOffset; }, barW / 2,
       function (k) { return yFor(hedgeCost[k]); });
-    var totalSegments = [], seg = null;
     // Same bar geometry as the usage chart's, so the two align pixel-for-pixel
     // under the shared crosshair.
     var w = barWidthFor(barW);
     for (i = 0; i < n; i++) {
+      // Nothing spent and nothing earned on an interval with no usage and no
+      // price — only the hedge cost below is known there.
+      if (totalCost[i] == null) { continue; }
       var anchor = padLeft + i * stepX + anchorOffset;
       var x = anchor - barW / 2;
       var yH = yFor(hedgeCost[i]);
@@ -6012,13 +6120,12 @@
       deltaBars += '<rect x="' + x.toFixed(1) + '" y="' + Math.min(yH, yT).toFixed(1) +
         '" width="' + w.toFixed(1) + '" height="' + Math.abs(yH - yT).toFixed(1) +
         '" fill="' + (buy ? COST_BUY_FILL : COST_SELL_FILL) + '"></rect>';
-      if (!seg) { seg = []; totalSegments.push(seg); }
-      seg.push(anchor.toFixed(1) + "," + yT.toFixed(1));
     }
-    var totalLines = totalSegments.map(function (pts) {
-      return '<polyline points="' + pts.join(" ") + '" fill="none" stroke="' + COST_TOTAL_LINE +
-        '" stroke-width="' + lineWidth + '" stroke-linejoin="round" stroke-linecap="round"></polyline>';
-    }).join("");
+    var totalLines = lineSegments(n, function (k) {
+      return totalCost[k] == null ? null
+        : (padLeft + k * stepX + anchorOffset).toFixed(1) + "," + yFor(totalCost[k]).toFixed(1);
+    }, '" fill="none" stroke="' + COST_TOTAL_LINE + '" stroke-width="' + lineWidth +
+       '" stroke-linejoin="round" stroke-linecap="round"></polyline>');
     return {
       zeroY: zeroY,
       markup: '<line x1="' + padLeft + '" y1="' + zeroY.toFixed(1) + '" x2="' + (padLeft + plotW) +
@@ -6390,9 +6497,7 @@
     var stats = ConsumptionCalc.computeDayStats(range.times, range.prices, range.consumption, range.production, range.dates, hedgeBlocks);
     var series = ConsumptionCalc.computeIntervalSeries(range.times, range.prices, range.consumption, range.production, range.dates, hedgeBlocks);
 
-    // Every date in the range is measured — concatRangeData skips the rest —
-    // so the day count is simply how many of them there are.
-    var dayCount = datesInRange(from, to).length;
+    var dayCount = allCalendarDatesInRange(from, to).length;
     // From/To sit in the chart-card toolbar, so a crumb restating the range
     // here would duplicate controls sitting right next to it. The
     // assignment itself must stay (not just deleted): crumb is one shared
@@ -6401,7 +6506,8 @@
     // this write would leave whatever crumb another screen last set (e.g. a
     // connection's EAN) showing above Consumption's own content.
     crumb.textContent = "";
-    chartSubtitle.textContent = portfolioLabel() + " · " + range.times.length + " intervals · " +
+    chartSubtitle.textContent = portfolioLabel() + " · " +
+      coverageLabel(range, "none metered yet · hedge only") + " · " +
       dayCount + (dayCount === 1 ? " day" : " days") + " · Europe/Amsterdam";
 
     renderPositionPanel(stats);
@@ -6732,12 +6838,16 @@
     var usageKwh = [], priceMwh = [];
     for (var i = 0; i < one.times.length; i++) {
       // The source is kW averaged over the interval; a quarter-hour of it is
-      // kWh — the same conversion consumption-calc.js does internally.
-      usageKwh.push((one.consumption[i] - one.production[i]) * 0.25);
+      // kWh — the same conversion consumption-calc.js does internally. Null
+      // stays null: an interval the meters have not reached has no usage.
+      var hasReading = one.consumption[i] != null && one.production[i] != null;
+      usageKwh.push(hasReading ? (one.consumption[i] - one.production[i]) * 0.25 : null);
       priceMwh.push(one.prices[i] == null ? null : one.prices[i] * 1000);
     }
+    // No "hedge only" here: this card plots usage against the price and draws
+    // no hedge line, so past the meters it is genuinely empty.
     eanChartSubtitle.textContent = siteName(siteId) + " · " + siteEan(siteId) + " · " +
-      one.times.length + " intervals";
+      coverageLabel(one, "no readings for this range yet");
     drawEanCharts(one, usageKwh, priceMwh, singleDay);
   }
 
@@ -6905,12 +7015,21 @@
       return;
     }
 
-    // The range stops where the meters do. With no forecast of usage and no
-    // forward price standing in for spot, a date past MAX_DATE yields no
-    // intervals at all — offering it in the picker is offering a blank screen.
-    // A position running past it is still on the Trading screen, which is
-    // where a contracted block belongs.
-    MAX_SELECTABLE_DATE = MAX_DATE;
+    // A year past today, so a position can be looked at before the metering
+    // data for it exists. Nothing is forecast out there — the intervals carry
+    // null usage and null price, and only the hedge draws (see
+    // concatRangeData). Extended further by any block or confirmed trade that
+    // runs past the year, or its own last months would sit beyond the input's
+    // max and be unreachable.
+    MAX_SELECTABLE_DATE = maxDate(MAX_DATE, oneYearAhead());
+    (DATA.hedge || []).forEach(function (block) {
+      MAX_SELECTABLE_DATE = maxDate(MAX_SELECTABLE_DATE, block.periodEnd);
+    });
+    liveTradeRecords().forEach(function (r) {
+      if (!r.periodEnd) { return; }
+      if (PortalTradeLink.effectiveStatus(r, nowForLink()) !== PortalTradeLink.STATUS_CONFIRMED) { return; }
+      MAX_SELECTABLE_DATE = maxDate(MAX_SELECTABLE_DATE, r.periodEnd);
+    });
 
     controls.forEach(function (el) {
       el.min = MIN_DATE;

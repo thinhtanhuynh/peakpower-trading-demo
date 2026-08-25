@@ -1374,39 +1374,63 @@ table summary row. Below 760px those stack. There is no small-screen layout
 and none is intended — this is a desktop trading tool. Known and accepted: the
 chart SVGs overflow the viewport below ~950px.
 
-### The screen shows measured intervals, and nothing else
+### Past the meters: only what is known
 
-**There is no forecast of usage anywhere on this screen.** `concatRangeData()`
-walks `datesInRange()` — the dataset's own dates — and skips anything the
-meters have not delivered: no row, no placeholder, no estimate. What was
-removed with it, and why each piece had to go together:
+**The range reaches a year ahead, and nothing is forecast out there.**
+`concatRangeData()` walks every calendar date in the range. A date the meters
+have delivered carries its real consumption, production and EPEX; a date past
+them carries **null for all three** — not an estimate. `consumption-calc.js`
+already nulls each derived field independently, so those intervals compute:
+
+| | Past the meters |
+|---|---|
+| Hedge volume, base/peak volume, hedge cost | **Real.** From the blocks and the calendar, priced at the block's own contract rate — never dependent on metering or spot |
+| Actual usage, uncovered, long, short | **Absent.** No reading, so no number |
+| Usage cost, delta cost, total cost | **Absent.** No usage and no day-ahead price |
+
+So a forward range draws the hedge as a dashed step on both charts and nothing
+else, the table shows `—` in every usage and cost column, and the panel says
+*No readings yet — hedge only*.
+
+**There is no forecast of usage anywhere.** What was removed, and why the
+pieces had to go together:
 
 | Gone | Was |
 |---|---|
 | `usage-projection.js` and its suite | a historical time-of-day profile per site, projecting usage past coverage |
-| `indicativeEpexFor()` | the forward curve standing in for spot on those dates. With no usage to price, it had nothing left to value |
-| the certainty layer | hatch fills, 55 % opacity, dotted line segments, the Measured/Projected boundary marker, the legend swatch, the tooltip's Status row, `.stat-card.projected` / `.position-panel.projected`, the "Projected" badge |
-| the table's `Data` column and its CSV twin | every row is measured, so a column that always reads "Measured" says nothing |
-| `measuredStats` / `projectedStats` / `realDayCount` | the measured-vs-projected split behind the cards' "+ €X projected" sublabels |
+| `indicativeEpexFor()` | the forward curve standing in for spot. With no usage to price, it had nothing left to value |
+| the certainty layer | hatch fills, 55 % opacity, dotted line segments, the Measured/Projected boundary marker, its legend swatch, the tooltip's Status row, `.stat-card.projected` / `.position-panel.projected`, the "Projected" badge |
+| the table's `Data` column and its CSV twin | provenance only meant something while some rows were forecast |
+| `measuredStats` / `projectedStats` / `realDayCount` | the split behind the cards' "+ €X projected" sublabels |
 
-**`MAX_SELECTABLE_DATE` is `MAX_DATE`.** The range picker stops where the
-meters do, because a date past it now yields zero intervals — offering it would
-offer a blank screen. The consequence is real and worth knowing: **a position
-running past the metered window is no longer visible on Consumption.** The
-Trading screen still lists it, which is where a contracted block belongs.
+**`MAX_SELECTABLE_DATE` is a year past today** (`oneYearAhead()`, by the demo
+clock), extended further by any block or confirmed trade running beyond it —
+otherwise that position's last months would sit past the input's max and be
+unreachable.
 
-**What stayed real.** Hedge volume and hedge cost never depended on metering or
-spot — they come from the blocks and the calendar, priced at the block's own
-contract rate. They still total the full selected range. Nothing about them was
-a forecast, so nothing about them changed.
+**A null is not a zero, and the charts must not draw one.** Every scale loop
+skips a null before taking a min/max (one null makes the whole axis `NaN`),
+every bar loop `continue`s on one, and both usage and total-cost lines go
+through `lineSegments()`, which starts a new `<polyline>` at each gap. A single
+polyline across the boundary would draw a straight run through intervals that
+carry no data at all. The hedge lines have no gaps to handle — they are known
+everywhere.
 
-**`costCertaintyOpts()` still exists, with one job left:** saying so when a
-range has no day-ahead price behind it at all. It no longer distinguishes
-indicative from measured, because there is no longer an indicative case.
+**The subtitle states coverage, not just size.** `coverageLabel()` prints
+"1.152 intervals · 480 metered", or "· none metered yet · hedge only" when
+there is nothing measured at all, so a mostly-forward range cannot read as a
+full one. The per-EAN card passes its own empty note — it plots usage against
+price and draws no hedge line, so out there it is genuinely empty rather than
+"hedge only".
 
-**If forecasting is ever wanted back**, it is one commit in the history rather
-than something to reconstruct — the module, the certainty vocabulary and every
-call site went in one change.
+**The panel states the hedge cost it does know** even when Total is `€ —`.
+Total is Delta + Hedge and Delta needs a spot price, so the total is genuinely
+unknown — but the hedge half is contracted, and swallowing it along with the
+number that depends on spot would hide a figure we have.
+
+**`costCertaintyOpts()` has one job left:** saying so when a range has no
+day-ahead price behind it. It no longer distinguishes indicative from measured,
+because there is no indicative case.
 
 ## Design system
 
