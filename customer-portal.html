@@ -881,6 +881,22 @@
      not an invented look — built on the corrected base colors below. */
   .ideal-card { border:1.5px solid var(--pp-teal-600); border-radius:var(--radius-lg); padding:20px 22px; background:#fff; display:flex; flex-direction:column; gap:14px; }
   .bank-card { border:1px solid var(--pp-border); border-radius:var(--radius-lg); padding:20px 22px; background:#fff; display:flex; flex-direction:column; gap:14px; }
+
+  /* An email we sent, shown back to the customer. Ported from
+     customer-onboarding.html — there is no build step to share a component
+     through, so this is the second hand-reimplementation of it. Keep the two
+     in step if either moves. */
+  .mail { border:1px solid var(--pp-border); border-radius:var(--radius-lg); overflow:hidden; }
+  .mail-head { background:var(--pp-surface-alt); border-bottom:1px solid var(--pp-border); padding:10px 16px; display:flex; justify-content:space-between; gap:12px; font-size:11px; color:var(--pp-text-body); flex-wrap:wrap; }
+  .mail-from { font-family:var(--font-mono); font-size:10.5px; color:var(--pp-text-faint); }
+  .mail-body { padding:18px 20px; font-size:var(--text-sm); line-height:1.6; color:var(--pp-text-body); }
+  .mail-facts { display:flex; gap:28px; margin-top:14px; padding:12px 0; border-top:1px solid var(--pp-border); border-bottom:1px solid var(--pp-border); flex-wrap:wrap; }
+  .mail-facts .k { font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--pp-text-faint); }
+  .mail-facts .v { font-weight:600; margin-top:3px; color:var(--pp-text-heading); }
+  /* The one control on the deposit screen that stands in for the bank feed,
+     marked as the demo affordance it is rather than dressed as a real action. */
+  .topup-demo { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-top:4px; padding-top:12px; border-top:1px dashed var(--pp-border-strong); }
+  .topup-demo span { font-size:11px; color:var(--pp-text-faint); line-height:1.5; flex:1; min-width:180px; }
   /* Mockup's raw (non-Card-component) header for iDEAL/Bank transfer — bigger
      than the app's usual 13.5px Card title, since the mockup doesn't route
      these two cards through the real Card primitive (only "Recent deposits"
@@ -1536,7 +1552,7 @@
     walletReserved: ACCOUNTS[ACCOUNT_SESSION.activeId].walletReserved,
     // topupAmount is reset to a real, computed value every time topUpWallet()
     // opens the screen (see that function) — 0 here is just "not open yet".
-    walletLedgerExtra: [], topupCount: 0, topupAmount: 0, lastTopup: null,
+    walletLedgerExtra: [], topupCount: 0, topupAmount: 0, lastTopup: null, lastTransfer: null,
     withdrawalCount: 0, withdrawAmount: 0, lastWithdrawal: null,
     // Which bucket the Ledger's filter is on — an index into LEDGER_TABS.
     ledgerFilter: 0,
@@ -1814,7 +1830,7 @@
       state.walletSettled = a.walletSettled;
       state.walletReserved = a.walletReserved;
       state.walletLedgerExtra = [];
-      state.topupCount = 0; state.lastTopup = null;
+      state.topupCount = 0; state.lastTopup = null; state.lastTransfer = null;
       state.withdrawalCount = 0; state.lastWithdrawal = null;
       state.depositReserved = {}; state.depositResolved = {};
     }
@@ -2412,6 +2428,102 @@
   /** "Back to wallet" from the confirmation screen. */
   function closeTopupSuccess() { state.walletView = "ledger"; renderApp(); }
 
+  /** The file the deposit instructions link serves, named once. */
+  var INSTRUCTIONS_FILE = "PeakPower_Funding_Instructions.docx";
+
+  /**
+   * A transfer arriving, which is the one deposit the customer is not watching
+   * a screen for.
+   *
+   * iDEAL clears while they are here and the success screen is the
+   * confirmation. A transfer lands one to two business days later, so the
+   * confirmation is an email — that is why this is the only deposit path that
+   * sends one.
+   */
+  function markTransferReceived() {
+    if (!topupAmountValid()) { return; }   // the button is disabled too
+    var amt = state.topupAmount;
+    var now = nowForLink();
+    var d = new Date(now);
+    var pad = function (n) { return String(n).padStart(2, "0"); };
+    var ref = PortalSeedData.BANK_DETAILS.reference;
+    var newAvailable = state.walletAvailable + amt;
+
+    state.walletAvailable += amt;
+    state.walletSettled += amt;
+    state.topupCount += 1;
+    state.walletLedgerExtra.unshift({
+      date: pad(d.getDate()) + "-" + pad(d.getMonth() + 1) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()),
+      type: "Deposit", tone: "success",
+      amount: "+ " + PortalSeedData.formatEUR(amt), positive: true,
+      by: acct().userName, ref: ref, refKind: "none", after: PortalSeedData.formatEUR(newAvailable)
+    });
+    state.lastTransfer = { amount: amt, ref: ref, newAvailable: newAvailable, receivedAt: utcStamp(now) };
+    state.walletView = "transfer-received";
+    renderApp();
+  }
+
+  function closeTransferReceived() { state.walletView = "ledger"; renderApp(); }
+
+  /** "Wed, Aug 26, 2026 11:30:42 AM UTC" — a receipt names an instant, in UTC. */
+  function utcStamp(ms) {
+    var d = new Date(ms);
+    var days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var pad = function (n) { return String(n).padStart(2, "0"); };
+    var h = d.getUTCHours();
+    var suffix = h < 12 ? "AM" : "PM";
+    var h12 = h % 12 || 12;
+    return days[d.getUTCDay()] + ", " + months[d.getUTCMonth()] + " " + d.getUTCDate() + ", " + d.getUTCFullYear() +
+      " " + pad(h12) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds()) + " " + suffix + " UTC";
+  }
+
+  /**
+   * The confirmation email, shown back to the customer.
+   *
+   * The amount reads "300.00 EUR" rather than the portal's own "€ 300,00":
+   * this is the receipt line as specified, and a receipt states the currency
+   * beside the figure. It is the one number on the site not in NL format.
+   */
+  function transferMailHtml(t) {
+    return '<div class="mail">' +
+      '<div class="mail-head"><span><b>Subject</b> · Your transfer has been received</span>' +
+        '<span class="mail-from">support@peakpower.nl</span></div>' +
+      '<div class="mail-body">' +
+        '<div>Hi ' + esc(acct().userName) + ',</div>' +
+        '<div style="margin-top:10px">We just received your transfer.</div>' +
+        '<div class="mail-facts">' +
+          '<div><div class="k">Date</div><div class="v">' + esc(t.receivedAt) + '</div></div>' +
+          '<div><div class="k">Amount received</div><div class="v">' + t.amount.toFixed(2) + ' EUR</div></div>' +
+          '<div><div class="k">Reference</div><div class="v">' + esc(t.ref) + '</div></div>' +
+        '</div>' +
+        '<div style="margin-top:14px">Your deposit has been added to your balance on the platform.</div>' +
+        '<div style="margin-top:12px">Have a question? You can reply directly to this email.</div>' +
+        '<div style="margin-top:12px">The PeakPower Team</div>' +
+      '</div></div>';
+  }
+
+  function renderWalletTransferReceived() {
+    var t = state.lastTransfer;
+    if (!t) { backToWallet(); return; }
+    var banner = '<div class="banner banner-green"><div class="banner-icon success">✓</div><div class="banner-body">' +
+      '<div class="banner-title">Your transfer has been received</div>' +
+      '<div class="banner-sub">€ ' + ConsumptionCalc.formatNL(t.amount, 2) + ' · reference ' + esc(t.ref) + ' · ' + esc(t.receivedAt) + '</div></div></div>';
+
+    var summaryCard = cardHtml("New balance", "", '<div class="balance-box">' +
+      '<div class="bb-row"><span>Amount received</span><span>€ ' + ConsumptionCalc.formatNL(t.amount, 2) + '</span></div>' +
+      '<div class="bb-row total"><span>Available balance</span><span style="color:var(--pp-green-text)">€ ' + ConsumptionCalc.formatNL(t.newAvailable, 2) + '</span></div>' +
+      '</div>' +
+      '<button type="button" class="btn-primary" style="width:100%;margin-top:14px" onclick="PP.closeTransferReceived()">Back to wallet</button>');
+
+    document.getElementById("wallet-body").innerHTML = banner +
+      '<div style="display:grid;grid-template-columns:420px 1fr;gap:16px;align-items:start;margin-top:16px">' +
+        summaryCard +
+        cardHtml("The email we just sent you", "From support@peakpower.nl — you can reply to it",
+          transferMailHtml(t)) +
+      '</div>';
+  }
+
   // --- withdrawal ---------------------------------------------------------
   //
   // The mirror image of a deposit, with one rule a deposit does not have: you
@@ -2559,6 +2671,7 @@
     setWizardVolume: setWizardVolume,
     commitWizardVolume: commitWizardVolume, stepWizardVolume: stepWizardVolume,
     onWizardNoteChange: onWizardNoteChange, submitWizard: submitWizard,
+    markTransferReceived: markTransferReceived, closeTransferReceived: closeTransferReceived,
     topUpWallet: topUpWallet, backToWallet: backToWallet, closeTopupSuccess: closeTopupSuccess,
     setTopupAmount: setTopupAmount, setTopupAmountValue: setTopupAmountValue,
     onTopupAmountInput: onTopupAmountInput, performTopup: performTopup,
@@ -3039,6 +3152,9 @@
     } else if (page === "Wallet" && state.walletView === "topup") {
       title = "Deposit funds";
       setCrumb("Add funds to your wallet", "Wallet", "backToWallet");
+    } else if (page === "Wallet" && state.walletView === "transfer-received") {
+      title = "Transfer received";
+      setCrumb("Credited to your wallet", "Wallet", "backToWallet");
     } else if (page === "Wallet" && state.walletView === "withdraw") {
       title = "Withdraw funds";
       setCrumb("Pay out to your own account", "Wallet", "backToWallet");
@@ -4638,6 +4754,7 @@
     if (state.walletView === "topup-success") { renderWalletTopupSuccess(); return; }
     if (state.walletView === "withdraw") { renderWalletWithdraw(); return; }
     if (state.walletView === "withdraw-success") { renderWalletWithdrawSuccess(); return; }
+    if (state.walletView === "transfer-received") { renderWalletTransferReceived(); return; }
 
     var kpiHtml =
       statCardHtml("Available balance", "€ " + ConsumptionCalc.formatNL(state.walletAvailable, 2), "brand", "ready to reserve for new trades") +
@@ -4765,7 +4882,15 @@
       '<div class="copy-row highlight"><div><div class="cr-label">Payment reference</div><div class="cr-value" style="font-size:20px;color:var(--pp-teal-700)">' + bank.reference + '</div></div><span class="copy-affordance">copy</span></div>' +
       '<div style="font-size:12px;color:var(--pp-text-body);font-weight:500">Without the reference we cannot match your transfer automatically.' +
         (pendingOffer ? " A transfer sent now will not arrive before your open offer (" + pendingOffer.id + ") expires — use iDEAL for that." : "") + '</div>' +
-      '<a class="btn-link" style="display:block;text-align:right;font-size:11.5px;color:var(--pp-teal-600)" onclick="PP.noop()">Download instructions as PDF</a>' +
+      // The same file the onboarding flow serves — it is the same document,
+      // PeakPower's bank details for a transfer, so it is not written twice.
+      '<a class="btn-link" href="' + INSTRUCTIONS_FILE + '" download style="display:block;text-align:right;font-size:11.5px;color:var(--pp-teal-600)">Download deposit instructions</a>' +
+      '<div class="topup-demo">' +
+        '<span>Demo — a real transfer is matched against the bank feed one to two business days later, ' +
+          'and the confirmation email goes out then.</span>' +
+        '<button type="button" class="btn-secondary btn-sm"' + (topupAmountValid() ? "" : " disabled") +
+          ' onclick="PP.markTransferReceived()">Mark transfer as received</button>' +
+      '</div>' +
       '</div>';
 
     // #wallet-body's own 16px flex-column gap (see the shared -body wrapper

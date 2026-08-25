@@ -531,6 +531,29 @@ saying no payout account is on file rather than a form whose right-hand column
 is a null dereference. Hiding the button alone is not enough — a stale screen
 still asks.
 
+**A transfer arriving is the one deposit that sends an email.** iDEAL clears
+while the customer is on the screen, so `topup-success` *is* the confirmation. A
+transfer lands one to two business days later with nobody watching, so
+`markTransferReceived()` credits the wallet exactly as `performTopup()` does and
+renders `transfer-received`: the new balance beside the email that went out,
+from `support@peakpower.nl`, quoting the UTC instant, the amount and the
+reference.
+
+**The amount reads `300.00 EUR`, not `€ 300,00`** — the one number on the site
+not in NL format. It is the receipt line as specified, and a receipt states the
+currency beside the figure. `utcStamp()` renders the date as
+`Wed, Aug 26, 2026 11:30:42 AM UTC`.
+
+**Both bank-transfer cards carry a marked demo control**, here and on
+onboarding's step 6, because nothing in this POC watches a bank feed. Onboarding
+needed one for a second reason: only its iDEAL button set `bankVerified`, so
+choosing the transfer card was a dead end that could never reach "Verified".
+
+The card's **Download deposit instructions** link serves the same
+`PeakPower_Funding_Instructions.docx` the onboarding flow does — it is the same
+document, PeakPower's bank details for a transfer, so it is not written twice.
+It replaced a `PP.noop()` link labelled "as PDF".
+
 **Both amount fields patch on blur, never re-render.** `setTopupAmount()` and
 `setWithdrawAmount()` reformat their own `<input>` through
 `reformatAmountField()` and call their `refresh*Ui()` — because blur fires on

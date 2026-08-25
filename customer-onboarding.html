@@ -184,6 +184,8 @@
   .mail-code .v { font-family:var(--font-mono); font-size:22px; font-weight:700; letter-spacing:.22em; color:var(--pp-text-heading); margin-top:4px; }
   .mail-attach { display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:7px 12px; border:1px solid var(--pp-border); border-radius:var(--radius-sm); background:var(--pp-surface-alt); font-size:11.5px; color:var(--pp-text-body); }
   .mail-attach .clip { font-size:12px; }
+  .demo-row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px dashed var(--pp-border-strong); }
+  .demo-row span { font-size:10.5px; color:var(--pp-text-faint); line-height:1.5; flex:1; min-width:150px; }
 
   .note-foot { margin-top:16px; padding-top:14px; border-top:1px solid var(--pp-border); font-size:11.5px; color:var(--pp-text-faint); line-height:1.5; }
 
@@ -556,6 +558,13 @@
           // happened — see downloadInstructions() for why it must not re-render.
           '<div class="spacer"><a class="btn-secondary btn-sm" href="' + INSTRUCTIONS_FILE + '" download ' +
             'onclick="ONB.downloadInstructions()">Download deposit instructions</a></div>' +
+          // Without this the transfer route cannot reach "verified" at all —
+          // only the iDEAL button flipped it, so choosing the other card was a
+          // dead end. Marked as the demo affordance it is: a real transfer is
+          // matched against the bank feed a day or two later.
+          (verified ? "" :
+            '<div class="demo-row"><span>Demo — a real transfer is matched one to two business days later.</span>' +
+            '<button type="button" class="btn-secondary btn-sm" onclick="ONB.transferReceived()">Mark € 0,01 as received</button></div>') +
         '</div>' +
       '</div>' +
       '<div id="bank-after">' + bankAfterHtml() + '</div>');
@@ -966,6 +975,7 @@
     // that is mid-click from the document, and a browser does not follow a link
     // whose element left the page during the click. Same failure as the blur
     // rebuilds elsewhere — the handler runs and nothing downloads.
+    transferReceived: function () { state.bankVerified = true; renderStep(); },
     downloadInstructions: function () {
       state.instructionsReady = true;
       var el = document.getElementById("bank-after");
