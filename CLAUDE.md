@@ -128,6 +128,8 @@ gzip before sending them through Claude (`gzip -9 -k file.json`).
 
 **Customer Portal**: Dashboard, Connections, Consumption, Prices, Trading,
 Wallet, Settlements. "Connections" is where EANs get linked to an account.
+Three of them are **labelled differently in the live rail** — see "Sidebar" —
+but the page keys are these, and this file names screens by their key.
 
 **Back Office Portal**: Home, Trade desk, Customers, Wallets, Settlements,
 Data & feeds, Reference data, Audit.
@@ -1824,24 +1826,35 @@ account rather than of a screen. Its "Products" row opens the Products screen
 (`#page-products`, `renderProductsPage()`), which is two cards — active and
 available — plus a banner saying what a product changes.
 
-**`future-trading` gates three pages**, listed once in `FUTURE_TRADING_PAGES`:
-Prices, Trading and Wallet. Off, they leave the rail entirely
-(`applyProductNav()` hides every `[data-nav-product]` element, the Market
-group label included), the Dashboard hero swaps "Request a trade" for the
-locked copy and an "Add the product" button, the wallet and open-trade stat
-cards and both trade banners are dropped, and a connection's detail says the
-product is not active instead of offering a request.
+**Two products gate pages, and one resolver answers for both.**
+`FUTURE_TRADING_PAGES` (Prices, Trading, Wallet) and `DAY_AHEAD_PAGES`
+(Connections) are the maps; `productForPage(pageCap)` returns the product a
+page needs or `null`, and `goTo()` and `toggleProduct()` both read it rather
+than naming a product themselves — so a page that moves between groups is
+re-gated in one place.
+
+Off, a gated row leaves the rail entirely (`applyProductNav()` hides every
+`[data-nav-product]` element, the group label included). Without
+`future-trading` the Dashboard hero also swaps "Request a trade" for the locked
+copy and an "Add the product" button, the wallet and open-trade stat cards and
+both trade banners are dropped, and a connection's detail says the product is
+not active instead of offering a request.
 
 Three rules worth keeping:
 
 - **The gate is in the handlers, not only in the markup.** `goTo()` redirects
-  a gated page to Products, and `requireFutureTrading()` guards
-  `startWizard`, `startWizardFromPrice`, `startWizardFromConnection`,
-  `openTrade` and `topUpWallet`. A hidden button is not a check — a deep link
-  or a stale screen still asks.
+  a gated page to Products; `requireFutureTrading()` guards `startWizard`,
+  `startWizardFromPrice`, `startWizardFromConnection`, `openTrade` and
+  `topUpWallet`, and `requireDayAhead()` guards `openConnection`. A hidden
+  button is not a check — a deep link or a stale screen still asks.
 - **Removing the product you are standing on moves you to Products.**
-  `toggleProduct()` checks `FUTURE_TRADING_PAGES[state.page]`; otherwise the
-  customer is left on a visible page with no rail entry to return to.
+  `toggleProduct()` compares `productForPage(state.page)` with the product just
+  removed; otherwise the customer is left on a visible page with no rail entry
+  to return to.
+- **The rail and the menu are redrawn *before* that redirect**, not after.
+  `goTo()` re-renders the page only, so the early return used to skip
+  `applyProductNav()` entirely and leave the rows the removed product paid for
+  still sitting in the rail.
 - **`goProducts()` re-renders the rail itself.** `goTo()` re-renders the page,
   not the sidebar, so without the extra `renderAccountMenu()` the popover and
   its full-viewport `.account-scrim` stay in the DOM and swallow every later
@@ -1862,15 +1875,71 @@ mockup seed data, not derived from state.
 
 ### Sidebar
 
-The Customer Portal's nav is four labelled groups — **Overview** (Dashboard),
-**Position** (Connections, Consumption), **Market** (Prices, Trading),
-**Finance** (Wallet, Settlements) — each link carrying a small domain-coloured
-square dot (Dashboard blue-700, Connections mint, Consumption blue-500, Prices
-amber, Trading blue-300, Wallet teal, Settlements violet) instead of the row
-tinting.
+The Customer Portal's nav is three labelled groups, each named after what the
+customer is doing rather than after the software:
 
-The grouping is markup and CSS only: `attachSidebarNav()`'s wiring and
-`goTo()`'s active toggle both work off
+| Group | Rows | Gated on |
+|---|---|---|
+| **Overview** | Dashboard | — |
+| **Day Ahead** | the account's first four tradeable connections, by name, then **More…** | `day-ahead` |
+| **Price Fixation** | Prices, Trades, Balance, Settlements, Volume | the first three on `future-trading` |
+
+Every link carries a small domain-coloured square dot instead of the row
+tinting (Dashboard blue-700, every connection row and More… mint, Prices
+amber, Trades blue-300, Balance teal, Settlements violet, Volume blue-500).
+
+**Three rows are labelled differently from the page they open**, and only the
+label moved — `state.page`, `data-page` and every `goTo()` argument are
+unchanged, and so are the screens:
+
+| Page key | Reads |
+|---|---|
+| `Consumption` | Volume |
+| `Trading` | Trades |
+| `Wallet` | Balance |
+
+`PAGE_LABELS` / `pageLabel()` is the one place that mapping lives, and the
+title, the crumb's back-link and the rail all read it. `goTo()`'s Consumption
+branch writes the title itself (that screen doesn't route through
+`renderTopbarChrome()`), so it reads `pageLabel()` too.
+
+**Price Fixation's label is not gated, because Settlements and Volume are not.**
+The group can never render as a bare heading over nothing, which is why only
+the three `future-trading` rows carry `data-nav-product`.
+
+**The Day Ahead group is rendered, not markup** — the connections belong to the
+account, and the account can be switched. `renderNavConnections()` fills
+`#nav-day-ahead` (a `.nav-group` container carrying the group's
+`data-nav-product`, so one toggle hides the heading and every row with it) and
+owns three things:
+
+- **It runs from `renderApp()`, and it must stay the last thing to touch the
+  rail.** `activatePageDom()` clears `.active` from every `#sidebar-nav a`
+  whose `data-page` doesn't match, and a connection row carries no `data-page`
+  — a connection is not a page — so it clears all of them and this call puts
+  the right one back. Entering Consumption/Volume needs no call of its own for
+  the same reason: that clearing is the correct answer there.
+- **Its links wire `onclick` inline**, like every other generated handler in
+  this file. `attachSidebarNav()` ran once at load, over markup this container
+  was empty in, so a re-rendered row would otherwise have no handler.
+- **More… counts every connection the table holds, the gas one included.** It
+  is the way to that table, not to the four rows above it, and the four are
+  `tradableConnections().slice(0, NAV_CONNECTIONS_NAMED)`.
+- **More… is lit by whether one of the four is, not by `!state.connId`.** It
+  stands for every Connections state the four don't name — the list, the
+  add-connection view, and the detail of a fifth, sixth or newly claimed
+  connection. Testing `!state.connId` instead left the **whole rail dark** on
+  those details: `activatePageDom()` has no `<a data-page="connections">` left
+  to fall back on, so this function is the only thing that can light anything
+  there.
+
+`openConnection()` is therefore a cross-screen entry point and owes the two
+lines every one of them owes — `state.page` plus `activatePageDom()` — or the
+detail renders into a hidden container from anywhere but the Connections
+table.
+
+The grouping is otherwise markup and CSS only: `attachSidebarNav()`'s wiring
+and `goTo()`'s active toggle both work off
 `document.querySelectorAll("#sidebar-nav a")`.
 
 **Keep it to one `<nav id="sidebar-nav">` wrapping every group.** A first
