@@ -72,10 +72,11 @@
   * { box-sizing: border-box; }
   body { margin:0; font-family: var(--font-sans); background: var(--pp-bg-gradient); background-attachment: fixed; color: var(--pp-text-heading); }
   .app { display:flex; height:100vh; width:100%; overflow:hidden; }
-  /* Rail: grouped nav under Overview / Position / Market / Finance, each
+  /* Rail: grouped nav under Overview / Day Ahead / Price Fixation, each
      item carrying its domain colour as a dot rather than the whole row —
-     the adopted SB-2026 nav (ui_kits/portal-2026), ported as markup/CSS
-     onto the existing goTo()/data-page wiring, which is untouched below. */
+     the adopted SB-2026 nav (ui_kits/portal-2026), on the existing
+     goTo()/data-page wiring. Day Ahead's rows are the account's own
+     connections, so that group is rendered rather than written out here. */
   .sidebar { position:relative; width:var(--sidebar-width); min-width:var(--sidebar-width); background:var(--pp-sidebar-bg); color:var(--pp-sidebar-text); display:flex; flex-direction:column; padding:20px 0 16px; overflow-y:auto; }
   .sidebar::before { content:""; position:absolute; left:0; right:0; top:0; height:3px; background:var(--pp-rail-spectrum); }
   .sidebar .brand { display:flex; align-items:center; gap:10px; padding:16px 20px 22px; }
@@ -84,8 +85,13 @@
   .sidebar-group-label { padding:14px 20px 6px; font-size:9.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:#7b8ba0; }
   .sidebar-group-label:first-child { padding-top:10px; }
   .sidebar nav { display:flex; flex-direction:column; gap:1px; }
+  /* The connection rows sit in their own container, so one product toggle can
+     hide the group; it has to repeat nav's own stacking. */
+  .sidebar nav .nav-group { display:flex; flex-direction:column; gap:1px; }
   .sidebar nav a { display:flex; align-items:center; gap:10px; margin:0 10px; padding:9px 12px; border-radius:8px; font-size:12.5px; color:var(--pp-sidebar-text); text-decoration:none; cursor:pointer; transition:background-color .15s ease, color .15s ease; }
   .sidebar nav a .nav-dot { width:6px; height:6px; border-radius:2px; flex-shrink:0; opacity:.85; }
+  /* Its own colour, so "More…" going active doesn't brighten the count with it. */
+  .sidebar nav a .nav-count { margin-left:auto; font-size:10.5px; font-weight:600; color:#7b8ba0; }
   .sidebar nav a:hover:not(.active) { background:rgba(255,255,255,0.06); color:var(--pp-sidebar-text-active); }
   .sidebar nav a.active { background:var(--pp-sidebar-active-bg); color:var(--pp-sidebar-text-active); font-weight:600; }
   .sidebar nav a.active .nav-dot { opacity:1; box-shadow:0 0 0 3px rgba(255,255,255,.12); }
@@ -997,15 +1003,17 @@
     <nav id="sidebar-nav">
       <div class="sidebar-group-label">Overview</div>
       <a href="#" data-page="dashboard" class="active"><span class="nav-dot" style="background:#004C94"></span>Dashboard</a>
-      <div class="sidebar-group-label">Position</div>
-      <a href="#" data-page="connections"><span class="nav-dot" style="background:#1DBD8E"></span>Connections</a>
-      <a href="#" data-page="consumption"><span class="nav-dot" style="background:#006ECF"></span>Consumption</a>
-      <div class="sidebar-group-label" data-nav-product="future-trading">Market</div>
+      <div class="sidebar-group-label" data-nav-product="day-ahead">Day Ahead</div>
+      <!-- Filled by renderNavConnections(): the connections themselves, then
+           the way to the rest. The list is per account, so it cannot be
+           markup. -->
+      <div class="nav-group" id="nav-day-ahead" data-nav-product="day-ahead"></div>
+      <div class="sidebar-group-label">Price Fixation</div>
       <a href="#" data-page="prices" data-nav-product="future-trading"><span class="nav-dot" style="background:#EEB72B"></span>Prices</a>
-      <a href="#" data-page="trading" data-nav-product="future-trading"><span class="nav-dot" style="background:#3C93FA"></span>Trading</a>
-      <div class="sidebar-group-label">Finance</div>
-      <a href="#" data-page="wallet" data-nav-product="future-trading"><span class="nav-dot" style="background:#0FA69D"></span>Wallet</a>
+      <a href="#" data-page="trading" data-nav-product="future-trading"><span class="nav-dot" style="background:#3C93FA"></span>Trades</a>
+      <a href="#" data-page="wallet" data-nav-product="future-trading"><span class="nav-dot" style="background:#0FA69D"></span>Balance</a>
       <a href="#" data-page="settlements"><span class="nav-dot" style="background:#9151B8"></span>Settlements</a>
+      <a href="#" data-page="consumption"><span class="nav-dot" style="background:#006ECF"></span>Volume</a>
     </nav>
     <div class="account-menu" id="account-menu"></div>
   </div>
@@ -1227,6 +1235,7 @@
   var toCtl = document.getElementById("to-ctl");
   var exportBtn = document.getElementById("export-csv");
   var crumb = document.getElementById("crumb");
+  var navDayAheadEl = document.getElementById("nav-day-ahead");
   var pageTitle = document.getElementById("page-title");
   var chartSubtitle = document.getElementById("chart-subtitle");
   var costChartSubtitle = document.getElementById("cost-chart-subtitle");
@@ -1566,9 +1575,24 @@
 
   /** Which pages Future Trading gates, both in the rail and in the handlers. */
   var FUTURE_TRADING_PAGES = { Prices: 1, Trading: 1, Wallet: 1 };
+  /** Day Ahead Trading pays for the connections group, and for nothing else. */
+  var DAY_AHEAD_PAGES = { Connections: 1 };
+
+  /**
+   * The product a page needs, or null. Every gate reads this one answer, so a
+   * page that moves between groups is re-gated in a single place — and
+   * toggleProduct() can ask "does the page I am standing on still have its
+   * product" without naming a product itself.
+   */
+  function productForPage(pageCap) {
+    if (FUTURE_TRADING_PAGES[pageCap]) { return "future-trading"; }
+    if (DAY_AHEAD_PAGES[pageCap]) { return "day-ahead"; }
+    return null;
+  }
 
   function hasProduct(id) { return state.products.indexOf(id) >= 0; }
   function hasFutureTrading() { return hasProduct("future-trading"); }
+  function hasDayAhead() { return hasProduct("day-ahead"); }
 
   /**
    * Every entry point into a gated screen calls this, not just the ones whose
@@ -1594,12 +1618,61 @@
     return true;
   }
 
+  function requireDayAhead() {
+    if (hasDayAhead()) { return false; }
+    goProducts();
+    return true;
+  }
+
   /** Show or hide the rail entries a product pays for. */
   function applyProductNav() {
     var gated = document.querySelectorAll("[data-nav-product]");
     for (var i = 0; i < gated.length; i++) {
       gated[i].style.display = hasProduct(gated[i].getAttribute("data-nav-product")) ? "" : "none";
     }
+  }
+
+  /** How many connections the rail names before it falls back to "More…". */
+  var NAV_CONNECTIONS_NAMED = 4;
+
+  /**
+   * The Day Ahead group is the account's own connections, by name — that is
+   * what a day-ahead customer navigates by — so it is rendered rather than
+   * written into the markup: the list belongs to the account, and the account
+   * can be switched.
+   *
+   * Two things this depends on:
+   *
+   * - It runs from renderApp(), which every navigation ends in, and it is the
+   *   LAST thing to touch the rail. activatePageDom() clears `.active` from
+   *   every #sidebar-nav a whose data-page doesn't match, and these rows carry
+   *   no data-page — a connection is not a page — so it clears all of them and
+   *   this call puts the right one back.
+   * - Its links wire onclick inline, like every other generated handler here.
+   *   attachSidebarNav() ran once at load, over markup this container was
+   *   empty in.
+   *
+   * "More…" counts every connection the table holds, the gas one included —
+   * it is the way to that table, not to the four above it — and it lights for
+   * every Connections state the four don't name: the list, the add-connection
+   * view, and a detail for a fifth or claimed connection. Lighting it on
+   * `!state.connId` alone left the whole rail dark on those details, since
+   * activatePageDom() has nothing with a matching data-page to fall back on.
+   */
+  function renderNavConnections() {
+    var dot = '<span class="nav-dot" style="background:#1DBD8E"></span>';
+    var onNamed = false;
+    var html = tradableConnections().slice(0, NAV_CONNECTIONS_NAMED).map(function (c) {
+      var on = state.page === "Connections" && state.connId === c.id;
+      if (on) { onNamed = true; }
+      return '<a href="#"' + (on ? ' class="active"' : "") +
+        ' onclick="PP.openConnection(\'' + c.id + '\');return false">' + dot + esc(c.name) + '</a>';
+    }).join("");
+    var listOn = state.page === "Connections" && !onNamed;
+    html += '<a href="#"' + (listOn ? ' class="active"' : "") +
+      ' onclick="PP.goTo(\'Connections\');return false">' + dot + 'More…' +
+      '<span class="nav-count">' + acctConnections().length + '</span></a>';
+    navDayAheadEl.innerHTML = html;
   }
 
   function accountMenuHtml() {
@@ -1846,9 +1919,12 @@
       ? state.products.filter(function (x) { return x !== id; })
       : state.products.concat([id]);
     writeProducts(state.accountId, state.products);
-    if (id === "future-trading" && had && FUTURE_TRADING_PAGES[state.page]) { goTo("Products"); return; }
+    // The rail and the menu are redrawn BEFORE the redirect, not after it:
+    // goTo() re-renders the page only, so returning early used to leave the
+    // entries the removed product paid for still sitting in the rail.
     applyProductNav();
     renderAccountMenu();
+    if (had && productForPage(state.page) === id) { goTo("Products"); return; }
     renderCurrentPage();
   }
 
@@ -1866,9 +1942,10 @@
   }
 
   function goTo(pageCap) {
-    // The rail hides these when the product is off, but a deep link, a stale
-    // screen or a leftover onclick can still ask for them.
-    if (FUTURE_TRADING_PAGES[pageCap] && !hasFutureTrading()) { pageCap = "Products"; }
+    // The rail hides a gated page when its product is off, but a deep link, a
+    // stale screen or a leftover onclick can still ask for one.
+    var needs = productForPage(pageCap);
+    if (needs && !hasProduct(needs)) { pageCap = "Products"; }
     activatePageDom(pageCap.toLowerCase());
     resetSubViewsFor(pageCap);
     // The crumb and the topbar action slot are SHARED by all seven screens,
@@ -1882,7 +1959,7 @@
     crumb.innerHTML = "";
     topbarActionsEl.innerHTML = "";
     if (pageCap.toLowerCase() === "consumption") {
-      pageTitle.textContent = "Consumption";
+      pageTitle.textContent = pageLabel("Consumption");
       render();
     } else {
       renderApp();
@@ -1921,7 +1998,20 @@
     return !!(t && t.periodStart && t.periodEnd);
   }
 
-  function openConnection(id) { state.connId = id; renderApp(); }
+  /**
+   * Reached from the connections table and from the rail, which is clickable
+   * from any screen — so it owes the two lines every cross-screen jump owes
+   * (see startWizard): renderApp() refreshes whichever .page is already
+   * visible, so without them the detail renders into a hidden container.
+   */
+  function openConnection(id) {
+    if (requireDayAhead()) { return; }
+    state.page = "Connections";
+    activatePageDom("connections");
+    state.connectionsView = "list";
+    state.connId = id;
+    renderApp();
+  }
   function closeConnection() { state.connId = null; renderApp(); }
 
   function openTrade(id) {
@@ -3070,9 +3160,18 @@
     crumb.innerHTML = backHtml + restHtml;
   }
 
+  /**
+   * The rail's label for a page, where it differs from the page key. The keys
+   * are the screens' own (state.page, data-page, goTo) and are deliberately
+   * unchanged — this is what the customer reads, in the title, the crumb and
+   * the rail, and it is written once.
+   */
+  var PAGE_LABELS = { Consumption: "Volume", Trading: "Trades", Wallet: "Balance" };
+  function pageLabel(pageCap) { return PAGE_LABELS[pageCap] || pageCap; }
+
   function renderTopbarChrome() {
     var page = state.page;
-    var title = page;
+    var title = pageLabel(page);
     var actionsHtml = "";
     crumb.innerHTML = "";
 
@@ -3099,8 +3198,8 @@
       setCrumb("Dutch power · indicative only");
     } else if (page === "Trading" && state.tradingView === "detail") {
       var trade = state.trades.filter(function (t) { return t.id === state.tradeId; })[0];
-      title = trade ? "Trade " + trade.id : "Trading";
-      setCrumb(trade ? (trade.shape + " " + trade.period + " · " + trade.power + " · " + trade.status) : "", "Trading", "backToTrades");
+      title = trade ? "Trade " + trade.id : pageLabel("Trading");
+      setCrumb(trade ? (trade.shape + " " + trade.period + " · " + trade.power + " · " + trade.status) : "", pageLabel("Trading"), "backToTrades");
       actionsHtml = '<button type="button" class="btn-secondary" onclick="PP.noop()">Export history</button>';
     } else if (page === "Trading" && state.tradingView === "wizard") {
       title = "Request a trade";
@@ -3116,13 +3215,13 @@
         : "";
     } else if (page === "Wallet" && state.walletView === "topup") {
       title = "Deposit funds";
-      setCrumb("Add funds to your wallet", "Wallet", "backToWallet");
+      setCrumb("Add funds to your wallet", pageLabel("Wallet"), "backToWallet");
     } else if (page === "Wallet" && state.walletView === "transfer-received") {
       title = "Transfer received";
-      setCrumb("Credited to your wallet", "Wallet", "backToWallet");
+      setCrumb("Credited to your wallet", pageLabel("Wallet"), "backToWallet");
     } else if (page === "Wallet" && state.walletView === "withdraw") {
       title = "Withdraw funds";
-      setCrumb("Pay out to your own account", "Wallet", "backToWallet");
+      setCrumb("Pay out to your own account", pageLabel("Wallet"), "backToWallet");
     } else if (page === "Wallet") {
       setCrumb(acct().legalName + " · EUR");
       actionsHtml = '<button type="button" class="btn-primary" onclick="PP.topUpWallet()">Deposit funds</button>' +
@@ -3144,6 +3243,7 @@
   }
 
   function renderApp() {
+    renderNavConnections();
     renderTopbarChrome();
     var pageLower = state.page.toLowerCase();
     if (pageLower === "dashboard") { renderDashboardPage(); }
@@ -3333,7 +3433,8 @@
     var banner = '<div class="banner banner-teal">' +
       '<div class="banner-icon" style="background:var(--pp-teal-600)">i</div>' +
       '<div class="banner-body"><div class="banner-sub">Products decide what appears in your navigation. ' +
-      'Future Trading adds the Market section — Prices and Trading — and the Wallet that funds those trades.' +
+      'Future Trading adds Prices, Trades and the Balance that funds them to Price Fixation. ' +
+      'Day Ahead Trading adds your connections.' +
       '</div></div></div>';
 
     var activeBody = active.length
